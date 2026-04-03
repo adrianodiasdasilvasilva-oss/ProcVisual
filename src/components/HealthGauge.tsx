@@ -13,12 +13,12 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
-    <div className="relative bg-gradient-to-br from-proc-secondary to-proc-bg p-6 rounded-[2rem] border border-white/10 shadow-2xl overflow-hidden mb-6">
+    <div className="relative bg-gradient-to-br from-proc-secondary/40 to-proc-bg p-6 rounded-[2.5rem] border border-white/5 shadow-2xl overflow-hidden mb-0">
       {/* Background Glow */}
       <div className="absolute -top-20 -right-20 w-40 h-40 bg-proc-green/10 blur-[80px] rounded-full" />
       
       <div className="flex flex-col items-center">
-        <h2 className="text-sm font-semibold text-proc-text-sec uppercase tracking-widest mb-6">Saúde Financeira</h2>
+        <h2 className="text-[10px] font-bold text-proc-text-sec uppercase tracking-[0.2em] mb-6">Saúde Financeira</h2>
         
         <div className="relative w-48 h-24 overflow-hidden">
           <svg height="160" width="160" className="absolute left-1/2 -translate-x-1/2 top-0">
@@ -76,7 +76,7 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
           >
             {percentage}%
           </motion.span>
-          <span className="text-xs text-proc-cyan font-bold glow-cyan px-2 py-0.5 bg-proc-cyan/10 rounded-full">Excelente</span>
+          <span className="text-[10px] text-proc-cyan font-bold glow-cyan px-3 py-1 bg-proc-cyan/10 rounded-full uppercase tracking-widest">Excelente</span>
         </div>
       </div>
     </div>

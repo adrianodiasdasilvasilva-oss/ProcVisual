@@ -1,0 +1,59 @@
+import React from 'react';
+import { LayoutDashboard, PieChart, Wallet, Settings, Bell, LogOut } from 'lucide-react';
+import { auth } from '../firebase';
+
+interface SidebarProps {
+  activeTab: string;
+  onTabChange: (tab: string) => void;
+}
+
+export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+  const menuItems = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'relatorios', label: 'Relatórios', icon: PieChart },
+    { id: 'carteira', label: 'Carteira', icon: Wallet },
+    { id: 'notificacoes', label: 'Alertas', icon: Bell },
+    { id: 'configuracoes', label: 'Ajustes', icon: Settings },
+  ];
+
+  return (
+    <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-white/5 h-screen sticky top-0 p-6">
+      <div className="mb-10">
+        <h1 className="text-2xl font-bold text-white tracking-tighter">
+          Proc<span className="text-proc-cyan">Visual</span>
+        </h1>
+        <p className="text-[10px] text-proc-text-sec uppercase tracking-[0.2em] font-bold mt-1">Intelligence Finance</p>
+      </div>
+
+      <nav className="flex-1 space-y-2">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onTabChange(item.id)}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
+              activeTab === item.id 
+                ? 'bg-proc-cyan/10 text-proc-cyan shadow-[0_0_20px_rgba(0,209,255,0.1)]' 
+                : 'text-proc-text-sec hover:bg-white/5 hover:text-white'
+            }`}
+          >
+            <item.icon size={20} className={activeTab === item.id ? 'text-proc-cyan' : 'group-hover:text-white'} />
+            <span className="font-medium text-sm">{item.label}</span>
+            {activeTab === item.id && (
+              <div className="ml-auto w-1.5 h-1.5 rounded-full bg-proc-cyan shadow-[0_0_8px_#00D1FF]" />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="mt-auto pt-6 border-t border-white/5">
+        <button 
+          onClick={() => auth.signOut()}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all duration-300 group"
+        >
+          <LogOut size={20} />
+          <span className="font-medium text-sm">Sair da conta</span>
+        </button>
+      </div>
+    </aside>
+  );
+}
