@@ -50,8 +50,8 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
             />
             <defs>
               <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#22C55E" />
-                <stop offset="100%" stopColor="#4ADE80" />
+                <stop offset="0%" stopColor="#00D1FF" />
+                <stop offset="100%" stopColor="#00E676" />
               </linearGradient>
             </defs>
           </svg>
@@ -76,7 +76,7 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
           >
             {percentage}%
           </motion.span>
-          <span className="text-xs text-proc-green font-bold glow-green px-2 py-0.5 bg-proc-green/10 rounded-full">Excelente</span>
+          <span className="text-xs text-proc-cyan font-bold glow-cyan px-2 py-0.5 bg-proc-cyan/10 rounded-full">Excelente</span>
         </div>
       </div>
     </div>

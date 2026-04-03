@@ -2,10 +2,10 @@ import { TrendingUp, TrendingDown, PiggyBank, Target } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const cards = [
-  { title: 'Receita', value: 'R$ 12.450', icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(34,197,94,0.15)]' },
+  { title: 'Receita', value: 'R$ 12.450', icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
   { title: 'Despesa', value: 'R$ 5.200', icon: TrendingDown, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(248,113,113,0.1)]' },
-  { title: 'Economia', value: 'R$ 7.250', icon: PiggyBank, color: 'text-blue-400', glow: 'shadow-[0_0_15px_rgba(96,165,250,0.1)]' },
-  { title: 'Meta', value: 'R$ 15.000', icon: Target, color: 'text-proc-glow', glow: 'shadow-[0_0_15px_rgba(74,222,128,0.15)]' },
+  { title: 'Economia', value: 'R$ 7.250', icon: PiggyBank, color: 'text-proc-cyan', glow: 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
+  { title: 'Meta', value: 'R$ 15.000', icon: Target, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
 ];
 
 export default function QuickCards() {

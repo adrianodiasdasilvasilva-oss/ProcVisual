@@ -25,16 +25,16 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
             onClick={() => onTabChange(tab.id)}
             className="relative flex flex-col items-center gap-1 min-w-[60px]"
           >
-            <div className={`p-1.5 transition-all duration-300 ${isActive ? 'text-proc-green scale-110' : 'text-proc-text-sec'}`}>
+            <div className={`p-1.5 transition-all duration-300 ${isActive ? 'text-proc-cyan scale-110' : 'text-proc-text-sec'}`}>
               <tab.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
             </div>
-            <span className={`text-[8px] font-bold uppercase tracking-tighter transition-colors ${isActive ? 'text-proc-green' : 'text-proc-text-sec'}`}>
+            <span className={`text-[8px] font-bold uppercase tracking-tighter transition-colors ${isActive ? 'text-proc-cyan' : 'text-proc-text-sec'}`}>
               {tab.label}
             </span>
             {isActive && (
               <motion.div
                 layoutId="activeGlow"
-                className="absolute -top-3 w-8 h-1 bg-proc-green rounded-full blur-[2px]"
+                className="absolute -top-3 w-8 h-1 bg-proc-cyan rounded-full blur-[2px]"
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
             )}
