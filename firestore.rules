@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: usuarios
+    // Document ID: userId (UID from Auth)
+    // Fields:
+    //   - nome: string (required)
+    //   - email: string (required, email format)
+    //   - dataCriacao: string (required, ISO 8601)
+    //
+    // Collection: lancamentos
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required, matches owner)
+    //   - tipo: string (required, 'income' | 'expense')
+    //   - valor: number (required, positive)
+    //   - categoria: string (required)
+    //   - data: string (required, ISO 8601 date)
+    //   - descricao: string (optional)
+    //   - estabelecimento: string (optional)
+    //   - formaPagamento: string (optional)
+    //   - comprovanteUrl: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}.*");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['nome', 'email', 'dataCriacao']) &&
+             data.nome is string && data.nome.size() > 0 && data.nome.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.dataCriacao is string;
+    }
+
+    function isValidLancamento(data) {
+      return data.keys().hasAll(['userId', 'tipo', 'valor', 'categoria', 'data']) &&
+             data.userId == request.auth.uid &&
+             data.tipo in ['income', 'expense'] &&
+             data.valor is number && data.valor >= 0 &&
+             data.categoria is string && data.categoria.size() > 0 &&
+             isValidDateString(data.data);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Users Collection
+    match /usuarios/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.email == resource.data.email; // Email immutable
+    }
+
+    // Lancamentos Collection
+    match /lancamentos/{lancamentoId} {
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && isValidLancamento(request.resource.data);
+      allow update: if isDocOwner() && isValidLancamento(request.resource.data) &&
+                      request.resource.data.userId == resource.data.userId; // Ownership immutable
+      allow delete: if isDocOwner();
+    }
+  }
+}

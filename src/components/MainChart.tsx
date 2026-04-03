@@ -1,23 +1,38 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
+import { Transaction } from '../App';
 
-const rawData = [
-  { name: 'Moradia', value: 1500 },
-  { name: 'Alimentação', value: 800 },
-  { name: 'Transporte', value: 400 },
-  { name: 'Lazer', value: 600 },
-  { name: 'Saúde', value: 300 },
-  { name: 'Educação', value: 500 },
-];
+interface MainChartProps {
+  transactions: Transaction[];
+}
 
-const total = rawData.reduce((acc, curr) => acc + curr.value, 0);
-const data = rawData
-  .map(item => ({
-    ...item,
-    percent: Math.round((item.value / total) * 100)
-  }))
-  .sort((a, b) => b.value - a.value);
+export default function MainChart({ transactions }: MainChartProps) {
+  // Group expenses by category
+  const expensesByCategory = transactions
+    .filter(t => t.tipo === 'expense')
+    .reduce((acc, curr) => {
+      acc[curr.categoria] = (acc[curr.categoria] || 0) + curr.valor;
+      return acc;
+    }, {} as Record<string, number>);
 
-export default function MainChart() {
+  const totalExpense = Object.values(expensesByCategory).reduce((a, b) => a + b, 0);
+
+  const data = Object.entries(expensesByCategory)
+    .map(([name, value]) => ({
+      name,
+      value,
+      percent: totalExpense > 0 ? Math.round((value / totalExpense) * 100) : 0
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6); // Top 6 categories
+
+  if (data.length === 0) {
+    return (
+      <div className="bg-proc-secondary/20 p-8 rounded-[2rem] border border-white/5 mb-6 text-center">
+        <p className="text-proc-text-sec text-sm">Nenhuma despesa registrada para exibir no gráfico.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-proc-secondary/20 p-6 rounded-[2rem] border border-white/5 mb-6">
       <div className="flex justify-between items-end mb-6">

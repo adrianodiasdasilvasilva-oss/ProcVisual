@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "usuario": {
+      "title": "Usuário",
+      "description": "Perfil do usuário do sistema ProcVisual",
+      "type": "object",
+      "properties": {
+        "nome": {
+          "type": "string",
+          "description": "Nome completo do usuário"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Email de contato"
+        },
+        "dataCriacao": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data em que o perfil foi criado"
+        }
+      },
+      "required": ["nome", "email", "dataCriacao"]
+    },
+    "lancamento": {
+      "title": "Lançamento",
+      "description": "Registro financeiro de receita ou despesa",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "ID do usuário proprietário do lançamento"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": ["income", "expense"],
+          "description": "Tipo do lançamento (Receita ou Despesa)"
+        },
+        "valor": {
+          "type": "number",
+          "description": "Valor monetário do lançamento"
+        },
+        "categoria": {
+          "type": "string",
+          "description": "Categoria do lançamento"
+        },
+        "data": {
+          "type": "string",
+          "format": "date",
+          "description": "Data da transação"
+        },
+        "descricao": {
+          "type": "string",
+          "description": "Descrição detalhada ou nome do estabelecimento"
+        },
+        "comprovanteUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL da imagem do comprovante no storage"
+        },
+        "formaPagamento": {
+          "type": "string",
+          "description": "Forma de pagamento utilizada"
+        },
+        "estabelecimento": {
+          "type": "string",
+          "description": "Nome do estabelecimento onde ocorreu a transação"
+        }
+      },
+      "required": ["userId", "tipo", "valor", "categoria", "data"]
+    }
+  },
+  "firestore": {
+    "/usuarios/{userId}": {
+      "schema": "usuario",
+      "description": "Coleção de perfis de usuários"
+    },
+    "/lancamentos/{lancamentoId}": {
+      "schema": "lancamento",
+      "description": "Coleção de todos os lançamentos financeiros"
+    }
+  }
+}

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createWorker } from 'tesseract.js';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { 
   X, 
   Edit3, 
@@ -33,6 +35,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [isOcrRunning, setIsOcrRunning] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
@@ -51,6 +54,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     setImagePreview(null);
     setOcrProgress(0);
     setIsOcrRunning(false);
+    setIsSaving(false);
     setFormData({
       type: 'expense',
       value: '',
@@ -170,12 +174,36 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     }
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setView('success');
-    setTimeout(() => {
-      handleClose();
-    }, 1500);
+    if (!auth.currentUser) {
+      alert('Você precisa estar logado para salvar lançamentos.');
+      return;
+    }
+
+    setIsSaving(true);
+    const path = 'lancamentos';
+    try {
+      await addDoc(collection(db, path), {
+        userId: auth.currentUser.uid,
+        tipo: formData.type,
+        valor: parseFloat(formData.value),
+        categoria: formData.category || 'Outros',
+        data: formData.date,
+        descricao: formData.description || formData.establishment || '',
+        estabelecimento: formData.establishment || '',
+        formaPagamento: formData.paymentMethod,
+        createdAt: serverTimestamp()
+      });
+      
+      setView('success');
+      setTimeout(() => {
+        handleClose();
+      }, 1500);
+    } catch (error) {
+      setIsSaving(false);
+      handleFirestoreError(error, OperationType.WRITE, path);
+    }
   };
 
   return (

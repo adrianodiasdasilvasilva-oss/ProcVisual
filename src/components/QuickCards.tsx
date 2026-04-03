@@ -1,14 +1,22 @@
 import { TrendingUp, TrendingDown, PiggyBank, Target } from 'lucide-react';
 import { motion } from 'motion/react';
 
-const cards = [
-  { title: 'Receita', value: 'R$ 12.450', icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
-  { title: 'Despesa', value: 'R$ 5.200', icon: TrendingDown, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(248,113,113,0.1)]' },
-  { title: 'Economia', value: 'R$ 7.250', icon: PiggyBank, color: 'text-proc-cyan', glow: 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
-  { title: 'Meta', value: 'R$ 15.000', icon: Target, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
-];
+interface QuickCardsProps {
+  income: number;
+  expense: number;
+}
 
-export default function QuickCards() {
+export default function QuickCards({ income, expense }: QuickCardsProps) {
+  const savings = income - expense;
+  const savingsPercent = income > 0 ? Math.round((savings / income) * 100) : 0;
+
+  const cards = [
+    { title: 'Receita', value: `R$ ${income.toLocaleString('pt-BR')}`, icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
+    { title: 'Despesa', value: `R$ ${expense.toLocaleString('pt-BR')}`, icon: TrendingDown, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(248,113,113,0.1)]' },
+    { title: 'Economia', value: `R$ ${savings.toLocaleString('pt-BR')}`, icon: PiggyBank, color: 'text-proc-cyan', glow: 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
+    { title: 'Meta', value: `${savingsPercent}%`, icon: Target, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
+  ];
+
   return (
     <div className="grid grid-cols-2 gap-4 mb-8">
       {cards.map((card, index) => (
