@@ -7,10 +7,12 @@ import SummaryCard from './components/SummaryCard';
 import MainChart from './components/MainChart';
 import QuickCards from './components/QuickCards';
 import BottomNav from './components/BottomNav';
+import NewTransactionModal from './components/NewTransactionModal';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-proc-bg text-white font-sans selection:bg-proc-green/30 pb-24">
@@ -29,7 +31,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.4 }}
               >
-                <ActionButtons />
+                <ActionButtons onNewTransaction={() => setIsModalOpen(true)} />
                 <HealthGauge percentage={82} />
                 <SummaryCard />
                 <MainChart />
@@ -61,6 +63,12 @@ export default function App() {
       </main>
 
       <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+
+      {/* New Transaction Modal */}
+      <NewTransactionModal 
+        isOpen={isModalOpen} 
+        onClose={() => setIsModalOpen(false)} 
+      />
     </div>
   );
 }
