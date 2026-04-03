@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Header from './components/Header';
 import Filters from './components/Filters';
+import ActionButtons from './components/ActionButtons';
 import HealthGauge from './components/HealthGauge';
 import SummaryCard from './components/SummaryCard';
 import MainChart from './components/MainChart';
@@ -28,6 +29,7 @@ export default function App() {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.4 }}
               >
+                <ActionButtons />
                 <HealthGauge percentage={82} />
                 <SummaryCard />
                 <MainChart />
