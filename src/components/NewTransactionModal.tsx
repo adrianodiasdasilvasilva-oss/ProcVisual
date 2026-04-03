@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { createWorker } from 'tesseract.js';
 import { 
   X, 
   Edit3, 
@@ -9,7 +10,15 @@ import {
   Save, 
   ArrowLeft,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Scan,
+  CreditCard,
+  Wallet,
+  Zap,
+  Store,
+  Calendar,
+  DollarSign,
+  Tag
 } from 'lucide-react';
 
 interface NewTransactionModalProps {
@@ -22,6 +31,8 @@ type ModalView = 'selection' | 'manual' | 'receipt' | 'processing' | 'success';
 export default function NewTransactionModal({ isOpen, onClose }: NewTransactionModalProps) {
   const [view, setView] = useState<ModalView>('selection');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [isOcrRunning, setIsOcrRunning] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
@@ -30,18 +41,24 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     value: '',
     category: '',
     date: new Date().toISOString().split('T')[0],
-    description: ''
+    description: '',
+    paymentMethod: 'Cartão',
+    establishment: ''
   });
 
   const resetModal = () => {
     setView('selection');
     setImagePreview(null);
+    setOcrProgress(0);
+    setIsOcrRunning(false);
     setFormData({
       type: 'expense',
       value: '',
       category: '',
       date: new Date().toISOString().split('T')[0],
-      description: ''
+      description: '',
+      paymentMethod: 'Cartão',
+      establishment: ''
     });
   };
 
@@ -61,19 +78,96 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     }
   };
 
-  const processReceipt = () => {
+  const parseOCRText = (text: string) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    
+    // 1. Extract Value (Look for R$ or decimal numbers near "TOTAL")
+    let value = '';
+    const valueMatch = text.match(/(?:R\$|TOTAL|VALOR|PAGAR)\s*[:=]?\s*(\d+[,.]\d{2})/i);
+    if (valueMatch) {
+      value = valueMatch[1].replace(',', '.');
+    } else {
+      // Fallback: find the largest decimal number
+      const allNumbers = text.match(/\d+[,.]\d{2}/g);
+      if (allNumbers) {
+        const numbers = allNumbers.map(n => parseFloat(n.replace(',', '.')));
+        value = Math.max(...numbers).toFixed(2);
+      }
+    }
+
+    // 2. Extract Date (DD/MM/YYYY)
+    let date = new Date().toISOString().split('T')[0];
+    const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+    if (dateMatch) {
+      let [_, day, month, year] = dateMatch;
+      if (year.length === 2) year = '20' + year;
+      date = `${year}-${month}-${day}`;
+    }
+
+    // 3. Extract Establishment (Usually first line or line with CNPJ)
+    let establishment = lines[0] || '';
+    const cnpjLine = lines.find(l => l.includes('CNPJ'));
+    if (cnpjLine) {
+      const cnpjIndex = lines.indexOf(cnpjLine);
+      if (cnpjIndex > 0) establishment = lines[cnpjIndex - 1];
+    }
+
+    // 4. Extract Payment Method
+    let paymentMethod = 'Cartão';
+    if (text.match(/PIX/i)) paymentMethod = 'PIX';
+    else if (text.match(/DINHEIRO|ESPECIE/i)) paymentMethod = 'Dinheiro';
+    else if (text.match(/DEBITO|CREDITO/i)) paymentMethod = 'Cartão';
+
+    // 5. Suggest Category
+    let category = 'Outros';
+    if (text.match(/MERCADO|SUPERMERCADO|ALIMENTO|RESTAURANTE|LANCHE|CAFE/i)) category = 'Alimentação';
+    else if (text.match(/POSTO|GASOLINA|COMBUSTIVEL|UBER|99APP/i)) category = 'Transporte';
+    else if (text.match(/FARMACIA|DROGARIA|MEDICAMENTO|HOSPITAL/i)) category = 'Saúde';
+    else if (text.match(/CINEMA|SHOW|TEATRO|EVENTO/i)) category = 'Lazer';
+
+    return { value, date, establishment, paymentMethod, category };
+  };
+
+  const processReceipt = async () => {
+    if (!imagePreview) return;
+    
     setView('processing');
-    // Simulate OCR processing
-    setTimeout(() => {
+    setIsOcrRunning(true);
+    setOcrProgress(10);
+
+    try {
+      const worker = await createWorker('por'); // Portuguese
+      setOcrProgress(30);
+      
+      const { data: { text } } = await worker.recognize(imagePreview);
+      setOcrProgress(80);
+      
+      const extracted = parseOCRText(text);
+      
       setFormData({
-        type: 'expense',
-        value: '154.90',
-        category: 'Alimentação',
-        date: '2026-04-03',
-        description: 'Restaurante ProcVisual'
+        ...formData,
+        value: extracted.value,
+        date: extracted.date,
+        establishment: extracted.establishment,
+        category: extracted.category,
+        paymentMethod: extracted.paymentMethod,
+        description: extracted.establishment
       });
+
+      await worker.terminate();
+      setOcrProgress(100);
+      
+      setTimeout(() => {
+        setView('manual');
+        setIsOcrRunning(false);
+      }, 500);
+
+    } catch (error) {
+      console.error('OCR Error:', error);
+      // Fallback to manual if OCR fails
       setView('manual');
-    }, 2000);
+      setIsOcrRunning(false);
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -107,7 +201,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
             {/* Header */}
             <div className="p-6 flex justify-between items-center border-b border-white/5">
               <div className="flex items-center gap-3">
-                {view !== 'selection' && view !== 'success' && (
+                {view !== 'selection' && view !== 'success' && view !== 'processing' && (
                   <button 
                     onClick={() => setView('selection')}
                     className="p-2 rounded-xl bg-white/5 text-proc-text-sec hover:text-white transition-colors"
@@ -117,9 +211,9 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                 )}
                 <h3 className="text-lg font-bold text-white">
                   {view === 'selection' && 'Novo Lançamento'}
-                  {view === 'manual' && 'Lançamento Manual'}
+                  {view === 'manual' && 'Revisar Lançamento'}
                   {view === 'receipt' && 'Enviar Comprovante'}
-                  {view === 'processing' && 'Processando...'}
+                  {view === 'processing' && 'Lendo Comprovante...'}
                   {view === 'success' && 'Sucesso!'}
                 </h3>
               </div>
@@ -131,7 +225,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-6 max-h-[70vh] overflow-y-auto no-scrollbar">
               {/* VIEW: SELECTION */}
               {view === 'selection' && (
                 <div className="space-y-4">
@@ -166,6 +260,16 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
               {/* VIEW: MANUAL FORM */}
               {view === 'manual' && (
                 <form onSubmit={handleSave} className="space-y-4">
+                  {/* Detected Data Badge */}
+                  {imagePreview && (
+                    <div className="bg-proc-green/10 border border-proc-green/20 rounded-xl p-3 flex items-center gap-3 mb-4">
+                      <div className="w-8 h-8 rounded-lg bg-proc-green/20 flex items-center justify-center text-proc-green">
+                        <Scan size={16} />
+                      </div>
+                      <p className="text-[10px] font-bold text-proc-green uppercase tracking-widest">Dados detectados automaticamente</p>
+                    </div>
+                  )}
+
                   <div className="flex bg-proc-bg/50 p-1 rounded-xl border border-white/5">
                     <button
                       type="button"
@@ -184,9 +288,11 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Valor</label>
+                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                      <DollarSign size={10} /> Valor
+                    </label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-text-sec font-bold">R$</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-cyan font-bold">R$</span>
                       <input 
                         type="number" 
                         step="0.01"
@@ -194,28 +300,47 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                         value={formData.value}
                         onChange={(e) => setFormData({...formData, value: e.target.value})}
                         placeholder="0,00"
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors text-lg"
                       />
                     </div>
                   </div>
 
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                      <Store size={10} /> Estabelecimento
+                    </label>
+                    <input 
+                      type="text" 
+                      value={formData.establishment}
+                      onChange={(e) => setFormData({...formData, establishment: e.target.value})}
+                      placeholder="Nome da loja ou local"
+                      className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Categoria</label>
+                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                        <Tag size={10} /> Categoria
+                      </label>
                       <select 
                         value={formData.category}
                         onChange={(e) => setFormData({...formData, category: e.target.value})}
                         className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
                       >
-                        <option value="">Selecionar</option>
+                        <option value="Outros">Outros</option>
                         <option value="Alimentação">Alimentação</option>
                         <option value="Moradia">Moradia</option>
                         <option value="Transporte">Transporte</option>
                         <option value="Lazer">Lazer</option>
+                        <option value="Saúde">Saúde</option>
+                        <option value="Educação">Educação</option>
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Data</label>
+                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                        <Calendar size={10} /> Data
+                      </label>
                       <input 
                         type="date" 
                         value={formData.date}
@@ -226,14 +351,24 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Descrição</label>
-                    <input 
-                      type="text" 
-                      value={formData.description}
-                      onChange={(e) => setFormData({...formData, description: e.target.value})}
-                      placeholder="Ex: Almoço de negócios"
-                      className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
-                    />
+                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                      <Wallet size={10} /> Forma de Pagamento
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['PIX', 'Cartão', 'Dinheiro'].map((method) => (
+                        <button
+                          key={method}
+                          type="button"
+                          onClick={() => setFormData({...formData, paymentMethod: method})}
+                          className={`py-2 rounded-lg text-[10px] font-bold border transition-all flex items-center justify-center gap-1 ${formData.paymentMethod === method ? 'bg-proc-cyan/10 border-proc-cyan text-proc-cyan' : 'bg-proc-bg/30 border-white/5 text-proc-text-sec'}`}
+                        >
+                          {method === 'PIX' && <Zap size={10} />}
+                          {method === 'Cartão' && <CreditCard size={10} />}
+                          {method === 'Dinheiro' && <Wallet size={10} />}
+                          {method}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="flex gap-3 pt-4">
@@ -249,7 +384,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                       className="flex-1 py-3.5 rounded-xl font-bold text-proc-bg bg-proc-green shadow-[0_0_20px_rgba(0,230,118,0.3)] flex items-center justify-center gap-2"
                     >
                       <Save size={18} />
-                      Salvar
+                      Confirmar
                     </button>
                   </div>
                 </form>
@@ -298,6 +433,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                     <div className="space-y-4">
                       <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10">
                         <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <button 
                           onClick={() => setImagePreview(null)}
                           className="absolute top-2 right-2 p-2 bg-black/50 backdrop-blur-md rounded-lg text-white hover:bg-black/70 transition-colors"
@@ -309,7 +445,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                         onClick={processReceipt}
                         className="w-full py-4 rounded-xl bg-proc-cyan text-proc-bg font-bold shadow-[0_0_20px_rgba(0,209,255,0.3)] flex items-center justify-center gap-2"
                       >
-                        <Loader2 size={18} className="animate-spin hidden" />
+                        <Scan size={18} />
                         Processar Comprovante
                       </button>
                     </div>
@@ -321,14 +457,31 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
               {view === 'processing' && (
                 <div className="py-12 flex flex-col items-center justify-center gap-6">
                   <div className="relative">
-                    <div className="w-24 h-24 rounded-full border-4 border-proc-cyan/20 border-t-proc-cyan animate-spin" />
+                    <div className="w-32 h-32 rounded-full border-4 border-proc-cyan/10 border-t-proc-cyan animate-spin" />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <Camera size={32} className="text-proc-cyan animate-pulse" />
+                      <motion.div
+                        animate={{ 
+                          y: [-20, 20, -20],
+                          opacity: [0.5, 1, 0.5]
+                        }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                        className="w-24 h-1 bg-proc-cyan shadow-[0_0_15px_#00D1FF] rounded-full"
+                      />
+                    </div>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Scan size={40} className="text-proc-cyan/50" />
                     </div>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center space-y-2">
                     <p className="text-xl font-bold text-white">Lendo Comprovante</p>
-                    <p className="text-sm text-proc-text-sec mt-1">Nossa IA está extraindo os dados...</p>
+                    <p className="text-sm text-proc-text-sec">Extraindo dados financeiros...</p>
+                    <div className="w-48 h-1.5 bg-white/5 rounded-full overflow-hidden mx-auto mt-4">
+                      <motion.div 
+                        className="h-full bg-proc-cyan"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${ocrProgress}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
               )}
@@ -339,7 +492,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                   <motion.div 
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="w-24 h-24 rounded-full bg-proc-green/20 flex items-center justify-center text-proc-green"
+                    className="w-24 h-24 rounded-full bg-proc-green/20 flex items-center justify-center text-proc-green shadow-[0_0_30px_rgba(0,230,118,0.2)]"
                   >
                     <CheckCircle2 size={48} />
                   </motion.div>
