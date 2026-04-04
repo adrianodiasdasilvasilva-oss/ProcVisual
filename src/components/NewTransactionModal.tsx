@@ -239,7 +239,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                 )}
                 <h3 className="text-lg font-bold text-white">
                   {view === 'selection' && 'Novo Lançamento'}
-                  {view === 'manual' && 'Revisar Lançamento'}
+                  {view === 'manual' && 'Inserir Lançamento'}
                   {view === 'receipt' && 'Enviar Comprovante'}
                   {view === 'processing' && 'Lendo Comprovante...'}
                   {view === 'success' && 'Sucesso!'}
@@ -253,7 +253,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
               </button>
             </div>
 
-            <div className="p-6 max-h-[70vh] overflow-y-auto no-scrollbar">
+            <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
               {/* VIEW: SELECTION */}
               {view === 'selection' && (
                 <div className="space-y-4">

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Github, Twitter, Instagram, Linkedin, Heart } from 'lucide-react';
+import Logo from '../Logo';
 
 export default function LandingFooter() {
   const currentYear = new Date().getFullYear();
@@ -24,7 +25,7 @@ export default function LandingFooter() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-12 mb-16">
           <div className="flex flex-col gap-4">
             <div className="flex items-center gap-2">
-              <img src="https://i.imgur.com/mPPZOMY.png" alt="ProcVisual Logo" className="h-8 w-auto" />
+              <Logo size="small" className="h-8" />
               <span className="text-xl font-bold text-white tracking-tighter">
                 Proc<span className="text-proc-cyan">Visual</span>
               </span>

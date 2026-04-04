@@ -1,6 +1,7 @@
 import React from 'react';
 import { LayoutDashboard, PieChart, Wallet, Settings, Bell, LogOut } from 'lucide-react';
 import { auth } from '../firebase';
+import Logo from './Logo';
 
 interface SidebarProps {
   activeTab: string;
@@ -18,11 +19,14 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
 
   return (
     <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-white/5 h-screen sticky top-0 p-6">
-      <div className="mb-10">
-        <h1 className="text-2xl font-bold text-white tracking-tighter">
-          Proc<span className="text-proc-cyan">Visual</span>
-        </h1>
-        <p className="text-[10px] text-proc-text-sec uppercase tracking-[0.2em] font-bold mt-1">Intelligence Finance</p>
+      <div className="mb-10 flex items-center gap-3">
+        <Logo size="small" className="h-8" />
+        <div>
+          <h1 className="text-xl font-bold text-white tracking-tighter leading-none">
+            Proc<span className="text-proc-cyan">Visual</span>
+          </h1>
+          <p className="text-[8px] text-proc-text-sec uppercase tracking-[0.2em] font-bold mt-0.5">Intelligence Finance</p>
+        </div>
       </div>
 
       <nav className="flex-1 space-y-2">

@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Menu, X } from 'lucide-react';
+import Logo from '../Logo';
 
 interface LandingHeaderProps {
   onLogin: () => void;
@@ -17,9 +18,9 @@ export default function LandingHeader({ onLogin }: LandingHeaderProps) {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-proc-bg/80 backdrop-blur-xl border-b border-white/5">
-      <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img src="https://i.imgur.com/mPPZOMY.png" alt="ProcVisual Logo" className="h-8 w-auto" />
+          <Logo size="medium" />
           <span className="text-xl font-bold text-white tracking-tighter">
             Proc<span className="text-proc-cyan">Visual</span>
           </span>

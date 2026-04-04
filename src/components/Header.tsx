@@ -1,5 +1,6 @@
 import { Bell, Search, User as UserIcon } from 'lucide-react';
 import { auth } from '../firebase';
+import Logo from './Logo';
 
 interface HeaderProps {
   balance: number;
@@ -10,15 +11,18 @@ export default function Header({ balance }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-white/5">
-      <div className="flex flex-col md:hidden">
-        <h1 className="text-xl font-bold tracking-tight text-white">
-          Proc<span className="text-proc-cyan">Visual</span>
-        </h1>
-        <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-[10px] text-proc-text-sec uppercase tracking-widest font-semibold">Saldo</span>
-          <span className="text-xs font-bold text-proc-cyan">
-            R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-          </span>
+      <div className="flex items-center gap-3 md:hidden">
+        <Logo size="small" className="h-7" />
+        <div className="flex flex-col">
+          <h1 className="text-lg font-bold tracking-tight text-white leading-none">
+            Proc<span className="text-proc-cyan">Visual</span>
+          </h1>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-[8px] text-proc-text-sec uppercase tracking-widest font-semibold">Saldo</span>
+            <span className="text-[10px] font-bold text-proc-cyan">
+              R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </span>
+          </div>
         </div>
       </div>
 

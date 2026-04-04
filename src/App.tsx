@@ -16,6 +16,7 @@ import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, ord
 import { LogIn, Loader2 } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
+import LoginScreen from './components/LoginScreen';
 
 export interface Transaction {
   id: string;
@@ -37,6 +38,7 @@ export default function App() {
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [showLogin, setShowLogin] = useState(false);
 
   // Auth Listener
   useEffect(() => {
@@ -111,7 +113,10 @@ export default function App() {
   }
 
   if (!user) {
-    return <LandingPage onLogin={handleLogin} />;
+    if (showLogin) {
+      return <LoginScreen onLogin={handleLogin} />;
+    }
+    return <LandingPage onLogin={() => setShowLogin(true)} />;
   }
 
   const totalIncome = transactions
