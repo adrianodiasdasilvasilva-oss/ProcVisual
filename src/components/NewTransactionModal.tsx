@@ -146,10 +146,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
       
       console.log('MimeType detectado:', mimeType);
-      console.log('Enviando para o modelo gemini-3-flash-preview...');
+      console.log('Enviando para o modelo gemini-flash-latest...');
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model: 'gemini-flash-latest',
         contents: [
           {
             parts: [

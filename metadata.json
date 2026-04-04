@@ -1,5 +1,9 @@
 {
-  "name": "ProcVisual - Dashboard Financeiro",
-  "description": "Dashboard mobile moderno com design dark mode e efeito glow para controle financeiro premium.",
-  "requestFramePermissions": []
+  "name": "ProcVisual - Gestão Financeira Inteligente",
+  "description": "Aplicativo de controle financeiro com leitura automática de comprovantes via IA e ajuste de perfil personalizado.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
 }
