@@ -125,7 +125,12 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setErrorMessage(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('Chave de API não configurada');
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       setOcrProgress(30);
       
       // Extract base64 data and mimeType
@@ -137,7 +142,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         contents: [
           {
             parts: [
-              { text: 'Analise este comprovante e extraia as informações financeiras. Retorne apenas o JSON conforme o esquema.' },
+              { text: 'Você é um assistente financeiro especializado em ler comprovantes, carnês, faturas e recibos brasileiros. Analise a imagem e extraia os seguintes dados: \n1. Valor: Procure pelo valor total ou "Valor de Cada Prestação". Use ponto como separador decimal.\n2. Data: Procure pela data de vencimento ou do contrato (converta meses como jan, fev, mar para números YYYY-MM-DD).\n3. Estabelecimento: Identifique o nome da loja ou emissor (ex: Lojas Cem).\n4. Categoria: Sugira uma categoria (Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros).\n5. Tipo: Identifique se é uma "despesa" (pagamento) ou "receita" (recebimento).\n\nRetorne APENAS o JSON.' },
               { inlineData: { data: base64Data, mimeType } }
             ]
           }
@@ -147,28 +152,40 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
           responseSchema: {
             type: Type.OBJECT,
             properties: {
-              valor: { type: Type.NUMBER, description: 'O valor total do comprovante' },
+              valor: { type: Type.NUMBER, description: 'O valor numérico extraído (ex: 188.20)' },
               data: { type: Type.STRING, description: 'A data no formato YYYY-MM-DD' },
-              estabelecimento: { type: Type.STRING, description: 'O nome do estabelecimento' },
+              estabelecimento: { type: Type.STRING, description: 'O nome do estabelecimento ou emissor' },
               categoria: { 
                 type: Type.STRING, 
-                description: 'Uma das categorias: Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros' 
+                description: 'Uma das categorias sugeridas' 
               },
-              descricao: { type: Type.STRING, description: 'Uma breve descrição do gasto' }
+              tipo: { 
+                type: Type.STRING, 
+                enum: ['receita', 'despesa'],
+                description: 'Se é uma receita ou despesa' 
+              },
+              descricao: { type: Type.STRING, description: 'Uma breve descrição do que foi pago' }
             },
-            required: ['valor', 'data', 'estabelecimento', 'categoria']
+            required: ['valor', 'data', 'estabelecimento', 'categoria', 'tipo']
           }
         }
       });
 
       setOcrProgress(80);
       
-      const extracted = JSON.parse(response.text || '{}');
+      const textResponse = response.text;
+      console.log('Resposta bruta do Gemini:', textResponse);
+      
+      if (!textResponse) throw new Error('Resposta vazia da IA');
+
+      const extracted = JSON.parse(textResponse);
+      console.log('Dados extraídos:', extracted);
       
       setIsCustomCategory(false);
       setCustomCategory('');
       setFormData({
         ...formData,
+        type: extracted.tipo || 'expense',
         value: extracted.valor?.toString() || '',
         date: extracted.data || new Date().toISOString().split('T')[0],
         establishment: extracted.estabelecimento || '',
