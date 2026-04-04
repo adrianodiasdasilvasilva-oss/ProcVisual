@@ -56,7 +56,7 @@ service cloud.firestore {
     function isValidUser(data) {
       return data.nome is string && data.nome.size() > 0 && data.nome.size() < 100 &&
              data.email is string && isValidEmail(data.email) &&
-             data.telefone is string && data.telefone.size() >= 8 &&
+             (!('telefone' in data) || (data.telefone is string && data.telefone.size() >= 8)) &&
              data.dataCriacao is timestamp;
     }
 
