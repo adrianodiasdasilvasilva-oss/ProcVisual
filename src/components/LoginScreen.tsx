@@ -30,11 +30,7 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: Log
     setIsLoading(true);
     setError(null);
     try {
-      const actionCodeSettings = {
-        url: window.location.origin,
-        handleCodeInApp: true,
-      };
-      await sendPasswordResetEmail(auth, email, actionCodeSettings);
+      await sendPasswordResetEmail(auth, email);
       setResetSent(true);
       setError(null);
     } catch (err: any) {
@@ -43,8 +39,10 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: Log
         setError('Usuário não cadastrado');
       } else if (err.code === 'auth/invalid-email') {
         setError('E-mail inválido.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('Domínio não autorizado para redefinição. Entre em contato com o suporte.');
       } else {
-        setError('Erro ao enviar e-mail de redefinição. Tente novamente.');
+        setError(`Erro ao enviar e-mail: ${err.message || 'Tente novamente.'}`);
       }
     } finally {
       setIsLoading(false);
