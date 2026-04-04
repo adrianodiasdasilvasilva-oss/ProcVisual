@@ -131,13 +131,15 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       console.log('Iniciando processamento com Gemini...');
       // Check all possible sources for the API key
       const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+                     (import.meta as any).env?.GEMINI_API_KEY_ ||
                      (import.meta as any).env?.GEMINI_API_KEY ||
+                     (process.env as any).GEMINI_API_KEY_ ||
                      (process.env as any).GEMINI_API_KEY;
       
       console.log('Verificando chave de API...');
-      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined') {
-        console.error('Erro: GEMINI_API_KEY não encontrada. Valor atual:', apiKey ? `${apiKey.substring(0, 5)}...` : 'null/undefined');
-        throw new Error('Chave de API não configurada. Por favor, adicione GEMINI_API_KEY nos Segredos (Secrets) do AI Studio e reinicie o app.');
+      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined' || apiKey === '""') {
+        console.error('Erro: GEMINI_API_KEY_ não encontrada. Valor atual:', apiKey ? `${apiKey.substring(0, 5)}...` : 'null/undefined');
+        throw new Error('Chave de API não configurada nos Segredos (Secrets) do AI Studio. Para que o site compartilhado funcione, você precisa adicionar a GEMINI_API_KEY_ no menu de configurações (ícone de engrenagem) > Secrets.');
       }
 
       console.log('API Key detectada (começa com:', apiKey.substring(0, 5), '), inicializando SDK...');
