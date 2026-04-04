@@ -129,10 +129,11 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
     try {
       console.log('Iniciando processamento com Gemini...');
-      const apiKey = process.env.GEMINI_API_KEY;
+      // Using import.meta.env for Vite compatibility
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       
       if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === '') {
-        console.error('Erro: GEMINI_API_KEY não encontrada ou inválida');
+        console.error('Erro: VITE_GEMINI_API_KEY não encontrada ou inválida');
         throw new Error('Chave de API não configurada corretamente no ambiente');
       }
 
