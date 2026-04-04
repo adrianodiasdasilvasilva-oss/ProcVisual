@@ -27,7 +27,6 @@ export interface Transaction {
   data: string;
   descricao: string;
   estabelecimento: string;
-  formaPagamento: string;
   createdAt: any;
 }
 

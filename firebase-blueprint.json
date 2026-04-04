@@ -58,10 +58,6 @@
           "format": "uri",
           "description": "URL da imagem do comprovante no storage"
         },
-        "formaPagamento": {
-          "type": "string",
-          "description": "Forma de pagamento utilizada"
-        },
         "estabelecimento": {
           "type": "string",
           "description": "Nome do estabelecimento onde ocorreu a transação"

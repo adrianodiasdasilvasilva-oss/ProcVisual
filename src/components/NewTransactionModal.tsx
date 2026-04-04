@@ -14,9 +14,6 @@ import {
   CheckCircle2,
   Loader2,
   Scan,
-  CreditCard,
-  Wallet,
-  Zap,
   Store,
   Calendar,
   DollarSign,
@@ -45,7 +42,6 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     category: '',
     date: new Date().toISOString().split('T')[0],
     description: '',
-    paymentMethod: 'Cartão',
     establishment: ''
   });
 
@@ -61,7 +57,6 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
       category: '',
       date: new Date().toISOString().split('T')[0],
       description: '',
-      paymentMethod: 'Cartão',
       establishment: ''
     });
   };
@@ -116,20 +111,14 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
       if (cnpjIndex > 0) establishment = lines[cnpjIndex - 1];
     }
 
-    // 4. Extract Payment Method
-    let paymentMethod = 'Cartão';
-    if (text.match(/PIX/i)) paymentMethod = 'PIX';
-    else if (text.match(/DINHEIRO|ESPECIE/i)) paymentMethod = 'Dinheiro';
-    else if (text.match(/DEBITO|CREDITO/i)) paymentMethod = 'Cartão';
-
-    // 5. Suggest Category
+    // 4. Suggest Category
     let category = 'Outros';
     if (text.match(/MERCADO|SUPERMERCADO|ALIMENTO|RESTAURANTE|LANCHE|CAFE/i)) category = 'Alimentação';
     else if (text.match(/POSTO|GASOLINA|COMBUSTIVEL|UBER|99APP/i)) category = 'Transporte';
     else if (text.match(/FARMACIA|DROGARIA|MEDICAMENTO|HOSPITAL/i)) category = 'Saúde';
     else if (text.match(/CINEMA|SHOW|TEATRO|EVENTO/i)) category = 'Lazer';
 
-    return { value, date, establishment, paymentMethod, category };
+    return { value, date, establishment, category };
   };
 
   const processReceipt = async () => {
@@ -154,7 +143,6 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
         date: extracted.date,
         establishment: extracted.establishment,
         category: extracted.category,
-        paymentMethod: extracted.paymentMethod,
         description: extracted.establishment
       });
 
@@ -176,31 +164,42 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Tentando salvar lançamento...', formData);
+    
     if (!auth.currentUser) {
-      alert('Você precisa estar logado para salvar lançamentos.');
+      console.error('Usuário não autenticado');
+      return;
+    }
+
+    if (!formData.value || isNaN(parseFloat(formData.value))) {
+      console.error('Valor inválido');
       return;
     }
 
     setIsSaving(true);
     const path = 'lancamentos';
     try {
-      await addDoc(collection(db, path), {
+      const cleanValue = formData.value.replace(',', '.');
+      const payload = {
         userId: auth.currentUser.uid,
         tipo: formData.type,
-        valor: parseFloat(formData.value),
+        valor: parseFloat(cleanValue),
         categoria: formData.category || 'Outros',
         data: formData.date,
-        descricao: formData.description || formData.establishment || '',
+        descricao: formData.description || formData.establishment || 'Sem descrição',
         estabelecimento: formData.establishment || '',
-        formaPagamento: formData.paymentMethod,
         createdAt: serverTimestamp()
-      });
+      };
+      
+      console.log('Payload para Firestore:', payload);
+      await addDoc(collection(db, path), payload);
       
       setView('success');
       setTimeout(() => {
         handleClose();
       }, 1500);
     } catch (error) {
+      console.error('Erro ao salvar no Firestore:', error);
       setIsSaving(false);
       handleFirestoreError(error, OperationType.WRITE, path);
     }
@@ -378,27 +377,6 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                     </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
-                      <Wallet size={10} /> Forma de Pagamento
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {['PIX', 'Cartão', 'Dinheiro'].map((method) => (
-                        <button
-                          key={method}
-                          type="button"
-                          onClick={() => setFormData({...formData, paymentMethod: method})}
-                          className={`py-2 rounded-lg text-[10px] font-bold border transition-all flex items-center justify-center gap-1 ${formData.paymentMethod === method ? 'bg-proc-cyan/10 border-proc-cyan text-proc-cyan' : 'bg-proc-bg/30 border-white/5 text-proc-text-sec'}`}
-                        >
-                          {method === 'PIX' && <Zap size={10} />}
-                          {method === 'Cartão' && <CreditCard size={10} />}
-                          {method === 'Dinheiro' && <Wallet size={10} />}
-                          {method}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div className="flex gap-3 pt-4">
                     <button 
                       type="button"
@@ -409,10 +387,19 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                     </button>
                     <button 
                       type="submit"
-                      className="flex-1 py-3.5 rounded-xl font-bold text-proc-bg bg-proc-green shadow-[0_0_20px_rgba(0,230,118,0.3)] flex items-center justify-center gap-2"
+                      disabled={isSaving}
+                      className={`flex-1 py-3.5 rounded-xl font-bold flex items-center justify-center gap-2 transition-all ${
+                        isSaving 
+                          ? 'bg-proc-green/50 text-proc-bg cursor-not-allowed' 
+                          : 'bg-proc-green text-proc-bg shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_30px_rgba(0,230,118,0.5)]'
+                      }`}
                     >
-                      <Save size={18} />
-                      Confirmar
+                      {isSaving ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : (
+                        <Save size={18} />
+                      )}
+                      {isSaving ? 'Salvando...' : 'Confirmar'}
                     </button>
                   </div>
                 </form>

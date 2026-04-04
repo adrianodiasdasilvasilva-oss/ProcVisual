@@ -11,7 +11,7 @@ service cloud.firestore {
     // Fields:
     //   - nome: string (required)
     //   - email: string (required, email format)
-    //   - dataCriacao: string (required, ISO 8601)
+    //   - dataCriacao: timestamp (required)
     //
     // Collection: lancamentos
     // Document ID: auto-generated
@@ -23,7 +23,7 @@ service cloud.firestore {
     //   - data: string (required, ISO 8601 date)
     //   - descricao: string (optional)
     //   - estabelecimento: string (optional)
-    //   - formaPagamento: string (optional)
+    //   - createdAt: timestamp (required)
     //   - comprovanteUrl: string (optional)
     //
     // ===============================================================
@@ -53,19 +53,17 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.keys().hasAll(['nome', 'email', 'dataCriacao']) &&
-             data.nome is string && data.nome.size() > 0 && data.nome.size() < 100 &&
-             isValidEmail(data.email) &&
-             data.dataCriacao is string;
+      return data.nome is string && 
+             data.email is string && 
+             isValidEmail(data.email);
     }
 
     function isValidLancamento(data) {
-      return data.keys().hasAll(['userId', 'tipo', 'valor', 'categoria', 'data']) &&
-             data.userId == request.auth.uid &&
+      return data.userId == request.auth.uid &&
              data.tipo in ['income', 'expense'] &&
-             data.valor is number && data.valor >= 0 &&
-             data.categoria is string && data.categoria.size() > 0 &&
-             isValidDateString(data.data);
+             data.valor is number && 
+             data.categoria is string && 
+             data.data is string;
     }
 
     // ===============================================================
@@ -74,19 +72,15 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isOwner(userId);
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
-                      request.resource.data.email == resource.data.email; // Email immutable
+      allow read, write: if isAuthenticated() && request.auth.uid == userId;
     }
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && isValidLancamento(request.resource.data);
-      allow update: if isDocOwner() && isValidLancamento(request.resource.data) &&
-                      request.resource.data.userId == resource.data.userId; // Ownership immutable
-      allow delete: if isDocOwner();
+      allow read, write: if isAuthenticated() && 
+        (resource == null || resource.data.userId == request.auth.uid) &&
+        (request.resource == null || request.resource.data.userId == request.auth.uid);
+      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
 }
