@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { createWorker } from 'tesseract.js';
+import { GoogleGenAI, Type } from '@google/genai';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction } from '../App';
@@ -35,6 +35,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   const [ocrProgress, setOcrProgress] = useState(0);
   const [isOcrRunning, setIsOcrRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,6 +87,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setOcrProgress(0);
     setIsOcrRunning(false);
     setIsSaving(false);
+    setErrorMessage(null);
     setIsCustomCategory(false);
     setCustomCategory('');
     setFormData({
@@ -114,78 +116,66 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     }
   };
 
-  const parseOCRText = (text: string) => {
-    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    
-    // 1. Extract Value (Look for R$ or decimal numbers near "TOTAL")
-    let value = '';
-    const valueMatch = text.match(/(?:R\$|TOTAL|VALOR|PAGAR)\s*[:=]?\s*(\d+[,.]\d{2})/i);
-    if (valueMatch) {
-      value = valueMatch[1].replace(',', '.');
-    } else {
-      // Fallback: find the largest decimal number
-      const allNumbers = text.match(/\d+[,.]\d{2}/g);
-      if (allNumbers) {
-        const numbers = allNumbers.map(n => parseFloat(n.replace(',', '.')));
-        value = Math.max(...numbers).toFixed(2);
-      }
-    }
-
-    // 2. Extract Date (DD/MM/YYYY)
-    let date = new Date().toISOString().split('T')[0];
-    const dateMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
-    if (dateMatch) {
-      let [_, day, month, year] = dateMatch;
-      if (year.length === 2) year = '20' + year;
-      date = `${year}-${month}-${day}`;
-    }
-
-    // 3. Extract Establishment (Usually first line or line with CNPJ)
-    let establishment = lines[0] || '';
-    const cnpjLine = lines.find(l => l.includes('CNPJ'));
-    if (cnpjLine) {
-      const cnpjIndex = lines.indexOf(cnpjLine);
-      if (cnpjIndex > 0) establishment = lines[cnpjIndex - 1];
-    }
-
-    // 4. Suggest Category
-    let category = 'Outros';
-    if (text.match(/MERCADO|SUPERMERCADO|ALIMENTO|RESTAURANTE|LANCHE|CAFE/i)) category = 'Alimentação';
-    else if (text.match(/POSTO|GASOLINA|COMBUSTIVEL|UBER|99APP/i)) category = 'Transporte';
-    else if (text.match(/FARMACIA|DROGARIA|MEDICAMENTO|HOSPITAL/i)) category = 'Saúde';
-    else if (text.match(/CINEMA|SHOW|TEATRO|EVENTO/i)) category = 'Lazer';
-
-    return { value, date, establishment, category };
-  };
-
   const processReceipt = async () => {
     if (!imagePreview) return;
     
     setView('processing');
     setIsOcrRunning(true);
     setOcrProgress(10);
+    setErrorMessage(null);
 
     try {
-      const worker = await createWorker('por'); // Portuguese
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       setOcrProgress(30);
       
-      const { data: { text } } = await worker.recognize(imagePreview);
+      // Extract base64 data and mimeType
+      const base64Data = imagePreview.split(',')[1];
+      const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [
+          {
+            parts: [
+              { text: 'Analise este comprovante e extraia as informações financeiras. Retorne apenas o JSON conforme o esquema.' },
+              { inlineData: { data: base64Data, mimeType } }
+            ]
+          }
+        ],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              valor: { type: Type.NUMBER, description: 'O valor total do comprovante' },
+              data: { type: Type.STRING, description: 'A data no formato YYYY-MM-DD' },
+              estabelecimento: { type: Type.STRING, description: 'O nome do estabelecimento' },
+              categoria: { 
+                type: Type.STRING, 
+                description: 'Uma das categorias: Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros' 
+              },
+              descricao: { type: Type.STRING, description: 'Uma breve descrição do gasto' }
+            },
+            required: ['valor', 'data', 'estabelecimento', 'categoria']
+          }
+        }
+      });
+
       setOcrProgress(80);
       
-      const extracted = parseOCRText(text);
+      const extracted = JSON.parse(response.text || '{}');
       
       setIsCustomCategory(false);
       setCustomCategory('');
       setFormData({
         ...formData,
-        value: extracted.value,
-        date: extracted.date,
-        establishment: extracted.establishment,
-        category: extracted.category,
-        description: extracted.establishment
+        value: extracted.valor?.toString() || '',
+        date: extracted.data || new Date().toISOString().split('T')[0],
+        establishment: extracted.estabelecimento || '',
+        category: extracted.categoria || 'Outros',
+        description: extracted.descricao || extracted.estabelecimento || ''
       });
 
-      await worker.terminate();
       setOcrProgress(100);
       
       setTimeout(() => {
@@ -194,8 +184,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       }, 500);
 
     } catch (error) {
-      console.error('OCR Error:', error);
-      // Fallback to manual if OCR fails
+      console.error('Gemini Error:', error);
+      setErrorMessage('Não foi possível ler o comprovante automaticamente. Por favor, insira os dados manualmente.');
       setView('manual');
       setIsOcrRunning(false);
     }
@@ -211,11 +201,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     }
 
     if (!formData.value || isNaN(parseFloat(formData.value))) {
-      console.error('Valor inválido');
+      setErrorMessage('Por favor, insira um valor válido.');
+      setIsSaving(false);
       return;
     }
 
     setIsSaving(true);
+    setErrorMessage(null);
     const path = 'lancamentos';
     try {
       const cleanValue = formData.value.replace(',', '.');
@@ -248,7 +240,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     } catch (error) {
       console.error('Erro ao salvar no Firestore:', error);
       setIsSaving(false);
-      handleFirestoreError(error, OperationType.WRITE, path);
+      setErrorMessage('Erro ao salvar no banco de dados. Por favor, tente novamente.');
+      // We still call handleFirestoreError for logging/system purposes
+      try {
+        handleFirestoreError(error, OperationType.WRITE, path);
+      } catch (e) {
+        // Ignore the re-thrown error here as we handle it in the UI
+      }
     }
   };
 
@@ -334,13 +332,23 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
               {/* VIEW: MANUAL FORM */}
               {view === 'manual' && (
                 <form onSubmit={handleSave} className="space-y-4">
+                  {/* Error Message */}
+                  {errorMessage && (
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center gap-3 mb-4">
+                      <p className="text-[10px] font-bold text-red-500 uppercase tracking-widest">{errorMessage}</p>
+                    </div>
+                  )}
+
                   {/* Detected Data Badge */}
-                  {imagePreview && (
-                    <div className="bg-proc-green/10 border border-proc-green/20 rounded-xl p-3 flex items-center gap-3 mb-4">
-                      <div className="w-8 h-8 rounded-lg bg-proc-green/20 flex items-center justify-center text-proc-green">
-                        <Scan size={16} />
+                  {imagePreview && !errorMessage && (
+                    <div className="bg-proc-green/10 border border-proc-green/20 rounded-xl p-3 flex flex-col gap-1 mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-proc-green/20 flex items-center justify-center text-proc-green">
+                          <Scan size={16} />
+                        </div>
+                        <p className="text-[10px] font-bold text-proc-green uppercase tracking-widest">Dados extraídos com sucesso!</p>
                       </div>
-                      <p className="text-[10px] font-bold text-proc-green uppercase tracking-widest">Dados detectados automaticamente</p>
+                      <p className="text-[10px] text-proc-text-sec ml-11">Confira as informações abaixo e clique em Confirmar.</p>
                     </div>
                   )}
 
