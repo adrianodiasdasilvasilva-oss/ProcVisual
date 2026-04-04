@@ -129,12 +129,12 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
     try {
       console.log('Iniciando processamento com Gemini...');
-      // Reverting to process.env.GEMINI_API_KEY as per platform instructions
-      const apiKey = process.env.GEMINI_API_KEY;
+      // Check both process.env and import.meta.env
+      const apiKey = process.env.GEMINI_API_KEY || (import.meta.env as any).GEMINI_API_KEY;
       
-      if (!apiKey || apiKey === '') {
-        console.error('Erro: GEMINI_API_KEY não encontrada');
-        throw new Error('Chave de API não encontrada no ambiente');
+      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY') {
+        console.error('Erro: GEMINI_API_KEY não encontrada ou é o placeholder');
+        throw new Error('Chave de API não configurada nos Segredos (Secrets) do AI Studio');
       }
 
       console.log('API Key detectada, inicializando SDK...');
