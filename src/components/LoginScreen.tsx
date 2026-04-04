@@ -63,10 +63,12 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
       }
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+      if (err.code === 'auth/user-not-found') {
         setError('Usuário não cadastrado');
       } else if (err.code === 'auth/wrong-password') {
         setError('Senha incorreta. Tente novamente.');
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('E-mail ou senha incorretos');
       } else if (err.code === 'auth/email-already-in-use') {
         setError('Este e-mail já está em uso.');
       } else if (err.code === 'auth/weak-password') {
@@ -74,7 +76,7 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
       } else if (err.code === 'auth/invalid-email') {
         setError('E-mail inválido.');
       } else {
-        setError('Usuário não cadastrado');
+        setError('Ocorreu um erro ao acessar sua conta.');
       }
     } finally {
       setIsLoading(false);
