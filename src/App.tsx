@@ -38,17 +38,23 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
 
   const handleEditTransactions = () => {
     setActiveTab('lancamentos');
   };
 
   const handleDeleteTransaction = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este lançamento?')) return;
+    setTransactionToDelete(id);
+  };
+
+  const confirmDelete = async () => {
+    if (!transactionToDelete) return;
     
     const path = 'lancamentos';
     try {
-      await deleteDoc(doc(db, path, id));
+      await deleteDoc(doc(db, path, transactionToDelete));
+      setTransactionToDelete(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
@@ -78,13 +84,16 @@ export default function App() {
         // Save/Update user in Firestore
         const userRef = doc(db, 'usuarios', currentUser.uid);
         try {
-          await setDoc(userRef, {
+          const userData = {
             nome: currentUser.displayName || 'Usuário',
             email: currentUser.email,
             dataCriacao: serverTimestamp()
-          }, { merge: true });
+          };
+          console.log('Tentando salvar dados do usuário:', currentUser.uid, userData);
+          await setDoc(userRef, userData, { merge: true });
+          console.log('Usuário salvo com sucesso no Firestore');
         } catch (error) {
-          console.error('Error saving user:', error);
+          console.error('Error saving user to Firestore:', error);
         }
       } else {
         setIsLoading(false);
@@ -239,7 +248,7 @@ export default function App() {
                                     <div className="w-2 h-2 rounded-full bg-current" />
                                   </div>
                                   <div>
-                                    <p className="text-white font-medium text-sm">{t.descricao || t.estabelecimento || 'Sem descrição'}</p>
+                                    <p className="text-white font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
                                     <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
                                   </div>
                                 </div>
@@ -286,7 +295,7 @@ export default function App() {
                               <div className="w-2.5 h-2.5 rounded-full bg-current" />
                             </div>
                             <div>
-                              <p className="text-white font-bold">{t.descricao || t.estabelecimento || 'Sem descrição'}</p>
+                              <p className="text-white font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
                               <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
                             </div>
                           </div>
@@ -363,6 +372,49 @@ export default function App() {
         }} 
         transactionToEdit={editingTransaction}
       />
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {transactionToDelete && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setTransactionToDelete(null)}
+              className="absolute inset-0 bg-proc-bg/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-proc-secondary border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full shadow-2xl"
+            >
+              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-white text-center mb-2">Excluir Lançamento?</h3>
+              <p className="text-proc-text-sec text-center mb-8">
+                Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setTransactionToDelete(null)}
+                  className="flex-1 py-4 rounded-2xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

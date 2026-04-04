@@ -128,7 +128,7 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
             initial={{ opacity: 0, scale: 0.9, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 40 }}
-            className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col max-h-[85vh]"
+            className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col max-h-[90vh]"
           >
             {/* Header */}
             <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between shrink-0 bg-proc-secondary/50 backdrop-blur-sm">
@@ -142,7 +142,7 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
             </div>
 
             {/* Cropper Area */}
-            <div className="relative flex-1 min-h-[240px] sm:min-h-[300px] bg-black/60">
+            <div className="relative w-full aspect-square bg-black/60 overflow-hidden">
               {image && (
                 <Cropper
                   image={image}
@@ -157,6 +157,17 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
                   onZoomChange={onZoomChange}
                   classes={{
                     containerClassName: "rounded-none",
+                  }}
+                  style={{
+                    containerStyle: {
+                      width: '100%',
+                      height: '100%',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      bottom: 0
+                    }
                   }}
                 />
               )}

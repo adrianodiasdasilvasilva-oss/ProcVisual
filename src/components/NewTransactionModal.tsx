@@ -130,16 +130,17 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     try {
       console.log('Iniciando processamento com Gemini...');
       // Check all possible sources for the API key
-      const apiKey = process.env.GEMINI_API_KEY || 
-                     (import.meta.env as any).VITE_GEMINI_API_KEY || 
-                     (import.meta.env as any).GEMINI_API_KEY;
+      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || 
+                     (import.meta as any).env?.GEMINI_API_KEY ||
+                     (process.env as any).GEMINI_API_KEY;
       
-      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY') {
-        console.error('Erro: GEMINI_API_KEY não encontrada em nenhuma fonte');
-        throw new Error('Chave de API não configurada nos Segredos (Secrets) do AI Studio. Por favor, adicione GEMINI_API_KEY nos Segredos.');
+      console.log('Verificando chave de API...');
+      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined') {
+        console.error('Erro: GEMINI_API_KEY não encontrada. Valor atual:', apiKey ? `${apiKey.substring(0, 5)}...` : 'null/undefined');
+        throw new Error('Chave de API não configurada. Por favor, adicione GEMINI_API_KEY nos Segredos (Secrets) do AI Studio e reinicie o app.');
       }
 
-      console.log('API Key detectada, inicializando SDK...');
+      console.log('API Key detectada (começa com:', apiKey.substring(0, 5), '), inicializando SDK...');
       const ai = new GoogleGenAI({ apiKey });
       setOcrProgress(30);
       
@@ -155,7 +156,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         contents: [
           {
             parts: [
-              { text: 'Você é um assistente financeiro especializado em ler comprovantes, carnês, faturas e recibos brasileiros. Analise a imagem e extraia os seguintes dados: \n1. Valor: Procure pelo valor total ou "Valor de Cada Prestação". Use ponto como separador decimal.\n2. Data: Procure pela data de vencimento ou do contrato (converta meses como jan, fev, mar para números YYYY-MM-DD).\n3. Estabelecimento: Identifique o nome da loja ou emissor (ex: Lojas Cem).\n4. Categoria: Sugira uma categoria (Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros).\n5. Tipo: Identifique se é uma "despesa" (pagamento) ou "receita" (recebimento).\n\nRetorne APENAS o JSON.' },
+              { text: 'Você é um assistente financeiro especializado em ler comprovantes brasileiros. Analise a imagem e extraia os dados seguindo estas regras CRÍTICAS:\n1. Estabelecimento: Identifique APENAS o nome próprio da loja ou empresa (ex: "Lojas Cem", "Mercado Livre", "Posto Shell"). NUNCA inclua frases descritivas como "Pagamento de prestação", "Compra parcelada" ou "Recibo de pagamento". Se o nome da loja for "Lojas Cem", o campo deve ser apenas "Lojas Cem".\n2. Valor: Use o valor total ou da prestação. Use ponto como separador decimal.\n3. Data: Formato YYYY-MM-DD.\n4. Categoria: Sugira uma (Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros).\n5. Tipo: "despesa" ou "receita".\n\nRetorne APENAS o JSON.' },
               { inlineData: { data: base64Data, mimeType } }
             ]
           }
@@ -167,7 +168,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
             properties: {
               valor: { type: Type.NUMBER, description: 'O valor numérico extraído (ex: 188.20)' },
               data: { type: Type.STRING, description: 'A data no formato YYYY-MM-DD' },
-              estabelecimento: { type: Type.STRING, description: 'O nome do estabelecimento ou emissor' },
+              estabelecimento: { type: Type.STRING, description: 'O nome curto e direto do estabelecimento ou emissor (ex: Lojas Cem)' },
               categoria: { 
                 type: Type.STRING, 
                 description: 'Uma das categorias sugeridas' 
@@ -176,7 +177,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                 type: Type.STRING, 
                 description: 'Se é uma receita ou despesa' 
               },
-              descricao: { type: Type.STRING, description: 'Uma breve descrição do que foi pago' }
+              descricao: { type: Type.STRING, description: 'Uma breve descrição do que foi pago. Evite frases genéricas como "Pagamento de prestação".' }
             },
             required: ['valor', 'data', 'estabelecimento', 'categoria', 'tipo']
           }
@@ -198,6 +199,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       
       setIsCustomCategory(false);
       setCustomCategory('');
+      const finalDescription = (extracted.descricao && extracted.descricao.toLowerCase().includes('pagamento de prestação')) 
+        ? extracted.estabelecimento 
+        : (extracted.descricao || extracted.estabelecimento || '');
+
       setFormData({
         ...formData,
         type: extracted.tipo === 'receita' ? 'income' : 'expense',
@@ -205,7 +210,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         date: extracted.data || new Date().toISOString().split('T')[0],
         establishment: extracted.estabelecimento || '',
         category: extracted.categoria || 'Outros',
-        description: extracted.descricao || extracted.estabelecimento || ''
+        description: finalDescription || ''
       });
 
       setOcrProgress(100);
@@ -566,8 +571,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10">
-                        <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                      <div className="relative w-full aspect-video rounded-2xl overflow-hidden border border-white/10 bg-black/40">
+                        <img src={imagePreview} alt="Preview" className="w-full h-full object-contain" />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                         <button 
                           onClick={() => setImagePreview(null)}
