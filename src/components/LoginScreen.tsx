@@ -235,8 +235,11 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: Log
                 exit={{ opacity: 0, height: 0 }}
                 className="text-proc-green text-xs font-medium bg-proc-green/10 p-3 rounded-xl border border-proc-green/20 flex items-center gap-2"
               >
-                <CheckCircle size={14} />
-                E-mail de redefinição enviado com sucesso!
+                <CheckCircle size={14} className="shrink-0" />
+                <div>
+                  <p>E-mail de redefinição enviado com sucesso!</p>
+                  <p className="text-[10px] opacity-80 mt-0.5">Verifique sua caixa de spam</p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
