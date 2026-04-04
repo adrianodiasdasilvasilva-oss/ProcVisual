@@ -117,7 +117,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   };
 
   const processReceipt = async () => {
-    if (!imagePreview) return;
+    if (!imagePreview) {
+      console.warn('Processamento cancelado: nenhuma imagem selecionada');
+      return;
+    }
     
     setView('processing');
     setIsOcrRunning(true);
@@ -125,17 +128,24 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setErrorMessage(null);
 
     try {
+      console.log('Iniciando processamento com Gemini...');
       const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('Chave de API não configurada');
+      
+      if (!apiKey || apiKey === 'MY_GEMINI_API_KEY' || apiKey === '') {
+        console.error('Erro: GEMINI_API_KEY não encontrada ou inválida');
+        throw new Error('Chave de API não configurada corretamente no ambiente');
       }
 
+      console.log('API Key detectada, inicializando SDK...');
       const ai = new GoogleGenAI({ apiKey });
       setOcrProgress(30);
       
       // Extract base64 data and mimeType
       const base64Data = imagePreview.split(',')[1];
       const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
+      
+      console.log('MimeType detectado:', mimeType);
+      console.log('Enviando para o modelo gemini-3-flash-preview...');
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
@@ -161,7 +171,6 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
               },
               tipo: { 
                 type: Type.STRING, 
-                enum: ['receita', 'despesa'],
                 description: 'Se é uma receita ou despesa' 
               },
               descricao: { type: Type.STRING, description: 'Uma breve descrição do que foi pago' }
@@ -176,16 +185,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       const textResponse = response.text;
       console.log('Resposta bruta do Gemini:', textResponse);
       
-      if (!textResponse) throw new Error('Resposta vazia da IA');
+      if (!textResponse) {
+        console.error('Erro: Resposta do Gemini veio vazia');
+        throw new Error('Resposta vazia da IA');
+      }
 
       const extracted = JSON.parse(textResponse);
-      console.log('Dados extraídos:', extracted);
+      console.log('Dados extraídos com sucesso:', extracted);
       
       setIsCustomCategory(false);
       setCustomCategory('');
       setFormData({
         ...formData,
-        type: extracted.tipo || 'expense',
+        type: extracted.tipo === 'receita' ? 'income' : 'expense',
         value: extracted.valor?.toString() || '',
         date: extracted.data || new Date().toISOString().split('T')[0],
         establishment: extracted.estabelecimento || '',
@@ -200,9 +212,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         setIsOcrRunning(false);
       }, 500);
 
-    } catch (error) {
-      console.error('Gemini Error:', error);
-      setErrorMessage('Não foi possível ler o comprovante automaticamente. Por favor, insira os dados manualmente.');
+    } catch (error: any) {
+      console.error('Erro detalhado no processamento Gemini:', error);
+      const msg = error.message || 'Erro desconhecido';
+      setErrorMessage(`Não foi possível ler o comprovante automaticamente (${msg}). Por favor, insira os dados manualmente.`);
       setView('manual');
       setIsOcrRunning(false);
     }

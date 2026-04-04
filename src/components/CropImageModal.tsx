@@ -115,29 +115,34 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-hidden">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 bg-proc-bg/90 backdrop-blur-md"
+            className="absolute inset-0 bg-proc-bg/95 backdrop-blur-xl"
             onClick={onClose}
           />
           
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 40 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+            exit={{ opacity: 0, scale: 0.9, y: 40 }}
+            className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col max-h-[85vh]"
           >
-            <div className="p-5 border-b border-white/5 flex items-center justify-between shrink-0">
-              <h3 className="text-lg font-bold text-white uppercase tracking-widest">Ajustar Foto</h3>
-              <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-proc-text-sec transition-all">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between shrink-0 bg-proc-secondary/50 backdrop-blur-sm">
+              <h3 className="text-sm font-bold text-white uppercase tracking-widest">Ajustar Perfil</h3>
+              <button 
+                onClick={onClose} 
+                className="p-2 -mr-2 rounded-xl hover:bg-white/5 text-proc-text-sec transition-all"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="relative flex-1 min-h-[280px] sm:min-h-[320px] bg-black/40">
+            {/* Cropper Area */}
+            <div className="relative flex-1 min-h-[240px] sm:min-h-[300px] bg-black/60">
               {image && (
                 <Cropper
                   image={image}
@@ -157,63 +162,80 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
               )}
             </div>
 
-            <div className="p-6 space-y-6 overflow-y-auto shrink-0">
-              <div className="space-y-5">
+            {/* Controls */}
+            <div className="p-6 space-y-5 bg-proc-secondary shrink-0">
+              <div className="space-y-4">
+                {/* Zoom Control */}
                 <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] uppercase tracking-tighter text-proc-text-sec font-bold">
-                    <span>Zoom</span>
-                    <span>{Math.round(zoom * 100)}%</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase tracking-widest text-proc-text-sec font-bold">Zoom</span>
+                    <span className="text-[10px] font-mono text-proc-cyan">{Math.round(zoom * 100)}%</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <ZoomOut size={18} className="text-proc-text-sec" />
+                    <button 
+                      onClick={() => setZoom(Math.max(1, zoom - 0.1))}
+                      className="p-1 text-proc-text-sec hover:text-white transition-colors"
+                    >
+                      <ZoomOut size={16} />
+                    </button>
                     <input
                       type="range"
                       value={zoom}
                       min={1}
                       max={3}
                       step={0.1}
-                      aria-labelledby="Zoom"
                       onChange={(e) => onZoomChange(Number(e.target.value))}
-                      className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-proc-cyan"
+                      className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-proc-cyan"
                     />
-                    <ZoomIn size={18} className="text-proc-text-sec" />
+                    <button 
+                      onClick={() => setZoom(Math.min(3, zoom + 0.1))}
+                      className="p-1 text-proc-text-sec hover:text-white transition-colors"
+                    >
+                      <ZoomIn size={16} />
+                    </button>
                   </div>
                 </div>
 
+                {/* Rotation Control */}
                 <div className="space-y-2">
-                  <div className="flex justify-between text-[10px] uppercase tracking-tighter text-proc-text-sec font-bold">
-                    <span>Rotação</span>
-                    <span>{rotation}°</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] uppercase tracking-widest text-proc-text-sec font-bold">Rotação</span>
+                    <span className="text-[10px] font-mono text-proc-cyan">{rotation}°</span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <RotateCcw size={18} className="text-proc-text-sec" />
+                    <button 
+                      onClick={() => setRotation((rotation - 90 + 360) % 360)}
+                      className="p-1 text-proc-text-sec hover:text-white transition-colors"
+                    >
+                      <RotateCcw size={16} />
+                    </button>
                     <input
                       type="range"
                       value={rotation}
                       min={0}
                       max={360}
                       step={1}
-                      aria-labelledby="Rotation"
                       onChange={(e) => setRotation(Number(e.target.value))}
-                      className="flex-1 h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-proc-cyan"
+                      className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-proc-cyan"
                     />
-                    <div className="w-8" />
+                    <div className="w-6" /> {/* Spacer to align with zoom buttons */}
                   </div>
                 </div>
               </div>
 
+              {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={onClose}
-                  className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-white text-sm font-bold hover:bg-white/10 transition-all"
+                  className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-proc-cyan to-proc-green text-proc-bg text-sm font-bold shadow-[0_0_20px_rgba(0,209,255,0.3)] hover:shadow-[0_0_30px_rgba(0,209,255,0.5)] transition-all flex items-center justify-center gap-2"
+                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-proc-cyan to-proc-green text-proc-bg text-xs font-bold shadow-[0_0_20px_rgba(0,209,255,0.3)] hover:shadow-[0_0_30px_rgba(0,209,255,0.5)] transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
                 >
-                  <Check size={18} />
+                  <Check size={16} />
                   Confirmar
                 </button>
               </div>
