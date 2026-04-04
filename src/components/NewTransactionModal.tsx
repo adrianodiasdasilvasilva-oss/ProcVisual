@@ -38,6 +38,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
+
+  const predefinedCategories = [
+    'Outros',
+    'Alimentação',
+    'Moradia',
+    'Transporte',
+    'Lazer',
+    'Saúde',
+    'Educação'
+  ];
+
   // Form states
   const [formData, setFormData] = useState({
     type: 'expense',
@@ -51,10 +64,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   useEffect(() => {
     if (isOpen && transactionToEdit) {
       setView('manual');
+      const isPredefined = predefinedCategories.includes(transactionToEdit.categoria);
+      setIsCustomCategory(!isPredefined);
+      setCustomCategory(!isPredefined ? transactionToEdit.categoria : '');
       setFormData({
         type: transactionToEdit.tipo,
         value: transactionToEdit.valor.toString(),
-        category: transactionToEdit.categoria,
+        category: isPredefined ? transactionToEdit.categoria : 'Personalizada',
         date: transactionToEdit.data,
         description: transactionToEdit.descricao,
         establishment: transactionToEdit.estabelecimento
@@ -63,12 +79,15 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       resetModal();
     }
   }, [isOpen, transactionToEdit]);
+
   const resetModal = () => {
     setView('selection');
     setImagePreview(null);
     setOcrProgress(0);
     setIsOcrRunning(false);
     setIsSaving(false);
+    setIsCustomCategory(false);
+    setCustomCategory('');
     setFormData({
       type: 'expense',
       value: '',
@@ -155,6 +174,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       
       const extracted = parseOCRText(text);
       
+      setIsCustomCategory(false);
+      setCustomCategory('');
       setFormData({
         ...formData,
         value: extracted.value,
@@ -198,11 +219,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     const path = 'lancamentos';
     try {
       const cleanValue = formData.value.replace(',', '.');
+      const finalCategory = isCustomCategory ? customCategory : formData.category;
+      
       const payload: any = {
         userId: auth.currentUser.uid,
         tipo: formData.type,
         valor: parseFloat(cleanValue),
-        categoria: formData.category || 'Outros',
+        categoria: finalCategory || 'Outros',
         data: formData.date,
         descricao: formData.description || formData.establishment || 'Sem descrição',
         estabelecimento: formData.establishment || '',
@@ -375,17 +398,21 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         <Tag size={10} /> Categoria
                       </label>
                       <select 
-                        value={formData.category}
-                        onChange={(e) => setFormData({...formData, category: e.target.value})}
+                        value={isCustomCategory ? 'Personalizada' : formData.category}
+                        onChange={(e) => {
+                          if (e.target.value === 'Personalizada') {
+                            setIsCustomCategory(true);
+                          } else {
+                            setIsCustomCategory(false);
+                            setFormData({...formData, category: e.target.value});
+                          }
+                        }}
                         className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
                       >
-                        <option value="Outros">Outros</option>
-                        <option value="Alimentação">Alimentação</option>
-                        <option value="Moradia">Moradia</option>
-                        <option value="Transporte">Transporte</option>
-                        <option value="Lazer">Lazer</option>
-                        <option value="Saúde">Saúde</option>
-                        <option value="Educação">Educação</option>
+                        {predefinedCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        <option value="Personalizada">Personalizada...</option>
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -400,6 +427,26 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       />
                     </div>
                   </div>
+
+                  {isCustomCategory && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-1"
+                    >
+                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">
+                        Nome da Categoria Personalizada
+                      </label>
+                      <input 
+                        type="text" 
+                        value={customCategory}
+                        onChange={(e) => setCustomCategory(e.target.value)}
+                        placeholder="Ex: Presentes, Viagem..."
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                        required
+                      />
+                    </motion.div>
+                  )}
 
                   <div className="flex gap-3 pt-4">
                     <button 

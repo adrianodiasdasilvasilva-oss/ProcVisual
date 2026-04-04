@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogIn, Mail, Lock, ArrowRight, UserPlus, Loader2, User, Phone, ArrowLeft } from 'lucide-react';
+import { LogIn, Mail, Lock, ArrowRight, UserPlus, Loader2, User, Phone, ArrowLeft, CheckCircle } from 'lucide-react';
 import Logo from './Logo';
+import { auth } from '../firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 
 interface LoginScreenProps {
   onGoogleLogin: () => void;
@@ -18,6 +20,33 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
   const [phone, setPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Por favor, digite seu e-mail para redefinir a senha.');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetSent(true);
+      setError(null);
+    } catch (err: any) {
+      console.error('Reset error:', err);
+      if (err.code === 'auth/user-not-found') {
+        setError('Usuário não cadastrado');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('E-mail inválido.');
+      } else {
+        setError('Erro ao enviar e-mail de redefinição. Tente novamente.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,8 +63,8 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
       }
     } catch (err: any) {
       console.error('Auth error:', err);
-      if (err.code === 'auth/user-not-found') {
-        setError('Usuário não encontrado. Verifique seu e-mail ou crie uma conta.');
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        setError('Usuário não cadastrado');
       } else if (err.code === 'auth/wrong-password') {
         setError('Senha incorreta. Tente novamente.');
       } else if (err.code === 'auth/email-already-in-use') {
@@ -45,7 +74,7 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
       } else if (err.code === 'auth/invalid-email') {
         setError('E-mail inválido.');
       } else {
-        setError('Ocorreu um erro ao acessar sua conta. Verifique se o login por e-mail está ativado no console do Firebase.');
+        setError('Usuário não cadastrado');
       }
     } finally {
       setIsLoading(false);
@@ -144,7 +173,10 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setResetSent(false);
+                }}
                 placeholder="seu@email.com"
                 className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-proc-cyan/50 focus:ring-4 focus:ring-proc-cyan/10 transition-all"
                 required
@@ -166,14 +198,26 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-proc-cyan/50 focus:ring-4 focus:ring-proc-cyan/10 transition-all"
-                required
+                required={!resetSent}
               />
             </div>
+            {!isSignUp && (
+              <div className="flex justify-end px-1">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-[10px] font-bold text-proc-text-sec hover:text-proc-cyan uppercase tracking-widest transition-colors"
+                >
+                  Esqueceu a senha?
+                </button>
+              </div>
+            )}
           </div>
 
           <AnimatePresence mode="wait">
             {error && (
               <motion.p
+                key="error"
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
                 exit={{ opacity: 0, height: 0 }}
@@ -181,6 +225,18 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
               >
                 {error}
               </motion.p>
+            )}
+            {resetSent && (
+              <motion.div
+                key="success"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="text-proc-green text-xs font-medium bg-proc-green/10 p-3 rounded-xl border border-proc-green/20 flex items-center gap-2"
+              >
+                <CheckCircle size={14} />
+                E-mail de redefinição enviado com sucesso!
+              </motion.div>
             )}
           </AnimatePresence>
 
@@ -225,6 +281,7 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError(null);
+              setResetSent(false);
             }}
             className="text-sm text-proc-text-sec hover:text-proc-cyan transition-colors"
           >
