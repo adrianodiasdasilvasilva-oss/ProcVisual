@@ -30,7 +30,11 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: Log
     setIsLoading(true);
     setError(null);
     try {
-      await sendPasswordResetEmail(auth, email);
+      const actionCodeSettings = {
+        url: window.location.origin,
+        handleCodeInApp: true,
+      };
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
       setResetSent(true);
       setError(null);
     } catch (err: any) {
