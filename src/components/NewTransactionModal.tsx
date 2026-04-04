@@ -36,6 +36,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   const [isOcrRunning, setIsOcrRunning] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -445,7 +446,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       
                       <div className="grid grid-cols-2 gap-3">
                         <button 
-                          onClick={() => fileInputRef.current?.click()}
+                          onClick={() => cameraInputRef.current?.click()}
                           className="flex items-center justify-center gap-2 py-3.5 rounded-xl bg-proc-secondary border border-white/10 text-white font-bold text-sm"
                         >
                           <Camera size={18} className="text-proc-cyan" />
@@ -464,6 +465,14 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         ref={fileInputRef}
                         className="hidden" 
                         accept="image/*"
+                        onChange={handleImageUpload}
+                      />
+                      <input 
+                        type="file" 
+                        ref={cameraInputRef}
+                        className="hidden" 
+                        accept="image/*"
+                        capture="environment"
                         onChange={handleImageUpload}
                       />
                     </div>
