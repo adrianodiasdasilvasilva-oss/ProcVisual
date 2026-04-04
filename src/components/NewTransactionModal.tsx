@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createWorker } from 'tesseract.js';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
+import { Transaction } from '../App';
 import { 
   X, 
   Edit3, 
@@ -23,11 +24,12 @@ import {
 interface NewTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
+  transactionToEdit?: Transaction | null;
 }
 
 type ModalView = 'selection' | 'manual' | 'receipt' | 'processing' | 'success';
 
-export default function NewTransactionModal({ isOpen, onClose }: NewTransactionModalProps) {
+export default function NewTransactionModal({ isOpen, onClose, transactionToEdit }: NewTransactionModalProps) {
   const [view, setView] = useState<ModalView>('selection');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -39,12 +41,27 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
   const [formData, setFormData] = useState({
     type: 'expense',
     value: '',
-    category: '',
+    category: 'Outros',
     date: new Date().toISOString().split('T')[0],
     description: '',
     establishment: ''
   });
 
+  useEffect(() => {
+    if (isOpen && transactionToEdit) {
+      setView('manual');
+      setFormData({
+        type: transactionToEdit.tipo,
+        value: transactionToEdit.valor.toString(),
+        category: transactionToEdit.categoria,
+        date: transactionToEdit.data,
+        description: transactionToEdit.descricao,
+        establishment: transactionToEdit.estabelecimento
+      });
+    } else if (isOpen && !transactionToEdit) {
+      resetModal();
+    }
+  }, [isOpen, transactionToEdit]);
   const resetModal = () => {
     setView('selection');
     setImagePreview(null);
@@ -54,7 +71,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     setFormData({
       type: 'expense',
       value: '',
-      category: '',
+      category: 'Outros',
       date: new Date().toISOString().split('T')[0],
       description: '',
       establishment: ''
@@ -180,7 +197,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
     const path = 'lancamentos';
     try {
       const cleanValue = formData.value.replace(',', '.');
-      const payload = {
+      const payload: any = {
         userId: auth.currentUser.uid,
         tipo: formData.type,
         valor: parseFloat(cleanValue),
@@ -188,11 +205,17 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
         data: formData.date,
         descricao: formData.description || formData.establishment || 'Sem descrição',
         estabelecimento: formData.establishment || '',
-        createdAt: serverTimestamp()
+        updatedAt: serverTimestamp()
       };
       
-      console.log('Payload para Firestore:', payload);
-      await addDoc(collection(db, path), payload);
+      if (transactionToEdit) {
+        console.log('Atualizando lançamento no Firestore:', transactionToEdit.id, payload);
+        await updateDoc(doc(db, path, transactionToEdit.id), payload);
+      } else {
+        payload.createdAt = serverTimestamp();
+        console.log('Payload para Firestore:', payload);
+        await addDoc(collection(db, path), payload);
+      }
       
       setView('success');
       setTimeout(() => {
@@ -238,7 +261,7 @@ export default function NewTransactionModal({ isOpen, onClose }: NewTransactionM
                 )}
                 <h3 className="text-lg font-bold text-white">
                   {view === 'selection' && 'Novo Lançamento'}
-                  {view === 'manual' && 'Inserir Lançamento'}
+                  {view === 'manual' && (transactionToEdit ? 'Editar Lançamento' : 'Inserir Lançamento')}
                   {view === 'receipt' && 'Enviar Comprovante'}
                   {view === 'processing' && 'Lendo Comprovante...'}
                   {view === 'success' && 'Sucesso!'}

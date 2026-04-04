@@ -9,10 +9,8 @@ interface BottomNavProps {
 export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
-    { id: 'income', label: 'Receitas', icon: ArrowUpCircle },
-    { id: 'expenses', label: 'Despesas', icon: ArrowDownCircle },
-    { id: 'analysis', label: 'Análises', icon: BarChart2 },
-    { id: 'reports', label: 'Relatórios', icon: FileText },
+    { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
+    { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
   ];
 
   return (

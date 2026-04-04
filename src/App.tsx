@@ -3,7 +3,6 @@ import Header from './components/Header';
 import Filters from './components/Filters';
 import ActionButtons from './components/ActionButtons';
 import HealthGauge from './components/HealthGauge';
-import SummaryCard from './components/SummaryCard';
 import MainChart from './components/MainChart';
 import QuickCards from './components/QuickCards';
 import BottomNav from './components/BottomNav';
@@ -11,9 +10,9 @@ import Sidebar from './components/Sidebar';
 import NewTransactionModal from './components/NewTransactionModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { LogIn, Loader2 } from 'lucide-react';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDocFromServer, deleteDoc } from 'firebase/firestore';
+import { LogIn, Loader2, Edit3, Trash2 } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -38,6 +37,36 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const handleEditTransactions = () => {
+    setActiveTab('lancamentos');
+  };
+
+  const handleDeleteTransaction = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este lançamento?')) return;
+    
+    const path = 'lancamentos';
+    try {
+      await deleteDoc(doc(db, path, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
+  // Connection Test
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. The client is offline.");
+        }
+      }
+    };
+    testConnection();
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -94,13 +123,30 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleLogin = async () => {
+  const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Google Login error:', error);
     }
+  };
+
+  const handleEmailLogin = async (email: string, pass: string) => {
+    await signInWithEmailAndPassword(auth, email, pass);
+  };
+
+  const handleEmailSignUp = async (email: string, pass: string, name: string, phone: string) => {
+    const { user: newUser } = await createUserWithEmailAndPassword(auth, email, pass);
+    
+    // Save additional user info to Firestore
+    const userRef = doc(db, 'usuarios', newUser.uid);
+    await setDoc(userRef, {
+      nome: name,
+      email: email,
+      telefone: phone,
+      dataCriacao: serverTimestamp()
+    }, { merge: true });
   };
 
   if (!isAuthReady) {
@@ -113,7 +159,14 @@ export default function App() {
 
   if (!user) {
     if (showLogin) {
-      return <LoginScreen onLogin={handleLogin} />;
+      return (
+        <LoginScreen 
+          onGoogleLogin={handleGoogleLogin} 
+          onEmailLogin={handleEmailLogin}
+          onEmailSignUp={handleEmailSignUp}
+          onBack={() => setShowLogin(false)}
+        />
+      );
     }
     return <LandingPage onLogin={() => setShowLogin(true)} />;
   }
@@ -128,6 +181,11 @@ export default function App() {
 
   const balance = totalIncome - totalExpense;
 
+  // Dynamic Health Calculation
+  const healthPercentage = totalIncome === 0 
+    ? (totalExpense === 0 ? 100 : 0)
+    : Math.max(0, Math.min(100, ((totalIncome - totalExpense) / totalIncome) * 100));
+
   return (
     <div className="min-h-screen bg-proc-bg text-white font-sans selection:bg-proc-green/30 flex flex-col md:flex-row">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
@@ -139,7 +197,10 @@ export default function App() {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
             <Filters />
             <div className="hidden md:block">
-              <ActionButtons onNewTransaction={() => setIsModalOpen(true)} />
+              <ActionButtons 
+                onNewTransaction={() => setIsModalOpen(true)} 
+                onEditTransactions={handleEditTransactions}
+              />
             </div>
           </div>
           
@@ -155,7 +216,10 @@ export default function App() {
                   className="md:col-span-12"
                 >
                   <div className="md:hidden mb-6">
-                    <ActionButtons onNewTransaction={() => setIsModalOpen(true)} />
+                    <ActionButtons 
+                      onNewTransaction={() => setIsModalOpen(true)} 
+                      onEditTransactions={handleEditTransactions}
+                    />
                   </div>
                   
                   {isLoading ? (
@@ -166,8 +230,7 @@ export default function App() {
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                       {/* Left Column - Stats & Summary */}
                       <div className="md:col-span-4 space-y-6">
-                        <HealthGauge percentage={balance > 0 ? 82 : 45} />
-                        <SummaryCard income={totalIncome} expense={totalExpense} />
+                        <HealthGauge percentage={healthPercentage} />
                         <QuickCards income={totalIncome} expense={totalExpense} />
                       </div>
 
@@ -190,9 +253,11 @@ export default function App() {
                                     <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
                                   </div>
                                 </div>
-                                <p className={`font-bold text-sm ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
-                                  {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                </p>
+                                <div className="flex items-center gap-4">
+                                  <p className={`font-bold text-sm ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
+                                    {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </p>
+                                </div>
                               </div>
                             ))}
                             {transactions.length === 0 && (
@@ -203,6 +268,71 @@ export default function App() {
                       </div>
                     </div>
                   )}
+                </motion.div>
+              ) : activeTab === 'lancamentos' ? (
+                <motion.div
+                  key="lancamentos"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="md:col-span-12"
+                >
+                  <div className="bg-proc-secondary/20 border border-white/5 rounded-[2.5rem] p-6">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-white font-bold text-xl">Gerenciar Lançamentos</h3>
+                      <button 
+                        onClick={() => setActiveTab('dashboard')}
+                        className="text-proc-text-sec hover:text-white transition-colors"
+                      >
+                        Voltar para Dashboard
+                      </button>
+                    </div>
+                    
+                    <div className="space-y-4">
+                      {transactions.map((t) => (
+                        <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5">
+                          <div className="flex items-center gap-4">
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
+                              <div className="w-2.5 h-2.5 rounded-full bg-current" />
+                            </div>
+                            <div>
+                              <p className="text-white font-bold">{t.descricao || t.estabelecimento || 'Sem descrição'}</p>
+                              <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-6">
+                            <div className="text-right">
+                              <p className={`font-bold ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
+                                {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              </p>
+                            </div>
+                            <button 
+                              onClick={() => handleDeleteTransaction(t.id)}
+                              className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                              title="Excluir"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setEditingTransaction(t);
+                                setIsModalOpen(true);
+                              }}
+                              className="p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
+                              title="Editar"
+                            >
+                              <Edit3 size={18} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {transactions.length === 0 && (
+                        <div className="py-20 text-center">
+                          <p className="text-proc-text-sec">Nenhum lançamento encontrado para gerenciar.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div
@@ -237,7 +367,11 @@ export default function App() {
       {/* New Transaction Modal */}
       <NewTransactionModal 
         isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingTransaction(null);
+        }} 
+        transactionToEdit={editingTransaction}
       />
     </div>
   );

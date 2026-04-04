@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, PiggyBank, Target } from 'lucide-react';
+import { TrendingUp, TrendingDown, PiggyBank, PieChart } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface QuickCardsProps {
@@ -8,13 +8,13 @@ interface QuickCardsProps {
 
 export default function QuickCards({ income, expense }: QuickCardsProps) {
   const savings = income - expense;
-  const savingsPercent = income > 0 ? Math.round((savings / income) * 100) : 0;
+  const expensePercent = income > 0 ? Math.round((expense / income) * 100) : (expense > 0 ? 100 : 0);
 
   const cards = [
-    { title: 'Receita', value: `R$ ${income.toLocaleString('pt-BR')}`, icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
-    { title: 'Despesa', value: `R$ ${expense.toLocaleString('pt-BR')}`, icon: TrendingDown, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(248,113,113,0.1)]' },
-    { title: 'Economia', value: `R$ ${savings.toLocaleString('pt-BR')}`, icon: PiggyBank, color: 'text-proc-cyan', glow: 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
-    { title: 'Meta', value: `${savingsPercent}%`, icon: Target, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
+    { title: 'Receita', value: `R$ ${income.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: TrendingUp, color: 'text-proc-green', glow: 'shadow-[0_0_15px_rgba(0,230,118,0.15)]' },
+    { title: 'Despesa', value: `R$ ${expense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: TrendingDown, color: 'text-red-400', glow: 'shadow-[0_0_15px_rgba(248,113,113,0.1)]' },
+    { title: 'Economia', value: `R$ ${savings.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: PiggyBank, color: savings < 0 ? 'text-red-500' : 'text-proc-cyan', glow: savings < 0 ? 'shadow-[0_0_15px_rgba(239,68,68,0.15)]' : 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
+    { title: '% Despesas', value: `${expensePercent}%`, icon: PieChart, color: expensePercent > 100 ? 'text-red-500' : 'text-proc-cyan', glow: expensePercent > 100 ? 'shadow-[0_0_15px_rgba(239,68,68,0.15)]' : 'shadow-[0_0_15px_rgba(0,209,255,0.15)]' },
   ];
 
   return (

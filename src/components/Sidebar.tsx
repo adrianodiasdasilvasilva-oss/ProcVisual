@@ -11,8 +11,8 @@ interface SidebarProps {
 export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'lancamentos', label: 'Lançamentos', icon: Wallet },
     { id: 'relatorios', label: 'Relatórios', icon: PieChart },
-    { id: 'carteira', label: 'Carteira', icon: Wallet },
     { id: 'notificacoes', label: 'Alertas', icon: Bell },
     { id: 'configuracoes', label: 'Ajustes', icon: Settings },
   ];

@@ -14,13 +14,17 @@
           "format": "email",
           "description": "Email de contato"
         },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone de contato"
+        },
         "dataCriacao": {
           "type": "string",
           "format": "date-time",
           "description": "Data em que o perfil foi criado"
         }
       },
-      "required": ["nome", "email", "dataCriacao"]
+      "required": ["nome", "email", "telefone", "dataCriacao"]
     },
     "lancamento": {
       "title": "Lançamento",

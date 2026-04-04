@@ -1,4 +1,4 @@
-import { Bell, Search, User as UserIcon } from 'lucide-react';
+import { Bell, Search, User as UserIcon, LogOut } from 'lucide-react';
 import { auth } from '../firebase';
 import Logo from './Logo';
 
@@ -19,7 +19,7 @@ export default function Header({ balance }: HeaderProps) {
           </h1>
           <div className="flex items-center gap-1.5 mt-0.5">
             <span className="text-[8px] text-proc-text-sec uppercase tracking-widest font-semibold">Saldo</span>
-            <span className="text-[10px] font-bold text-proc-cyan">
+            <span className={`text-[10px] font-bold ${balance < 0 ? 'text-red-500' : 'text-proc-cyan'}`}>
               R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </span>
           </div>
@@ -38,13 +38,20 @@ export default function Header({ balance }: HeaderProps) {
         
         <div className="flex items-center gap-2 px-4 py-2 bg-proc-cyan/5 rounded-2xl border border-proc-cyan/10">
           <span className="text-[10px] text-proc-text-sec uppercase tracking-widest font-bold">Saldo Consolidado</span>
-          <span className="text-sm font-bold text-proc-cyan">
+          <span className={`text-sm font-bold ${balance < 0 ? 'text-red-500' : 'text-proc-cyan'}`}>
             R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </span>
         </div>
       </div>
 
       <div className="flex items-center gap-3 md:gap-4">
+        <button 
+          onClick={() => auth.signOut()}
+          className="md:hidden p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all"
+        >
+          <LogOut size={20} />
+        </button>
+
         <button className="p-2.5 rounded-xl bg-proc-secondary/50 border border-white/5 text-proc-text-sec hover:text-white hover:border-white/10 transition-all relative">
           <Bell size={20} />
           <div className="absolute top-2 right-2 w-2 h-2 bg-proc-cyan rounded-full border-2 border-proc-bg shadow-[0_0_8px_#00D1FF]" />

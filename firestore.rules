@@ -11,6 +11,7 @@ service cloud.firestore {
     // Fields:
     //   - nome: string (required)
     //   - email: string (required, email format)
+    //   - telefone: string (required)
     //   - dataCriacao: timestamp (required)
     //
     // Collection: lancamentos
@@ -53,17 +54,19 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.nome is string && 
-             data.email is string && 
-             isValidEmail(data.email);
+      return data.nome is string && data.nome.size() > 0 && data.nome.size() < 100 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.telefone is string && data.telefone.size() >= 8 &&
+             data.dataCriacao is timestamp;
     }
 
     function isValidLancamento(data) {
       return data.userId == request.auth.uid &&
              data.tipo in ['income', 'expense'] &&
-             data.valor is number && 
-             data.categoria is string && 
-             data.data is string;
+             data.valor is number && data.valor >= 0 &&
+             data.categoria is string && data.categoria.size() > 0 &&
+             data.data is string &&
+             data.createdAt is timestamp;
     }
 
     // ===============================================================
@@ -72,14 +75,15 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      allow read: if isAuthenticated() && request.auth.uid == userId;
+      allow create, update: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data);
     }
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      allow read, write: if isAuthenticated() && 
-        (resource == null || resource.data.userId == request.auth.uid) &&
-        (request.resource == null || request.resource.data.userId == request.auth.uid);
+      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data);
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }

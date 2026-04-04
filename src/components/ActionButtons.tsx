@@ -3,9 +3,10 @@ import { motion } from 'motion/react';
 
 interface ActionButtonsProps {
   onNewTransaction: () => void;
+  onEditTransactions: () => void;
 }
 
-export default function ActionButtons({ onNewTransaction }: ActionButtonsProps) {
+export default function ActionButtons({ onNewTransaction, onEditTransactions }: ActionButtonsProps) {
   return (
     <div className="flex flex-row gap-3 md:gap-4 mb-0 md:mb-0">
       <motion.button 
@@ -21,10 +22,11 @@ export default function ActionButtons({ onNewTransaction }: ActionButtonsProps) 
       <motion.button 
         whileHover={{ scale: 1.02, y: -2 }}
         whileTap={{ scale: 0.98 }}
+        onClick={onEditTransactions}
         className="flex-1 md:flex-none md:px-8 flex items-center justify-center gap-2 bg-proc-secondary/50 border border-white/10 text-white py-3.5 md:py-3 rounded-2xl font-bold hover:bg-proc-secondary/80 hover:border-white/20 transition-all"
       >
         <RefreshCw size={18} strokeWidth={2.5} className="text-proc-cyan" />
-        <span className="text-sm">Atualizar</span>
+        <span className="text-sm">Editar lançamentos</span>
       </motion.button>
     </div>
   );

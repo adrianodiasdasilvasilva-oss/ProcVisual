@@ -34,7 +34,7 @@ export default function MainChart({ transactions }: MainChartProps) {
   }
 
   return (
-    <div className="bg-proc-secondary/20 p-6 rounded-[2rem] border border-white/5 mb-6">
+    <div className="p-6 rounded-[2rem] border border-white/5 mb-6">
       <div className="flex justify-between items-end mb-6">
         <h3 className="text-sm font-semibold text-proc-text-sec uppercase tracking-widest">Despesas por Categoria</h3>
         <span className="text-xs font-bold text-proc-cyan">Abril 2026</span>
@@ -57,7 +57,6 @@ export default function MainChart({ transactions }: MainChartProps) {
                 <feComposite in="SourceGraphic" in2="blur" operator="over" />
               </filter>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
             <XAxis type="number" hide domain={[0, 'dataMax + 200']} />
             <YAxis 
               dataKey="name" 
@@ -68,7 +67,7 @@ export default function MainChart({ transactions }: MainChartProps) {
               width={80}
             />
             <Tooltip 
-              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+              cursor={{ fill: 'rgba(255,255,255,0.02)' }}
               contentStyle={{ 
                 backgroundColor: '#112236', 
                 border: '1px solid rgba(255,255,255,0.1)',

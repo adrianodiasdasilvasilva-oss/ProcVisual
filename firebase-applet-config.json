@@ -1,10 +1,10 @@
 {
-  "projectId": "procvisual-8afad",
-  "appId": "1:567701838235:web:fbac5ce987e7cfa109a93e",
-  "apiKey": "AIzaSyCKXSxn0mTdGFSDV8Z7TY-AKFq1NrWUmK4",
-  "authDomain": "procvisual-8afad.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "procvisual-8afad.firebasestorage.app",
-  "messagingSenderId": "567701838235",
+  "projectId": "gen-lang-client-0683065612",
+  "appId": "1:89251701640:web:629041cb21dc200a79103d",
+  "apiKey": "AIzaSyCgS54XsxBOQXRBkda8TgHNuGv7wwL69v8",
+  "authDomain": "gen-lang-client-0683065612.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-a2c6ec88-ba7b-46b5-9458-7e66129a3a3d",
+  "storageBucket": "gen-lang-client-0683065612.firebasestorage.app",
+  "messagingSenderId": "89251701640",
   "measurementId": ""
 }
