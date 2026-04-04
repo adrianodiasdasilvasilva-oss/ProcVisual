@@ -6,13 +6,12 @@ import { auth } from '../firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
 
 interface LoginScreenProps {
-  onGoogleLogin: () => void;
   onEmailLogin: (email: string, pass: string) => Promise<void>;
   onEmailSignUp: (email: string, pass: string, name: string, phone: string) => Promise<void>;
   onBack?: () => void;
 }
 
-export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp, onBack }: LoginScreenProps) {
+export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: LoginScreenProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -258,26 +257,6 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
           </button>
         </form>
 
-        <div className="relative my-8">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-white/5"></div>
-          </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-proc-bg px-4 text-proc-text-sec font-bold tracking-widest">Ou</span>
-          </div>
-        </div>
-
-        <button 
-          onClick={onGoogleLogin}
-          type="button"
-          className="w-full group relative flex items-center justify-center gap-3 py-4 rounded-2xl bg-white/5 border border-white/10 text-white font-bold hover:bg-white/10 transition-all duration-300"
-        >
-          <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors">
-            <LogIn size={18} className="text-proc-cyan" />
-          </div>
-          Entrar com Google
-        </button>
-
         <div className="mt-8 text-center">
           <button
             onClick={() => {
@@ -291,11 +270,6 @@ export default function LoginScreen({ onGoogleLogin, onEmailLogin, onEmailSignUp
           </button>
         </div>
 
-        <div className="mt-8 pt-6 border-t border-white/5">
-          <p className="text-[10px] text-proc-text-sec uppercase tracking-widest font-bold text-center">
-            Segurança de nível bancário
-          </p>
-        </div>
       </motion.div>
     </div>
   );

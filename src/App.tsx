@@ -10,7 +10,7 @@ import Sidebar from './components/Sidebar';
 import NewTransactionModal from './components/NewTransactionModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDocFromServer, deleteDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2 } from 'lucide-react';
 
@@ -123,15 +123,6 @@ export default function App() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error('Google Login error:', error);
-    }
-  };
-
   const handleEmailLogin = async (email: string, pass: string) => {
     await signInWithEmailAndPassword(auth, email, pass);
   };
@@ -161,7 +152,6 @@ export default function App() {
     if (showLogin) {
       return (
         <LoginScreen 
-          onGoogleLogin={handleGoogleLogin} 
           onEmailLogin={handleEmailLogin}
           onEmailSignUp={handleEmailSignUp}
           onBack={() => setShowLogin(false)}
