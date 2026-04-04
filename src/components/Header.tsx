@@ -4,6 +4,7 @@ import { auth, db } from '../firebase';
 import Logo from './Logo';
 import { updateProfile } from 'firebase/auth';
 import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
+import CropImageModal from './CropImageModal';
 
 interface HeaderProps {
   balance: number;
@@ -13,6 +14,8 @@ export default function Header({ balance }: HeaderProps) {
   const user = auth.currentUser;
   const [isUploading, setIsUploading] = useState(false);
   const [photoURL, setPhotoURL] = useState<string | null>(user?.photoURL || null);
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [tempImage, setTempImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -36,34 +39,43 @@ export default function Header({ balance }: HeaderProps) {
     fileInputRef.current?.click();
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    setIsUploading(true);
     const reader = new FileReader();
-    reader.onloadend = async () => {
-      const base64String = reader.result as string;
-      
-      try {
-        // 1. Update Firebase Auth Profile (optional, but good for consistency)
-        await updateProfile(user, { photoURL: base64String });
-        
-        // 2. Update Firestore
-        const userRef = doc(db, 'usuarios', user.uid);
-        await updateDoc(userRef, {
-          fotoURL: base64String,
-          updatedAt: new Date().toISOString()
-        });
-        
-        setPhotoURL(base64String);
-      } catch (error) {
-        console.error('Error updating profile picture:', error);
-      } finally {
-        setIsUploading(false);
-      }
+    reader.onloadend = () => {
+      setTempImage(reader.result as string);
+      setIsCropModalOpen(true);
     };
     reader.readAsDataURL(file);
+    
+    // Reset input value to allow selecting the same file again
+    e.target.value = '';
+  };
+
+  const handleCropComplete = async (croppedImage: string) => {
+    if (!user) return;
+
+    setIsUploading(true);
+    try {
+      // 1. Update Firebase Auth Profile
+      await updateProfile(user, { photoURL: croppedImage });
+      
+      // 2. Update Firestore
+      const userRef = doc(db, 'usuarios', user.uid);
+      await updateDoc(userRef, {
+        fotoURL: croppedImage,
+        updatedAt: new Date().toISOString()
+      });
+      
+      setPhotoURL(croppedImage);
+    } catch (error) {
+      console.error('Error updating profile picture:', error);
+    } finally {
+      setIsUploading(false);
+      setTempImage(null);
+    }
   };
 
   return (
@@ -146,6 +158,13 @@ export default function Header({ balance }: HeaderProps) {
           </div>
         </div>
       </div>
+
+      <CropImageModal 
+        isOpen={isCropModalOpen}
+        onClose={() => setIsCropModalOpen(false)}
+        image={tempImage}
+        onCropComplete={handleCropComplete}
+      />
     </header>
   );
 }
