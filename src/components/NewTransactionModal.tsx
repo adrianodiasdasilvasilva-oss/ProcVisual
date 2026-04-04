@@ -139,7 +139,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       console.log('Verificando chave de API...');
       if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined' || apiKey === '""') {
         console.error('Erro: GEMINI_API_KEY_ não encontrada. Valor atual:', apiKey ? `${apiKey.substring(0, 5)}...` : 'null/undefined');
-        throw new Error('Chave de API não configurada nos Segredos (Secrets) do AI Studio. Para que o site compartilhado funcione, você precisa adicionar a GEMINI_API_KEY_ no menu de configurações (ícone de engrenagem) > Secrets.');
+        throw new Error('Chave de API não configurada. Se estiver no AI Studio, adicione GEMINI_API_KEY_ nos Segredos (Secrets). Se estiver na Vercel, adicione GEMINI_API_KEY_ nas Environment Variables.');
       }
 
       console.log('API Key detectada (começa com:', apiKey.substring(0, 5), '), inicializando SDK...');
