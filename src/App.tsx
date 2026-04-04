@@ -15,6 +15,8 @@ import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, User } from 'f
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { LogIn, Loader2 } from 'lucide-react';
 
+import LandingPage from './components/landing/LandingPage';
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -109,22 +111,7 @@ export default function App() {
   }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-proc-bg flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-24 h-24 rounded-full bg-proc-cyan/10 flex items-center justify-center text-proc-cyan mb-8 shadow-[0_0_30px_rgba(0,209,255,0.2)]">
-          <LogIn size={40} />
-        </div>
-        <h1 className="text-3xl font-bold text-white mb-2">Proc<span className="text-proc-cyan">Visual</span></h1>
-        <p className="text-proc-text-sec mb-8 max-w-xs">Acesse sua conta para gerenciar suas finanças com inteligência visual.</p>
-        <button 
-          onClick={handleLogin}
-          className="w-full max-w-xs py-4 rounded-2xl bg-white text-proc-bg font-bold flex items-center justify-center gap-3 hover:bg-proc-cyan transition-all shadow-xl"
-        >
-          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-          Entrar com Google
-        </button>
-      </div>
-    );
+    return <LandingPage onLogin={handleLogin} />;
   }
 
   const totalIncome = transactions
