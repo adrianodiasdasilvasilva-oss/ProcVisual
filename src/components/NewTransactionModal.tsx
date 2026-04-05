@@ -177,14 +177,16 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
   // Função auxiliar para processar o texto do comprovante sem IA externa
   const parseReceiptText = (text: string) => {
-    const lines = text.split('\n');
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     let valor = 0;
     let data = '';
     let estabelecimento = '';
     
-    // Tentar encontrar o valor (procura por R$ ou números com vírgula)
-    // Regex melhorada para pegar valores como 188,20 ou 1.200,00
-    const valorMatch = text.match(/(?:R\$|TOTAL|VALOR|PAGO|VALOR TOTAL)[\s:]*([\d.,]+)/i) || 
+    console.log('Linhas detectadas para análise:', lines);
+
+    // 1. Tentar encontrar o VALOR
+    // Procura por padrões comuns de valor em carnês e notas
+    const valorMatch = text.match(/(?:VALOR|PRESTAÇÃO|TOTAL|PAGO|R\$)[\s:]*([\d.,]+)/i) || 
                        text.match(/([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/);
     
     if (valorMatch) {
@@ -192,16 +194,50 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       valor = parseFloat(valorStr);
     }
 
-    // Tentar encontrar a data (DD/MM/YYYY ou DD/MM/YY)
-    const dataMatch = text.match(/(\d{2}\/\d{2}\/\d{2,4})/);
-    if (dataMatch) {
-      const parts = dataMatch[1].split('/');
-      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
-      data = `${year}-${parts[1]}-${parts[0]}`;
+    // 2. Tentar encontrar a DATA
+    // Mapeamento de meses em português para números
+    const meses: { [key: string]: string } = {
+      'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
+      'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
+    };
+
+    // Padrão 1: DD/MM/YYYY ou DD/MM/YY
+    const dataPadraoMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+    
+    // Padrão 2: DD-mes-YYYY (comum em carnês como o da imagem)
+    const dataMesMatch = text.match(/(\d{2})-(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)-(\d{4})/i);
+
+    if (dataMesMatch) {
+      const dia = dataMesMatch[1];
+      const mes = meses[dataMesMatch[2].toLowerCase()];
+      const ano = dataMesMatch[3];
+      data = `${ano}-${mes}-${dia}`;
+    } else if (dataPadraoMatch) {
+      const dia = dataPadraoMatch[1];
+      const mes = dataPadraoMatch[2];
+      const year = dataPadraoMatch[3].length === 2 ? `20${dataPadraoMatch[3]}` : dataPadraoMatch[3];
+      data = `${year}-${mes}-${dia}`;
     }
 
-    // Tentar pegar o estabelecimento (geralmente a primeira ou segunda linha com texto)
-    estabelecimento = lines.find(l => l.trim().length > 3 && !l.includes('COMPROVANTE'))?.trim() || 'Estabelecimento';
+    // 3. Tentar encontrar o ESTABELECIMENTO
+    // Procura por nomes conhecidos ou a primeira linha que não seja genérica
+    const textoLimpo = text.toUpperCase();
+    if (textoLimpo.includes('LOJAS CEM')) {
+      estabelecimento = 'Lojas Cem';
+    } else if (textoLimpo.includes('MERCADO LIVRE')) {
+      estabelecimento = 'Mercado Livre';
+    } else if (textoLimpo.includes('IFOOD')) {
+      estabelecimento = 'iFood';
+    } else {
+      // Pega a primeira linha que pareça um nome (sem muitos números)
+      const provavelNome = lines.find(l => 
+        l.length > 3 && 
+        !l.includes('COMPROVANTE') && 
+        !l.includes('PAGAMENTO') &&
+        !/\d{5,}/.test(l) // Evita linhas que são apenas números de contrato
+      );
+      estabelecimento = provavelNome || 'Estabelecimento';
+    }
 
     return {
       valor: valor || '',
