@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from '@google/genai';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction } from '../App';
@@ -128,77 +127,33 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setErrorMessage(null);
 
     try {
-      console.log('Iniciando processamento com Gemini...');
-      // Check all possible sources for the API key
-      const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || 
-                     (import.meta as any).env?.GEMINI_API_KEY_ ||
-                     (import.meta as any).env?.GEMINI_API_KEY ||
-                     (process.env as any).GEMINI_API_KEY_ ||
-                     (process.env as any).GEMINI_API_KEY;
-      
-      console.log('Verificando chave de API...');
-      if (!apiKey || apiKey === '' || apiKey === 'MY_GEMINI_API_KEY' || apiKey === 'undefined' || apiKey === '""') {
-        console.error('Erro: GEMINI_API_KEY_ não encontrada. Valor atual:', apiKey ? `${apiKey.substring(0, 5)}...` : 'null/undefined');
-        throw new Error('Chave de API não configurada. Se estiver no AI Studio, adicione GEMINI_API_KEY_ nos Segredos (Secrets). Se estiver na Vercel, adicione GEMINI_API_KEY_ nas Environment Variables.');
-      }
-
-      console.log('API Key detectada (começa com:', apiKey.substring(0, 5), '), inicializando SDK...');
-      const ai = new GoogleGenAI({ apiKey });
+      console.log('Enviando imagem para o servidor para processamento...');
       setOcrProgress(30);
       
-      // Extract base64 data and mimeType
       const base64Data = imagePreview.split(',')[1];
       const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
       
-      console.log('MimeType detectado:', mimeType);
-      console.log('Enviando para o modelo gemini-flash-latest...');
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
-        contents: [
-          {
-            parts: [
-              { text: 'Você é um assistente financeiro especializado em ler comprovantes brasileiros. Analise a imagem e extraia os dados seguindo estas regras CRÍTICAS:\n1. Estabelecimento: Identifique APENAS o nome próprio da loja ou empresa (ex: "Lojas Cem", "Mercado Livre", "Posto Shell"). NUNCA inclua frases descritivas como "Pagamento de prestação", "Compra parcelada" ou "Recibo de pagamento". Se o nome da loja for "Lojas Cem", o campo deve ser apenas "Lojas Cem".\n2. Valor: Use o valor total ou da prestação. Use ponto como separador decimal.\n3. Data: Formato YYYY-MM-DD.\n4. Categoria: Sugira uma (Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Outros).\n5. Tipo: "despesa" ou "receita".\n\nRetorne APENAS o JSON.' },
-              { inlineData: { data: base64Data, mimeType } }
-            ]
-          }
-        ],
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              valor: { type: Type.NUMBER, description: 'O valor numérico extraído (ex: 188.20)' },
-              data: { type: Type.STRING, description: 'A data no formato YYYY-MM-DD' },
-              estabelecimento: { type: Type.STRING, description: 'O nome curto e direto do estabelecimento ou emissor (ex: Lojas Cem)' },
-              categoria: { 
-                type: Type.STRING, 
-                description: 'Uma das categorias sugeridas' 
-              },
-              tipo: { 
-                type: Type.STRING, 
-                description: 'Se é uma receita ou despesa' 
-              },
-              descricao: { type: Type.STRING, description: 'Uma breve descrição do que foi pago. Evite frases genéricas como "Pagamento de prestação".' }
-            },
-            required: ['valor', 'data', 'estabelecimento', 'categoria', 'tipo']
-          }
-        }
+      const response = await fetch('/api/process-receipt', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageBase64: base64Data,
+          mimeType: mimeType,
+        }),
       });
 
-      setOcrProgress(80);
-      
-      const textResponse = response.text;
-      console.log('Resposta bruta do Gemini:', textResponse);
-      
-      if (!textResponse) {
-        console.error('Erro: Resposta do Gemini veio vazia');
-        throw new Error('Resposta vazia da IA');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao processar imagem no servidor.');
       }
 
-      const extracted = JSON.parse(textResponse);
-      console.log('Dados extraídos com sucesso:', extracted);
+      const extracted = await response.json();
+      setOcrProgress(80);
       
+      console.log('Dados extraídos pelo servidor:', extracted);
+
       setIsCustomCategory(false);
       setCustomCategory('');
       const finalDescription = (extracted.descricao && extracted.descricao.toLowerCase().includes('pagamento de prestação')) 
