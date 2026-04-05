@@ -1,4 +1,4 @@
-import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText } from 'lucide-react';
+import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface BottomNavProps {
@@ -11,6 +11,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
     { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+    { id: 'configuracoes', label: 'Ajustes', icon: SettingsIcon },
   ];
 
   return (

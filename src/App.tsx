@@ -8,6 +8,7 @@ import QuickCards from './components/QuickCards';
 import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import NewTransactionModal from './components/NewTransactionModal';
+import Settings from './components/Settings';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
@@ -332,6 +333,16 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                </motion.div>
+              ) : activeTab === 'configuracoes' ? (
+                <motion.div
+                  key="configuracoes"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="md:col-span-12"
+                >
+                  <Settings />
                 </motion.div>
               ) : (
                 <motion.div

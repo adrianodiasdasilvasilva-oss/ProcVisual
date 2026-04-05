@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createWorker } from 'tesseract.js';
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction } from '../App';
 import { 
@@ -41,6 +41,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
+  const [userCustomCategories, setUserCustomCategories] = useState<string[]>([]);
 
   const predefinedCategories = [
     'Outros',
@@ -61,6 +62,20 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     description: '',
     establishment: ''
   });
+
+  useEffect(() => {
+    if (!auth.currentUser || !isOpen) return;
+
+    const categoriesRef = collection(db, 'categorias');
+    const q = query(categoriesRef, where('userId', '==', auth.currentUser.uid));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cats = snapshot.docs.map(doc => doc.data().nome as string);
+      setUserCustomCategories(cats);
+    });
+
+    return () => unsubscribe();
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && transactionToEdit) {
@@ -186,11 +201,22 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
     // 1. Tentar encontrar o VALOR
     // Procura por padrões comuns de valor em carnês e notas
-    const valorMatch = text.match(/(?:VALOR|PRESTAÇÃO|TOTAL|PAGO|R\$)[\s:]*([\d.,]+)/i) || 
-                       text.match(/([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/);
+    // Prioridade para "VALOR PAGO" ou "VALOR TOTAL"
+    // Usamos [\s\S]*? para permitir quebras de linha entre o texto e o valor
+    const valorPagoMatch = text.match(/VALOR\s+PAGO[\s:]*?([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/i);
+    const valorTotalMatch = text.match(/(?:TOTAL|VALOR|PRESTAÇÃO|R\$)[\s:]*?([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/i);
+    const valorGenericoMatch = text.match(/([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/g);
     
-    if (valorMatch) {
-      const valorStr = valorMatch[1].replace(/\./g, '').replace(',', '.');
+    if (valorPagoMatch) {
+      const valorStr = valorPagoMatch[1].replace(/\./g, '').replace(',', '.');
+      valor = parseFloat(valorStr);
+    } else if (valorTotalMatch) {
+      const valorStr = valorTotalMatch[1].replace(/\./g, '').replace(',', '.');
+      valor = parseFloat(valorStr);
+    } else if (valorGenericoMatch) {
+      // Pega o último valor encontrado (geralmente o total no final da nota)
+      const lastValue = valorGenericoMatch[valorGenericoMatch.length - 1];
+      const valorStr = lastValue.replace(/\./g, '').replace(',', '.');
       valor = parseFloat(valorStr);
     }
 
@@ -201,13 +227,16 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
     };
 
-    // Padrão 1: DD/MM/YYYY ou DD/MM/YY
+    // Padrão 1: Data Emis.: DD/MM/YYYY (comum em NFC-e)
+    const dataEmisMatch = text.match(/Data\s+Emis\.:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
+    // Padrão 2: DD/MM/YYYY ou DD/MM/YY
     const dataPadraoMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
-    
-    // Padrão 2: DD-mes-YYYY (comum em carnês como o da imagem)
+    // Padrão 3: DD-mes-YYYY (comum em carnês)
     const dataMesMatch = text.match(/(\d{2})-(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)-(\d{4})/i);
 
-    if (dataMesMatch) {
+    if (dataEmisMatch) {
+      data = `${dataEmisMatch[3]}-${dataEmisMatch[2]}-${dataEmisMatch[1]}`;
+    } else if (dataMesMatch) {
       const dia = dataMesMatch[1];
       const mes = meses[dataMesMatch[2].toLowerCase()];
       const ano = dataMesMatch[3];
@@ -222,7 +251,22 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     // 3. Tentar encontrar o ESTABELECIMENTO
     // Procura por nomes conhecidos ou a primeira linha que não seja genérica
     const textoLimpo = text.toUpperCase();
-    if (textoLimpo.includes('LOJAS CEM')) {
+    if (textoLimpo.includes('SUPERMERCADO')) {
+      // Tenta extrair o nome completo se tiver "SUPERMERCADO"
+      const linhaSuper = lines.find(l => l.toUpperCase().includes('SUPERMERCADO'));
+      if (linhaSuper) {
+        // Remove CNPJ e outros dados técnicos da linha
+        estabelecimento = linhaSuper
+          .replace(/CNPJ[:\s]*[\d./-]{14,}/gi, '')
+          .replace(/IE[:\s]*[\d.-]{9,}/gi, '')
+          .trim();
+        
+        // Se após a limpeza sobrar algo muito curto, tenta pegar a linha toda sem o CNPJ
+        if (estabelecimento.length < 5) estabelecimento = 'Supermercado';
+      } else {
+        estabelecimento = 'Supermercado';
+      }
+    } else if (textoLimpo.includes('LOJAS CEM')) {
       estabelecimento = 'Lojas Cem';
     } else if (textoLimpo.includes('MERCADO LIVRE')) {
       estabelecimento = 'Mercado Livre';
@@ -234,6 +278,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         l.length > 3 && 
         !l.includes('COMPROVANTE') && 
         !l.includes('PAGAMENTO') &&
+        !l.includes('CNPJ') &&
+        !l.includes('CPF') &&
         !/\d{5,}/.test(l) // Evita linhas que são apenas números de contrato
       );
       estabelecimento = provavelNome || 'Estabelecimento';
@@ -271,6 +317,21 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       const cleanValue = formData.value.replace(',', '.');
       const finalCategory = isCustomCategory ? customCategory : formData.category;
       
+      // If it's a custom category, save it to the 'categorias' collection if it doesn't exist
+      if (isCustomCategory && customCategory) {
+        const categoriesRef = collection(db, 'categorias');
+        const q = query(categoriesRef, where('userId', '==', auth.currentUser.uid), where('nome', '==', customCategory));
+        const existing = await getDocs(q);
+        
+        if (existing.empty) {
+          await addDoc(categoriesRef, {
+            userId: auth.currentUser.uid,
+            nome: customCategory,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
       const payload: any = {
         userId: auth.currentUser.uid,
         tipo: formData.type,
@@ -476,6 +537,9 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
                       >
                         {predefinedCategories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        {userCustomCategories.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
                         <option value="Personalizada">Personalizada...</option>

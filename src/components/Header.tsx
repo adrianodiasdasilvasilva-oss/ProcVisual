@@ -1,10 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Bell, Search, User as UserIcon, LogOut, Camera, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, Search, User as UserIcon, LogOut } from 'lucide-react';
 import { auth, db } from '../firebase';
 import Logo from './Logo';
-import { updateProfile } from 'firebase/auth';
-import { doc, updateDoc, onSnapshot } from 'firebase/firestore';
-import CropImageModal from './CropImageModal';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface HeaderProps {
   balance: number;
@@ -12,11 +10,7 @@ interface HeaderProps {
 
 export default function Header({ balance }: HeaderProps) {
   const user = auth.currentUser;
-  const [isUploading, setIsUploading] = useState(false);
   const [photoURL, setPhotoURL] = useState<string | null>(user?.photoURL || null);
-  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
-  const [tempImage, setTempImage] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -35,58 +29,8 @@ export default function Header({ balance }: HeaderProps) {
     return () => unsubscribe();
   }, [user]);
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setTempImage(reader.result as string);
-      setIsCropModalOpen(true);
-    };
-    reader.readAsDataURL(file);
-    
-    // Reset input value to allow selecting the same file again
-    e.target.value = '';
-  };
-
-  const handleCropComplete = async (croppedImage: string) => {
-    if (!user) return;
-
-    setIsUploading(true);
-    try {
-      // 1. Update Firebase Auth Profile
-      await updateProfile(user, { photoURL: croppedImage });
-      
-      // 2. Update Firestore
-      const userRef = doc(db, 'usuarios', user.uid);
-      await updateDoc(userRef, {
-        fotoURL: croppedImage,
-        updatedAt: new Date().toISOString()
-      });
-      
-      setPhotoURL(croppedImage);
-    } catch (error) {
-      console.error('Error updating profile picture:', error);
-    } finally {
-      setIsUploading(false);
-      setTempImage(null);
-    }
-  };
-
   return (
     <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-white/5">
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="image/*" 
-        onChange={handleFileChange} 
-      />
       <div className="flex items-center gap-3 md:hidden">
         <Logo size="small" className="h-7" />
         <div className="flex flex-col">
@@ -139,32 +83,18 @@ export default function Header({ balance }: HeaderProps) {
             <p className="text-[10px] text-proc-text-sec mt-1">Premium Plan</p>
           </div>
           <div 
-            onClick={handleAvatarClick}
-            className="w-10 h-10 rounded-xl bg-gradient-to-br from-proc-cyan to-proc-green p-[1px] shadow-[0_0_15px_rgba(0,209,255,0.2)] cursor-pointer group relative"
+            className="w-10 h-10 rounded-xl bg-gradient-to-br from-proc-cyan to-proc-green p-[1px] shadow-[0_0_15px_rgba(0,209,255,0.2)] group relative"
           >
             <div className="w-full h-full rounded-[11px] bg-proc-bg flex items-center justify-center overflow-hidden">
-              {isUploading ? (
-                <Loader2 size={20} className="text-proc-cyan animate-spin" />
-              ) : photoURL ? (
+              {photoURL ? (
                 <img src={photoURL} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               ) : (
                 <UserIcon size={20} className="text-proc-cyan" />
               )}
-              
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Camera size={16} className="text-white" />
-              </div>
             </div>
           </div>
         </div>
       </div>
-
-      <CropImageModal 
-        isOpen={isCropModalOpen}
-        onClose={() => setIsCropModalOpen(false)}
-        image={tempImage}
-        onCropComplete={handleCropComplete}
-      />
     </header>
   );
 }
