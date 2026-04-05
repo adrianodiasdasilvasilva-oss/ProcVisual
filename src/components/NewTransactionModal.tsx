@@ -133,6 +133,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       const base64Data = imagePreview.split(',')[1];
       const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
       
+      console.log('Fetching URL:', window.location.origin + '/api/process-receipt');
+      
       const response = await fetch('/api/process-receipt', {
         method: 'POST',
         headers: {

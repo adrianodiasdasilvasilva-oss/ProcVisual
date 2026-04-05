@@ -23,14 +23,20 @@ async function startServer() {
     next();
   });
 
+  app.get("/api/test", (req, res) => {
+    res.json({ status: "ok", message: "API is reachable" });
+  });
+
   // API Route for Receipt Processing
   app.post("/api/process-receipt", async (req, res) => {
-    console.log("Recebida requisição POST em /api/process-receipt");
+    console.log(">>> Recebida requisição POST em /api/process-receipt");
+    console.log(">>> Body keys:", Object.keys(req.body || {}));
     try {
       const { imageBase64, mimeType } = req.body;
 
       if (!imageBase64 || !mimeType) {
-        return res.status(400).json({ error: "Imagem ou tipo MIME ausente." });
+        console.error(">>> Erro: Dados ausentes no body");
+        return res.status(400).json({ error: "Imagem ou tipo MIME ausente no corpo da requisição." });
       }
 
       // Check for API key in environment
