@@ -14,7 +14,7 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
     { id: 'lancamentos', label: 'Lançamentos', icon: Wallet },
     { id: 'relatorios', label: 'Relatórios', icon: PieChart },
     { id: 'notificacoes', label: 'Alertas', icon: Bell },
-    { id: 'configuracoes', label: 'Ajustes', icon: Settings },
+    { id: 'configuracoes', label: 'Configurações', icon: Settings },
   ];
 
   return (

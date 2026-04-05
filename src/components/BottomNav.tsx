@@ -11,7 +11,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
     { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
-    { id: 'configuracoes', label: 'Ajustes', icon: SettingsIcon },
+    { id: 'configuracoes', label: 'Configurações', icon: SettingsIcon },
   ];
 
   return (

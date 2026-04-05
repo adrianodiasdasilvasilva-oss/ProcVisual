@@ -193,7 +193,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   // Função auxiliar para processar o texto do comprovante sem IA externa
   const parseReceiptText = (text: string) => {
     const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    let valor = 0;
+    let valor: number | null = null;
     let data = '';
     let estabelecimento = '';
     
@@ -202,25 +202,36 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     // 1. Tentar encontrar o VALOR
     // Procura por padrões comuns de valor em carnês e notas
     // Prioridade para "VALOR PAGO" ou "VALOR TOTAL"
-    // Usamos [\s\S]*? para permitir quebras de linha entre o texto e o valor
-    const valorPagoMatch = text.match(/VALOR\s+PAGO[\s:]*?([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/i);
-    const valorTotalMatch = text.match(/(?:TOTAL|VALOR|PRESTAÇÃO|R\$)[\s:]*?([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/i);
-    const valorGenericoMatch = text.match(/([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/g);
+    const padraoValor = /([\d]{1,3}(?:[.,\s][\d]{3})*[.,\s]{1,2}[\d]{1,2})/;
     
+    // Padrões específicos com rótulos (mais confiáveis)
+    const valorPagoMatch = text.match(new RegExp(`VALOR\\s+PAGO[\\s:]*?${padraoValor.source}`, 'i'));
+    const valorTotalMatch = text.match(new RegExp(`(?:TOTAL|VALOR|PRESTAÇÃO|R\\$|PREST|VALOR\\s+DA\\s+PREST)[\\s:]*?${padraoValor.source}`, 'i'));
+    const valorGenericoMatch = text.match(new RegExp(padraoValor.source, 'g'));
+    
+    console.log('Tentando extrair valor...');
     if (valorPagoMatch) {
-      const valorStr = valorPagoMatch[1].replace(/\./g, '').replace(',', '.');
+      console.log('Valor Pago encontrado:', valorPagoMatch[1]);
+      const valorStr = valorPagoMatch[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
       valor = parseFloat(valorStr);
     } else if (valorTotalMatch) {
-      const valorStr = valorTotalMatch[1].replace(/\./g, '').replace(',', '.');
+      console.log('Valor Total/Prestação encontrado:', valorTotalMatch[1]);
+      const valorStr = valorTotalMatch[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
       valor = parseFloat(valorStr);
     } else if (valorGenericoMatch) {
+      console.log('Valores genéricos encontrados:', valorGenericoMatch);
       // Pega o último valor encontrado (geralmente o total no final da nota)
       const lastValue = valorGenericoMatch[valorGenericoMatch.length - 1];
-      const valorStr = lastValue.replace(/\./g, '').replace(',', '.');
+      const valorStr = lastValue.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
       valor = parseFloat(valorStr);
     }
+    console.log('Valor final extraído:', valor);
+
+    // Formata o valor para string com ponto decimal para o input type="number"
+    const valorFormatado = (valor !== null && !isNaN(valor)) ? valor.toFixed(2) : '';
 
     // 2. Tentar encontrar a DATA
+    // ... (mantém a lógica de data anterior)
     // Mapeamento de meses em português para números
     const meses: { [key: string]: string } = {
       'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
@@ -253,13 +264,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     const textoLimpo = text.toUpperCase();
     
     // Detecção robusta para Lojas Cem (mesmo com erros de leitura comuns)
+    // Usamos palavras-chave que aparecem no carnê como "impressão digital"
     const padroesLojasCem = [
-      'LOJAS CEM', 'LOJAS CEM', 'LOIAS CEM', 'LOJAS CEN', 'LOJAS GEM', 
-      'LOJAS OEN', 'LOJAS GEN', 'LOJAS CFM', 'LOJAS CEM', 'LOJAS CEM'
+      'LOJAS CEM', 'LOIAS CEM', 'LOJAS CEN', 'LOJAS GEM', 'LOJAS OEN', 
+      'LOJAS GEN', 'LOJAS CFM', 'CEM', 'SONHOS', 'S A AÇO', 'RESOO TESS'
     ];
     
-    const encontrouLojasCem = padroesLojasCem.some(p => textoLimpo.includes(p)) || 
-                             (textoLimpo.includes('CEM') && (textoLimpo.includes('PRESTAÇÃO') || textoLimpo.includes('VENCTO')));
+    // Se encontrar CEM e alguma palavra técnica de carnê, é Lojas Cem
+    const termosCarne = ['PRESTAÇÃO', 'VENCTO', 'FILIAL', 'CONTRATO', 'PREST.', 'CLIENTE', 'CARNÊ'];
+    const temTermosCarne = termosCarne.filter(t => textoLimpo.includes(t)).length >= 1;
+    
+    const encontrouLojasCem = (padroesLojasCem.some(p => textoLimpo.includes(p)) && temTermosCarne) || 
+                             textoLimpo.includes('VOCÊ REALIZANDO SONHOS') ||
+                             textoLimpo.includes('S A AÇO');
 
     if (encontrouLojasCem) {
       estabelecimento = 'Lojas Cem';
@@ -297,13 +314,15 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       estabelecimento = provavelNome || 'Estabelecimento';
     }
 
+    const finalEstabelecimento = estabelecimento || 'Estabelecimento';
+
     return {
-      valor: valor || '',
+      valor: valorFormatado || '',
       data: data || new Date().toISOString().split('T')[0],
-      estabelecimento: estabelecimento.substring(0, 30),
+      estabelecimento: finalEstabelecimento.substring(0, 30),
       categoria: 'Outros',
       tipo: text.toLowerCase().includes('recebido') ? 'receita' : 'despesa',
-      descricao: estabelecimento
+      descricao: `Leitura automática: ${finalEstabelecimento}`
     };
   };
 
