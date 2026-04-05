@@ -30,34 +30,39 @@ async function startServer() {
   // API Route for Receipt Processing
   app.post("/api/process-receipt", async (req, res) => {
     console.log(">>> Recebida requisição POST em /api/process-receipt");
-    console.log(">>> Body keys:", Object.keys(req.body || {}));
     try {
       const { imageBase64, mimeType } = req.body;
 
       if (!imageBase64 || !mimeType) {
         console.error(">>> Erro: Dados ausentes no body");
-        return res.status(400).json({ error: "Imagem ou tipo MIME ausente no corpo da requisição." });
+        return res.status(400).json({ 
+          error: "Imagem ou tipo MIME ausente no corpo da requisição.",
+          receivedKeys: Object.keys(req.body || {})
+        });
       }
 
       // Check for API key in environment
       const apiKey = process.env.GEMINI_API_KEY_ || process.env.GEMINI_API_KEY;
       
       if (!apiKey) {
+        console.error(">>> Erro: Chave de API não encontrada no process.env");
         return res.status(500).json({ 
           error: "Chave de API não configurada no servidor. Por favor, adicione GEMINI_API_KEY_ nos Segredos (Secrets) do AI Studio." 
         });
       }
 
+      console.log(">>> Inicializando Gemini com chave (final):", apiKey.substring(0, 5) + "...");
       const ai = new GoogleGenAI({ apiKey });
       const model = "gemini-3-flash-preview";
 
       const prompt = `
         Analise este comprovante de pagamento ou nota fiscal e extraia as seguintes informações em formato JSON:
-        - descricao: Uma descrição curta do que foi pago ou comprado.
+        - estabelecimento: O nome curto e direto do estabelecimento ou emissor (ex: Lojas Cem).
         - valor: O valor total (apenas números, use ponto para decimais).
         - categoria: Uma das seguintes: Alimentação, Transporte, Lazer, Saúde, Educação, Moradia, Outros.
         - data: A data no formato YYYY-MM-DD.
-        - tipo: 'despesa' (sempre despesa para comprovantes).
+        - tipo: 'despesa' ou 'receita'.
+        - descricao: Uma breve descrição do que foi pago.
 
         Responda APENAS o JSON puro, sem blocos de código markdown.
       `;
@@ -73,6 +78,8 @@ async function startServer() {
       });
 
       const text = response.text;
+      console.log(">>> Resposta bruta do Gemini:", text);
+      
       if (!text) {
         throw new Error("Resposta vazia do Gemini.");
       }
@@ -83,12 +90,17 @@ async function startServer() {
 
       res.json(result);
     } catch (error: any) {
-      console.error("Erro no processamento Gemini:", error);
+      console.error(">>> Erro no processamento Gemini:", error);
       res.status(500).json({ 
-        error: "Erro ao processar o comprovante.",
+        error: "Erro ao processar o comprovante no servidor.",
         details: error.message 
       });
     }
+  });
+
+  // Catch-all for other /api routes to prevent HTML fallback
+  app.all("/api/*", (req, res) => {
+    res.status(404).json({ error: `Rota de API não encontrada: ${req.method} ${req.url}` });
   });
 
   // Vite middleware for development

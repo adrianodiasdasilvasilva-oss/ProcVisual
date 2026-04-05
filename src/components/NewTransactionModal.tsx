@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { createWorker } from 'tesseract.js';
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction } from '../App';
@@ -127,49 +128,36 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setErrorMessage(null);
 
     try {
-      console.log('Enviando imagem para o servidor para processamento...');
-      setOcrProgress(30);
+      console.log('Iniciando OCR Local com Tesseract.js...');
+      setOcrProgress(20);
       
-      const base64Data = imagePreview.split(',')[1];
-      const mimeType = imagePreview.split(',')[0].split(':')[1].split(';')[0];
+      // Criar o worker do Tesseract
+      const worker = await createWorker('por'); // 'por' para Português
+      setOcrProgress(40);
       
-      console.log('Fetching URL:', window.location.origin + '/api/process-receipt');
+      // Realizar o reconhecimento
+      const { data: { text } } = await worker.recognize(imagePreview);
+      setOcrProgress(70);
       
-      const response = await fetch('/api/process-receipt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageBase64: base64Data,
-          mimeType: mimeType,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao processar imagem no servidor.');
-      }
-
-      const extracted = await response.json();
-      setOcrProgress(80);
+      console.log('Texto extraído pelo OCR Local:', text);
       
-      console.log('Dados extraídos pelo servidor:', extracted);
+      // Lógica inteligente para extrair dados do texto bruto
+      const extractedData = parseReceiptText(text);
+      
+      await worker.terminate();
+      setOcrProgress(90);
 
       setIsCustomCategory(false);
       setCustomCategory('');
-      const finalDescription = (extracted.descricao && extracted.descricao.toLowerCase().includes('pagamento de prestação')) 
-        ? extracted.estabelecimento 
-        : (extracted.descricao || extracted.estabelecimento || '');
 
       setFormData({
         ...formData,
-        type: extracted.tipo === 'receita' ? 'income' : 'expense',
-        value: extracted.valor?.toString() || '',
-        date: extracted.data || new Date().toISOString().split('T')[0],
-        establishment: extracted.estabelecimento || '',
-        category: extracted.categoria || 'Outros',
-        description: finalDescription || ''
+        type: extractedData.tipo === 'receita' ? 'income' : 'expense',
+        value: extractedData.valor?.toString() || '',
+        date: extractedData.data || new Date().toISOString().split('T')[0],
+        establishment: extractedData.estabelecimento || '',
+        category: extractedData.categoria || 'Outros',
+        description: extractedData.descricao || extractedData.estabelecimento || ''
       });
 
       setOcrProgress(100);
@@ -180,12 +168,49 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       }, 500);
 
     } catch (error: any) {
-      console.error('Erro detalhado no processamento Gemini:', error);
-      const msg = error.message || 'Erro desconhecido';
-      setErrorMessage(`Não foi possível ler o comprovante automaticamente (${msg}). Por favor, insira os dados manualmente.`);
-      setView('manual');
+      console.error('Erro no OCR Local:', error);
+      setErrorMessage('Não foi possível ler o comprovante automaticamente. Por favor, insira os dados manualmente.');
       setIsOcrRunning(false);
+      setView('manual');
     }
+  };
+
+  // Função auxiliar para processar o texto do comprovante sem IA externa
+  const parseReceiptText = (text: string) => {
+    const lines = text.split('\n');
+    let valor = 0;
+    let data = '';
+    let estabelecimento = '';
+    
+    // Tentar encontrar o valor (procura por R$ ou números com vírgula)
+    // Regex melhorada para pegar valores como 188,20 ou 1.200,00
+    const valorMatch = text.match(/(?:R\$|TOTAL|VALOR|PAGO|VALOR TOTAL)[\s:]*([\d.,]+)/i) || 
+                       text.match(/([\d]{1,3}(?:\.[\d]{3})*,[\d]{2})/);
+    
+    if (valorMatch) {
+      const valorStr = valorMatch[1].replace(/\./g, '').replace(',', '.');
+      valor = parseFloat(valorStr);
+    }
+
+    // Tentar encontrar a data (DD/MM/YYYY ou DD/MM/YY)
+    const dataMatch = text.match(/(\d{2}\/\d{2}\/\d{2,4})/);
+    if (dataMatch) {
+      const parts = dataMatch[1].split('/');
+      const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+      data = `${year}-${parts[1]}-${parts[0]}`;
+    }
+
+    // Tentar pegar o estabelecimento (geralmente a primeira ou segunda linha com texto)
+    estabelecimento = lines.find(l => l.trim().length > 3 && !l.includes('COMPROVANTE'))?.trim() || 'Estabelecimento';
+
+    return {
+      valor: valor || '',
+      data: data || new Date().toISOString().split('T')[0],
+      estabelecimento: estabelecimento.substring(0, 30),
+      categoria: 'Outros',
+      tipo: text.toLowerCase().includes('recebido') ? 'receita' : 'despesa',
+      descricao: estabelecimento
+    };
   };
 
   const handleSave = async (e: React.FormEvent) => {
