@@ -251,7 +251,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     // 3. Tentar encontrar o ESTABELECIMENTO
     // Procura por nomes conhecidos ou a primeira linha que não seja genérica
     const textoLimpo = text.toUpperCase();
-    if (textoLimpo.includes('SUPERMERCADO')) {
+    
+    // Detecção robusta para Lojas Cem (mesmo com erros de leitura comuns)
+    const padroesLojasCem = [
+      'LOJAS CEM', 'LOJAS CEM', 'LOIAS CEM', 'LOJAS CEN', 'LOJAS GEM', 
+      'LOJAS OEN', 'LOJAS GEN', 'LOJAS CFM', 'LOJAS CEM', 'LOJAS CEM'
+    ];
+    
+    const encontrouLojasCem = padroesLojasCem.some(p => textoLimpo.includes(p)) || 
+                             (textoLimpo.includes('CEM') && (textoLimpo.includes('PRESTAÇÃO') || textoLimpo.includes('VENCTO')));
+
+    if (encontrouLojasCem) {
+      estabelecimento = 'Lojas Cem';
+    } else if (textoLimpo.includes('SUPERMERCADO')) {
       // Tenta extrair o nome completo se tiver "SUPERMERCADO"
       const linhaSuper = lines.find(l => l.toUpperCase().includes('SUPERMERCADO'));
       if (linhaSuper) {
@@ -266,8 +278,6 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       } else {
         estabelecimento = 'Supermercado';
       }
-    } else if (textoLimpo.includes('LOJAS CEM')) {
-      estabelecimento = 'Lojas Cem';
     } else if (textoLimpo.includes('MERCADO LIVRE')) {
       estabelecimento = 'Mercado Livre';
     } else if (textoLimpo.includes('IFOOD')) {
@@ -280,6 +290,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         !l.includes('PAGAMENTO') &&
         !l.includes('CNPJ') &&
         !l.includes('CPF') &&
+        !l.includes('CONTRATO') && // Evita linhas de contrato
+        !l.includes('PEDIDO') &&   // Evita linhas de pedido
         !/\d{5,}/.test(l) // Evita linhas que são apenas números de contrato
       );
       estabelecimento = provavelNome || 'Estabelecimento';
