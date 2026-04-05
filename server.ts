@@ -17,8 +17,15 @@ async function startServer() {
   // Increase payload size for images
   app.use(express.json({ limit: '10mb' }));
 
+  // Log all requests for debugging
+  app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+  });
+
   // API Route for Receipt Processing
   app.post("/api/process-receipt", async (req, res) => {
+    console.log("Recebida requisição POST em /api/process-receipt");
     try {
       const { imageBase64, mimeType } = req.body;
 
