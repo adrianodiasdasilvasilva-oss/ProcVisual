@@ -12,7 +12,7 @@ import Settings from './components/Settings';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDocFromServer, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2 } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
@@ -104,7 +104,7 @@ export default function App() {
         // Ensure user exists in Firestore without overwriting existing data
         const userRef = doc(db, 'usuarios', currentUser.uid);
         try {
-          const userSnap = await getDocFromServer(userRef);
+          const userSnap = await getDoc(userRef);
           if (!userSnap.exists()) {
             const userData = {
               nome: currentUser.displayName || 'Usuário',
@@ -114,6 +114,8 @@ export default function App() {
             };
             await setDoc(userRef, userData);
             console.log('Novo usuário criado no Firestore');
+          } else {
+            console.log('Usuário já existe no Firestore');
           }
         } catch (error) {
           console.error('Error ensuring user in Firestore:', error);

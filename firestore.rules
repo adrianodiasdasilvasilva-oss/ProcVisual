@@ -55,11 +55,11 @@ service cloud.firestore {
 
     function isValidUser(data) {
       return (!('nome' in data) || data.nome is string) &&
-             (!('email' in data) || (data.email is string && isValidEmail(data.email))) &&
+             (!('email' in data) || data.email is string) &&
              (!('telefone' in data) || data.telefone is string) &&
              (!('fotoURL' in data) || data.fotoURL is string) &&
-             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
-             (!('dataCriacao' in data) || data.dataCriacao is timestamp);
+             (!('updatedAt' in data) || (data.updatedAt is timestamp || data.updatedAt is string)) &&
+             (!('dataCriacao' in data) || (data.dataCriacao is timestamp || data.dataCriacao is string));
     }
 
     function isValidLancamento(data) {
@@ -77,8 +77,7 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isAuthenticated() && request.auth.uid == userId;
-      allow create, update: if isAuthenticated() && request.auth.uid == userId && isValidUser(request.resource.data);
+      allow read, write: if isOwner(userId);
     }
 
     // Lancamentos Collection
