@@ -123,9 +123,16 @@ export default function Settings() {
       setImageToCrop(null);
     } catch (error: any) {
       console.error("Error updating photo:", error);
-      handleFirestoreError(error, OperationType.UPDATE, path);
-      setMessage({ type: 'error', text: 'Erro ao salvar foto no banco de dados. Verifique sua conexão.' });
-      throw error;
+      const errorMsg = 'Erro ao salvar foto no banco de dados. Verifique sua conexão.';
+      setMessage({ type: 'error', text: errorMsg });
+      
+      // Call handleFirestoreError last as it throws
+      try {
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      } catch (e) {
+        // Re-throw the error from handleFirestoreError to the modal
+        throw e;
+      }
     } finally {
       setIsCropping(false);
     }

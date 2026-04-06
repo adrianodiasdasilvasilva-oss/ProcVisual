@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
 import Cropper, { Area, Point } from 'react-easy-crop';
-import { X, Check, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { X, Check, ZoomIn, ZoomOut, RotateCcw, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CropImageModalProps {
@@ -16,6 +16,7 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete,
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const onCropChange = (crop: Point) => {
     setCrop(crop);
@@ -124,13 +125,28 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete,
 
   const handleConfirm = async () => {
     if (image && croppedAreaPixels && !isSaving) {
+      setError(null);
       try {
         const croppedImage = await getCroppedImg(image, croppedAreaPixels, rotation);
         await onCropComplete(croppedImage);
         // onClose is called by handleCropComplete in Settings.tsx if successful
-      } catch (e) {
+      } catch (e: any) {
         console.error("Crop error:", e);
+        let errorMsg = 'Não foi possível salvar a foto.';
+        if (e.message?.includes('insufficient permissions')) {
+          errorMsg = 'Erro de permissão no banco de dados.';
+        } else if (e.message?.includes('too large')) {
+          errorMsg = 'A imagem é muito grande para o servidor.';
+        }
+        setError(errorMsg);
       }
+    }
+  };
+
+  const handleClose = () => {
+    if (!isSaving) {
+      setError(null);
+      onClose();
     }
   };
 
@@ -156,7 +172,7 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete,
             <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between shrink-0 bg-proc-secondary/50 backdrop-blur-sm">
               <h3 className="text-sm font-bold text-white uppercase tracking-widest">Ajustar Perfil</h3>
               <button 
-                onClick={onClose} 
+                onClick={handleClose} 
                 className="p-2 -mr-2 rounded-xl hover:bg-white/5 text-proc-text-sec transition-all"
               >
                 <X size={20} />
@@ -197,6 +213,20 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete,
 
             {/* Controls */}
             <div className="p-6 space-y-5 bg-proc-secondary shrink-0">
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 text-red-500 text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    <AlertCircle size={14} />
+                    {error}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="space-y-4">
                 {/* Zoom Control */}
                 <div className="space-y-2">
@@ -259,8 +289,9 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete,
               {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
                 <button
-                  onClick={onClose}
-                  className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest"
+                  onClick={handleClose}
+                  disabled={isSaving}
+                  className="flex-1 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-white text-xs font-bold hover:bg-white/10 transition-all uppercase tracking-widest disabled:opacity-50"
                 >
                   Cancelar
                 </button>
