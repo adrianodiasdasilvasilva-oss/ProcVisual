@@ -96,10 +96,24 @@ export default function Settings() {
     e.target.value = '';
   };
 
-  const handleCropComplete = (croppedImage: string) => {
+  const handleCropComplete = async (croppedImage: string) => {
     setPhoto(croppedImage);
     setIsCropModalOpen(false);
     setImageToCrop(null);
+
+    // Auto-save photo
+    if (!auth.currentUser) return;
+    const path = 'usuarios';
+    try {
+      const userRef = doc(db, path, auth.currentUser.uid);
+      await updateDoc(userRef, {
+        fotoURL: croppedImage,
+        updatedAt: new Date()
+      });
+      setMessage({ type: 'success', text: 'Foto de perfil atualizada!' });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
   };
 
   const handleDeleteCategory = async (id: string) => {

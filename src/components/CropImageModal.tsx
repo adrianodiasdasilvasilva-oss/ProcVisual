@@ -83,10 +83,31 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
     canvas.height = pixelCrop.height;
 
     // paste generated rotate image with correct offsets for x,y crop values.
-    ctx.putImageData(data, 0, 0);
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = pixelCrop.width;
+    tempCanvas.height = pixelCrop.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    if (tempCtx) {
+      tempCtx.putImageData(data, 0, 0);
+    }
+
+    // Resize if too large
+    const MAX_SIZE = 400;
+    let targetWidth = pixelCrop.width;
+    let targetHeight = pixelCrop.height;
+    
+    if (targetWidth > MAX_SIZE || targetHeight > MAX_SIZE) {
+      const ratio = Math.min(MAX_SIZE / targetWidth, MAX_SIZE / targetHeight);
+      targetWidth = targetWidth * ratio;
+      targetHeight = targetHeight * ratio;
+    }
+
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    ctx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight);
 
     // As Base64 string
-    return canvas.toDataURL('image/jpeg');
+    return canvas.toDataURL('image/jpeg', 0.8);
   };
 
   const rotateSize = (width: number, height: number, rotation: number) => {

@@ -58,7 +58,7 @@ service cloud.firestore {
              data.email is string && isValidEmail(data.email) &&
              (!('telefone' in data) || data.telefone is string) &&
              (!('fotoURL' in data) || data.fotoURL is string) &&
-             (!('updatedAt' in data) || data.updatedAt is string) &&
+             (!('updatedAt' in data) || data.updatedAt is timestamp) &&
              data.dataCriacao is timestamp;
     }
 
