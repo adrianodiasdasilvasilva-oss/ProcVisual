@@ -203,7 +203,6 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
     // 1. Tentar encontrar o ESTABELECIMENTO
     // Detecção específica para Lojas Cem
-    // Incluímos variações comuns de erro de OCR (como "S A AÇO" ou "RESOO TESS")
     if (textoLimpo.includes('LOJAS CEM') || 
         textoLimpo.includes('VOCÊ REALIZANDO SONHOS') || 
         textoLimpo.includes('VOCE REALIZANDO SONHOS') ||
@@ -211,30 +210,60 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         textoLimpo.includes('RESOO TESS') ||
         (textoLimpo.includes('CEM') && (textoLimpo.includes('PRESTAÇÃO') || textoLimpo.includes('CONTRATO')))) {
       estabelecimento = 'Lojas Cem';
+    } else if (textoLimpo.includes('CAVICCHIOLLI') || 
+               textoLimpo.includes('CAVICCHIOLI') ||
+               textoLimpo.includes('SUPERMERCADO') ||
+               textoLimpo.includes('MERCADO') ||
+               textoLimpo.includes('HORTIFRUTI') ||
+               textoLimpo.includes('ATACADO')) {
+      // Tenta pegar o nome completo se encontrar a palavra supermercado ou similar
+      const linhaSuper = lines.find(l => {
+        const u = l.toUpperCase();
+        return u.includes('SUPERMERCADO') || u.includes('MERCADO') || u.includes('CAVICCHIOLLI') || u.includes('CAVICCHIOLI') || u.includes('ATACADO');
+      });
+      if (linhaSuper) {
+        // Remove CNPJ, IE, IM e outras sujeiras da linha
+        const cleaned = linhaSuper
+          .replace(/CNPJ[:\s]*[\d./-]{14,}/gi, '')
+          .replace(/IE[:\s]*[\d./-]{9,}/gi, '')
+          .replace(/^[^\w]+|[^\w]+$/g, '')
+          .trim();
+        if (cleaned.length > 3) {
+          estabelecimento = cleaned;
+        }
+      }
+      if (!estabelecimento || estabelecimento.length < 3) {
+        estabelecimento = 'Supermercado';
+      }
     }
 
     // 2. Tentar encontrar o VALOR
-    // Regex para capturar valores monetários com separador decimal obrigatório (ex: 123,45 ou 1.234,56)
-    // Evita capturar números muito longos que pareçam IDs ou contratos
+    // Regex mais flexível para capturar valores monetários
     const padraoValor = /(?:^|\s|R\$)\s?(\d{1,3}(?:[.,\s]?\d{3})*[.,\s]\d{2})(?:\s|$)/;
     
     // Padrões específicos com rótulos (mais confiáveis)
-    // Usamos variações com e sem acento para o OCR
     const labelsValor = [
-      'VALOR\\s+DE\\s+CADA\\s+PRESTA[ÇC][ÃA]O',
-      'VALOR\\s+DA\\s+PRESTA[ÇC][ÃA]O',
       'VALOR\\s+PAGO',
       'VALOR\\s+TOTAL',
       'TOTAL\\s+A\\s+PAGAR',
+      'VALOR\\s+DE\\s+CADA\\s+PRESTA[ÇC][ÃA]O',
+      'VALOR\\s+DA\\s+PRESTA[ÇC][ÃA]O',
       'VALOR\\s+DA\\s+PREST',
       'VALOR\\s+PREST',
       'PRESTA[ÇC][ÃA]O',
       'TOTAL',
       'VALOR',
-      'R\\$'
+      'PAGO',
+      'R\\$',
+      'VALOR:',
+      'TOTAL:',
+      'PAGO:'
     ].join('|');
     
-    const valorComLabel = text.match(new RegExp(`(?:${labelsValor})[\\s:]*?${padraoValor.source.replace('(?:^|\\s|R\\$)\\s?', '')}`, 'i'));
+    // Tenta encontrar o valor acompanhado de um label
+    // O regex agora permite que o valor esteja na mesma linha ou na próxima
+    const regexLabel = new RegExp(`(?:${labelsValor})[\\s:]*?${padraoValor.source.replace('(?:^|\\s|R\\$)\\s?', '')}`, 'i');
+    const valorComLabel = text.match(regexLabel);
     
     if (valorComLabel) {
       console.log('Valor com label encontrado:', valorComLabel[1]);
@@ -242,23 +271,27 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       valor = parseFloat(valorStr);
     }
 
+    // Se não encontrou com label, tenta buscar todos os valores e filtrar
     if (valor === null || isNaN(valor)) {
       const matchesValores = text.match(new RegExp(padraoValor.source, 'g'));
       if (matchesValores) {
         console.log('Valores genéricos encontrados:', matchesValores);
         
-        // Filtra valores que parecem números de contrato ou IDs (muito grandes ou sem decimais plausíveis)
-        // No caso das Lojas Cem, o valor da prestação costuma ser menor que 5.000
         const valoresPlausiveis = matchesValores
           .map(v => v.trim().replace(/^R\$\s?/, ''))
           .map(v => v.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'))
           .map(v => parseFloat(v))
-          .filter(v => v > 0 && v < 5000); // Filtro conservador
+          .filter(v => v > 0 && v < 5000); 
         
         if (valoresPlausiveis.length > 0) {
-          // Se houver múltiplos, tenta pegar um que tenha cara de centavos (não terminado em .00 se houver outros)
-          // Ou simplesmente o que aparece mais pro final (comum em cupons)
-          valor = valoresPlausiveis[valoresPlausiveis.length - 1];
+          // Em cupons de supermercado, o valor total costuma ser um dos últimos
+          // Mas vamos tentar evitar valores muito pequenos que podem ser quantidades
+          const valoresSignificativos = valoresPlausiveis.filter(v => v > 1.0);
+          if (valoresSignificativos.length > 0) {
+            valor = valoresSignificativos[valoresSignificativos.length - 1];
+          } else {
+            valor = valoresPlausiveis[valoresPlausiveis.length - 1];
+          }
         }
       }
     }
@@ -287,7 +320,22 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       if (dataMatch) {
         const dia = dataMatch[1];
         const mes = dataMatch[2];
-        const year = dataMatch[3].length === 2 ? `20${dataMatch[3]}` : dataMatch[3];
+        let year = dataMatch[3];
+        if (year.length === 2) {
+          // Se o ano for "26", assume 2026. Se for "76", pode ser erro de OCR de "26"
+          // Vamos assumir que anos > 50 em formato de 2 dígitos são provavelmente erros de OCR para 20xx
+          // ou datas muito antigas. Para finanças pessoais, 20xx é mais provável.
+          const numYear = parseInt(year);
+          if (numYear > 50 && numYear < 100) {
+            // Se for algo como 76, e estamos em 2026, é quase certeza que o OCR errou o 2 pelo 7
+            year = `20${year.replace(/^[7]/, '2')}`; 
+          } else {
+            year = `20${year}`;
+          }
+        } else if (year.length === 4) {
+          // Se o ano for 2076, é quase certeza que o OCR errou o 2 pelo 7
+          if (year === '2076') year = '2026';
+        }
         data = `${year}-${mes}-${dia}`;
       }
     }
@@ -296,13 +344,17 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     if (!estabelecimento) {
       const linhasFiltradas = lines.filter(l => {
         const upper = l.toUpperCase();
-        return l.length > 3 && 
+        return l.length > 5 && // Aumentado para evitar ruídos curtos
                !upper.includes('COMPROVANTE') && 
                !upper.includes('PAGAMENTO') &&
                !upper.includes('CNPJ') &&
                !upper.includes('CPF') &&
                !upper.includes('DATA') &&
                !upper.includes('VALOR') &&
+               !upper.includes('TOTAL') &&
+               !upper.includes('PAGO') &&
+               !upper.includes('R$') &&
+               !upper.includes('RS ') &&
                !/\d{10,}/.test(l); // Evita linhas com números longos (códigos de barras/contratos)
       });
 
@@ -315,11 +367,29 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
     const finalEstabelecimento = estabelecimento || 'Estabelecimento';
 
+    // 5. Tentar determinar a CATEGORIA
+    let categoria = 'Outros';
+    const estabUpper = finalEstabelecimento.toUpperCase();
+    if (textoLimpo.includes('SUPERMERCADO') || 
+        textoLimpo.includes('ALIMENTOS') || 
+        textoLimpo.includes('MERCEARIA') ||
+        textoLimpo.includes('CAVICCHIOLLI') ||
+        textoLimpo.includes('CAVICCHIOLI') ||
+        estabUpper.includes('SUPERMERCADO') ||
+        estabUpper.includes('CAVICCHIOLLI') ||
+        estabUpper.includes('CAVICCHIOLI')) {
+      categoria = 'Alimentação';
+    } else if (textoLimpo.includes('POSTO') || textoLimpo.includes('COMBUSTIVEL')) {
+      categoria = 'Transporte';
+    } else if (textoLimpo.includes('LOJAS CEM') || textoLimpo.includes('ELETRO')) {
+      categoria = 'Casa';
+    }
+
     return {
       valor: valorFormatado || '',
       data: data || new Date().toISOString().split('T')[0],
       estabelecimento: finalEstabelecimento.substring(0, 30),
-      categoria: 'Outros',
+      categoria: categoria,
       tipo: text.toLowerCase().includes('recebido') ? 'receita' : 'despesa',
       descricao: `Leitura automática: ${finalEstabelecimento}`
     };
