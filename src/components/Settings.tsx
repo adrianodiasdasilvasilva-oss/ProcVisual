@@ -14,6 +14,7 @@ import {
   Tag,
   Plus
 } from 'lucide-react';
+import CropImageModal from './CropImageModal';
 
 export default function Settings() {
   const [userData, setUserData] = useState<any>(null);
@@ -24,6 +25,8 @@ export default function Settings() {
   
   const [phone, setPhone] = useState('');
   const [photo, setPhoto] = useState('');
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -84,10 +87,19 @@ export default function Settings() {
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPhoto(reader.result as string);
+        setImageToCrop(reader.result as string);
+        setIsCropModalOpen(true);
       };
       reader.readAsDataURL(file);
     }
+    // Reset input so the same file can be selected again
+    e.target.value = '';
+  };
+
+  const handleCropComplete = (croppedImage: string) => {
+    setPhoto(croppedImage);
+    setIsCropModalOpen(false);
+    setImageToCrop(null);
   };
 
   const handleDeleteCategory = async (id: string) => {
@@ -263,6 +275,16 @@ export default function Settings() {
           </div>
         </section>
       </div>
+
+      <CropImageModal 
+        isOpen={isCropModalOpen}
+        onClose={() => {
+          setIsCropModalOpen(false);
+          setImageToCrop(null);
+        }}
+        image={imageToCrop}
+        onCropComplete={handleCropComplete}
+      />
     </div>
   );
 }
