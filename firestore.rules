@@ -54,12 +54,12 @@ service cloud.firestore {
     }
 
     function isValidUser(data) {
-      return data.nome is string && data.nome.size() > 0 &&
-             data.email is string && isValidEmail(data.email) &&
+      return (!('nome' in data) || data.nome is string) &&
+             (!('email' in data) || (data.email is string && isValidEmail(data.email))) &&
              (!('telefone' in data) || data.telefone is string) &&
              (!('fotoURL' in data) || data.fotoURL is string) &&
              (!('updatedAt' in data) || data.updatedAt is timestamp) &&
-             data.dataCriacao is timestamp;
+             (!('dataCriacao' in data) || data.dataCriacao is timestamp);
     }
 
     function isValidLancamento(data) {

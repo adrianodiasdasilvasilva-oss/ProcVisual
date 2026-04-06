@@ -101,19 +101,22 @@ export default function App() {
       setIsAuthReady(true);
       
       if (currentUser) {
-        // Save/Update user in Firestore
+        // Ensure user exists in Firestore without overwriting existing data
         const userRef = doc(db, 'usuarios', currentUser.uid);
         try {
-          const userData = {
-            nome: currentUser.displayName || 'Usuário',
-            email: currentUser.email,
-            dataCriacao: serverTimestamp()
-          };
-          console.log('Tentando salvar dados do usuário:', currentUser.uid, userData);
-          await setDoc(userRef, userData, { merge: true });
-          console.log('Usuário salvo com sucesso no Firestore');
+          const userSnap = await getDocFromServer(userRef);
+          if (!userSnap.exists()) {
+            const userData = {
+              nome: currentUser.displayName || 'Usuário',
+              email: currentUser.email,
+              dataCriacao: serverTimestamp(),
+              fotoURL: currentUser.photoURL || ''
+            };
+            await setDoc(userRef, userData);
+            console.log('Novo usuário criado no Firestore');
+          }
         } catch (error) {
-          console.error('Error saving user to Firestore:', error);
+          console.error('Error ensuring user in Firestore:', error);
         }
       } else {
         setIsLoading(false);

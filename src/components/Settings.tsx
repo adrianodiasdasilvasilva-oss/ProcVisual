@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
-import { doc, onSnapshot, updateDoc, collection, query, where, deleteDoc, getDocs } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, setDoc, collection, query, where, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
 import { 
   User, 
   Phone, 
@@ -21,6 +21,7 @@ export default function Settings() {
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCropping, setIsCropping] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const [phone, setPhone] = useState('');
@@ -68,11 +69,11 @@ export default function Settings() {
     const path = 'usuarios';
     try {
       const userRef = doc(db, path, auth.currentUser.uid);
-      await updateDoc(userRef, {
+      await setDoc(userRef, {
         telefone: phone,
         fotoURL: photo,
-        updatedAt: new Date()
-      });
+        updatedAt: serverTimestamp()
+      }, { merge: true });
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, path);
@@ -97,22 +98,36 @@ export default function Settings() {
   };
 
   const handleCropComplete = async (croppedImage: string) => {
-    setPhoto(croppedImage);
-    setIsCropModalOpen(false);
-    setImageToCrop(null);
-
+    setIsCropping(true);
+    setMessage(null);
+    
     // Auto-save photo
-    if (!auth.currentUser) return;
+    if (!auth.currentUser) {
+      setIsCropping(false);
+      return;
+    }
+    
     const path = 'usuarios';
     try {
       const userRef = doc(db, path, auth.currentUser.uid);
-      await updateDoc(userRef, {
+      
+      // Use setDoc with merge: true to ensure document exists and fields are updated correctly
+      await setDoc(userRef, {
         fotoURL: croppedImage,
-        updatedAt: new Date()
-      });
-      setMessage({ type: 'success', text: 'Foto de perfil atualizada!' });
-    } catch (error) {
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      setPhoto(croppedImage);
+      setMessage({ type: 'success', text: 'Foto de perfil salva com sucesso!' });
+      setIsCropModalOpen(false);
+      setImageToCrop(null);
+    } catch (error: any) {
+      console.error("Error updating photo:", error);
       handleFirestoreError(error, OperationType.UPDATE, path);
+      setMessage({ type: 'error', text: 'Erro ao salvar foto no banco de dados. Verifique sua conexão.' });
+      throw error;
+    } finally {
+      setIsCropping(false);
     }
   };
 
@@ -293,11 +308,14 @@ export default function Settings() {
       <CropImageModal 
         isOpen={isCropModalOpen}
         onClose={() => {
-          setIsCropModalOpen(false);
-          setImageToCrop(null);
+          if (!isCropping) {
+            setIsCropModalOpen(false);
+            setImageToCrop(null);
+          }
         }}
         image={imageToCrop}
         onCropComplete={handleCropComplete}
+        isSaving={isCropping}
       />
     </div>
   );

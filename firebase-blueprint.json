@@ -22,9 +22,18 @@
           "type": "string",
           "format": "date-time",
           "description": "Data em que o perfil foi criado"
+        },
+        "fotoURL": {
+          "type": "string",
+          "description": "URL ou base64 da foto de perfil"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da última atualização do perfil"
         }
       },
-      "required": ["nome", "email", "telefone", "dataCriacao"]
+      "required": ["nome", "email", "dataCriacao"]
     },
     "lancamento": {
       "title": "Lançamento",

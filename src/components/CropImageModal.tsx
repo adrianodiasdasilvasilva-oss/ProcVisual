@@ -7,10 +7,11 @@ interface CropImageModalProps {
   isOpen: boolean;
   onClose: () => void;
   image: string | null;
-  onCropComplete: (croppedImage: string) => void;
+  onCropComplete: (croppedImage: string) => Promise<void>;
+  isSaving?: boolean;
 }
 
-export default function CropImageModal({ isOpen, onClose, image, onCropComplete }: CropImageModalProps) {
+export default function CropImageModal({ isOpen, onClose, image, onCropComplete, isSaving = false }: CropImageModalProps) {
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -92,7 +93,7 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
     }
 
     // Resize if too large
-    const MAX_SIZE = 400;
+    const MAX_SIZE = 300; // Reduced from 400
     let targetWidth = pixelCrop.width;
     let targetHeight = pixelCrop.height;
     
@@ -106,8 +107,8 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
     canvas.height = targetHeight;
     ctx.drawImage(tempCanvas, 0, 0, targetWidth, targetHeight);
 
-    // As Base64 string
-    return canvas.toDataURL('image/jpeg', 0.8);
+    // As Base64 string with lower quality to ensure it fits in Firestore
+    return canvas.toDataURL('image/jpeg', 0.6); // Reduced from 0.8
   };
 
   const rotateSize = (width: number, height: number, rotation: number) => {
@@ -122,13 +123,13 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
   };
 
   const handleConfirm = async () => {
-    if (image && croppedAreaPixels) {
+    if (image && croppedAreaPixels && !isSaving) {
       try {
         const croppedImage = await getCroppedImg(image, croppedAreaPixels, rotation);
-        onCropComplete(croppedImage);
-        onClose();
+        await onCropComplete(croppedImage);
+        // onClose is called by handleCropComplete in Settings.tsx if successful
       } catch (e) {
-        console.error(e);
+        console.error("Crop error:", e);
       }
     }
   };
@@ -265,10 +266,15 @@ export default function CropImageModal({ isOpen, onClose, image, onCropComplete 
                 </button>
                 <button
                   onClick={handleConfirm}
-                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-proc-cyan to-proc-green text-proc-bg text-xs font-bold shadow-[0_0_20px_rgba(0,209,255,0.3)] hover:shadow-[0_0_30px_rgba(0,209,255,0.5)] transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+                  disabled={isSaving}
+                  className="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-proc-cyan to-proc-green text-proc-bg text-xs font-bold shadow-[0_0_20px_rgba(0,209,255,0.3)] hover:shadow-[0_0_30px_rgba(0,209,255,0.5)] transition-all flex items-center justify-center gap-2 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check size={16} />
-                  Confirmar
+                  {isSaving ? (
+                    <div className="w-4 h-4 border-2 border-proc-bg/30 border-t-proc-bg rounded-full animate-spin" />
+                  ) : (
+                    <Check size={16} />
+                  )}
+                  {isSaving ? 'Salvando...' : 'Confirmar'}
                 </button>
               </div>
             </div>
