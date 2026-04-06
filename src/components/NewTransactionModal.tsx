@@ -199,119 +199,118 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     
     console.log('Linhas detectadas para análise:', lines);
 
-    // 1. Tentar encontrar o VALOR
-    // Procura por padrões comuns de valor em carnês e notas
-    // Prioridade para "VALOR PAGO" ou "VALOR TOTAL"
-    const padraoValor = /([\d]{1,3}(?:[.,\s][\d]{3})*[.,\s]{1,2}[\d]{1,2})/;
+    const textoLimpo = text.toUpperCase();
+
+    // 1. Tentar encontrar o ESTABELECIMENTO
+    // Detecção específica para Lojas Cem
+    // Incluímos variações comuns de erro de OCR (como "S A AÇO" ou "RESOO TESS")
+    if (textoLimpo.includes('LOJAS CEM') || 
+        textoLimpo.includes('VOCÊ REALIZANDO SONHOS') || 
+        textoLimpo.includes('VOCE REALIZANDO SONHOS') ||
+        textoLimpo.includes('S A AÇO') ||
+        textoLimpo.includes('RESOO TESS') ||
+        (textoLimpo.includes('CEM') && (textoLimpo.includes('PRESTAÇÃO') || textoLimpo.includes('CONTRATO')))) {
+      estabelecimento = 'Lojas Cem';
+    }
+
+    // 2. Tentar encontrar o VALOR
+    // Regex para capturar valores monetários com separador decimal obrigatório (ex: 123,45 ou 1.234,56)
+    // Evita capturar números muito longos que pareçam IDs ou contratos
+    const padraoValor = /(?:^|\s|R\$)\s?(\d{1,3}(?:[.,\s]?\d{3})*[.,\s]\d{2})(?:\s|$)/;
     
     // Padrões específicos com rótulos (mais confiáveis)
-    const valorPagoMatch = text.match(new RegExp(`VALOR\\s+PAGO[\\s:]*?${padraoValor.source}`, 'i'));
-    const valorTotalMatch = text.match(new RegExp(`(?:TOTAL|VALOR|PRESTAÇÃO|R\\$|PREST|VALOR\\s+DA\\s+PREST)[\\s:]*?${padraoValor.source}`, 'i'));
-    const valorGenericoMatch = text.match(new RegExp(padraoValor.source, 'g'));
+    // Usamos variações com e sem acento para o OCR
+    const labelsValor = [
+      'VALOR\\s+DE\\s+CADA\\s+PRESTA[ÇC][ÃA]O',
+      'VALOR\\s+DA\\s+PRESTA[ÇC][ÃA]O',
+      'VALOR\\s+PAGO',
+      'VALOR\\s+TOTAL',
+      'TOTAL\\s+A\\s+PAGAR',
+      'VALOR\\s+DA\\s+PREST',
+      'VALOR\\s+PREST',
+      'PRESTA[ÇC][ÃA]O',
+      'TOTAL',
+      'VALOR',
+      'R\\$'
+    ].join('|');
     
-    console.log('Tentando extrair valor...');
-    if (valorPagoMatch) {
-      console.log('Valor Pago encontrado:', valorPagoMatch[1]);
-      const valorStr = valorPagoMatch[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-      valor = parseFloat(valorStr);
-    } else if (valorTotalMatch) {
-      console.log('Valor Total/Prestação encontrado:', valorTotalMatch[1]);
-      const valorStr = valorTotalMatch[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
-      valor = parseFloat(valorStr);
-    } else if (valorGenericoMatch) {
-      console.log('Valores genéricos encontrados:', valorGenericoMatch);
-      // Pega o último valor encontrado (geralmente o total no final da nota)
-      const lastValue = valorGenericoMatch[valorGenericoMatch.length - 1];
-      const valorStr = lastValue.replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
+    const valorComLabel = text.match(new RegExp(`(?:${labelsValor})[\\s:]*?${padraoValor.source.replace('(?:^|\\s|R\\$)\\s?', '')}`, 'i'));
+    
+    if (valorComLabel) {
+      console.log('Valor com label encontrado:', valorComLabel[1]);
+      const valorStr = valorComLabel[1].replace(/\s/g, '').replace(/\./g, '').replace(',', '.');
       valor = parseFloat(valorStr);
     }
-    console.log('Valor final extraído:', valor);
+
+    if (valor === null || isNaN(valor)) {
+      const matchesValores = text.match(new RegExp(padraoValor.source, 'g'));
+      if (matchesValores) {
+        console.log('Valores genéricos encontrados:', matchesValores);
+        
+        // Filtra valores que parecem números de contrato ou IDs (muito grandes ou sem decimais plausíveis)
+        // No caso das Lojas Cem, o valor da prestação costuma ser menor que 5.000
+        const valoresPlausiveis = matchesValores
+          .map(v => v.trim().replace(/^R\$\s?/, ''))
+          .map(v => v.replace(/\s/g, '').replace(/\./g, '').replace(',', '.'))
+          .map(v => parseFloat(v))
+          .filter(v => v > 0 && v < 5000); // Filtro conservador
+        
+        if (valoresPlausiveis.length > 0) {
+          // Se houver múltiplos, tenta pegar um que tenha cara de centavos (não terminado em .00 se houver outros)
+          // Ou simplesmente o que aparece mais pro final (comum em cupons)
+          valor = valoresPlausiveis[valoresPlausiveis.length - 1];
+        }
+      }
+    }
 
     // Formata o valor para string com ponto decimal para o input type="number"
     const valorFormatado = (valor !== null && !isNaN(valor)) ? valor.toFixed(2) : '';
 
-    // 2. Tentar encontrar a DATA
-    // ... (mantém a lógica de data anterior)
-    // Mapeamento de meses em português para números
+    // 3. Tentar encontrar a DATA
     const meses: { [key: string]: string } = {
       'jan': '01', 'fev': '02', 'mar': '03', 'abr': '04', 'mai': '05', 'jun': '06',
       'jul': '07', 'ago': '08', 'set': '09', 'out': '10', 'nov': '11', 'dez': '12'
     };
 
-    // Padrão 1: Data Emis.: DD/MM/YYYY (comum em NFC-e)
-    const dataEmisMatch = text.match(/Data\s+Emis\.:\s*(\d{2})\/(\d{2})\/(\d{4})/i);
-    // Padrão 2: DD/MM/YYYY ou DD/MM/YY
-    const dataPadraoMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
-    // Padrão 3: DD-mes-YYYY (comum em carnês)
-    const dataMesMatch = text.match(/(\d{2})-(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)-(\d{4})/i);
-
-    if (dataEmisMatch) {
-      data = `${dataEmisMatch[3]}-${dataEmisMatch[2]}-${dataEmisMatch[1]}`;
-    } else if (dataMesMatch) {
-      const dia = dataMesMatch[1];
-      const mes = meses[dataMesMatch[2].toLowerCase()];
-      const ano = dataMesMatch[3];
+    // Padrão Lojas Cem: DD-mes-YYYY (ex: 28-fev-2026)
+    const dataLojasCemMatch = text.match(/(\d{2})-(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)-(\d{4})/i);
+    
+    if (dataLojasCemMatch) {
+      console.log('Data Lojas Cem encontrada:', dataLojasCemMatch[0]);
+      const dia = dataLojasCemMatch[1];
+      const mes = meses[dataLojasCemMatch[2].toLowerCase()];
+      const ano = dataLojasCemMatch[3];
       data = `${ano}-${mes}-${dia}`;
-    } else if (dataPadraoMatch) {
-      const dia = dataPadraoMatch[1];
-      const mes = dataPadraoMatch[2];
-      const year = dataPadraoMatch[3].length === 2 ? `20${dataPadraoMatch[3]}` : dataPadraoMatch[3];
-      data = `${year}-${mes}-${dia}`;
+    } else {
+      // Padrão: DD/MM/YYYY ou DD/MM/YY
+      const dataMatch = text.match(/(\d{2})\/(\d{2})\/(\d{2,4})/);
+      if (dataMatch) {
+        const dia = dataMatch[1];
+        const mes = dataMatch[2];
+        const year = dataMatch[3].length === 2 ? `20${dataMatch[3]}` : dataMatch[3];
+        data = `${year}-${mes}-${dia}`;
+      }
     }
 
-    // 3. Tentar encontrar o ESTABELECIMENTO
-    // Procura por nomes conhecidos ou a primeira linha que não seja genérica
-    const textoLimpo = text.toUpperCase();
-    
-    // Detecção robusta para Lojas Cem (mesmo com erros de leitura comuns)
-    // Usamos palavras-chave que aparecem no carnê como "impressão digital"
-    const padroesLojasCem = [
-      'LOJAS CEM', 'LOIAS CEM', 'LOJAS CEN', 'LOJAS GEM', 'LOJAS OEN', 
-      'LOJAS GEN', 'LOJAS CFM', 'CEM', 'SONHOS', 'S A AÇO', 'RESOO TESS'
-    ];
-    
-    // Se encontrar CEM e alguma palavra técnica de carnê, é Lojas Cem
-    const termosCarne = ['PRESTAÇÃO', 'VENCTO', 'FILIAL', 'CONTRATO', 'PREST.', 'CLIENTE', 'CARNÊ'];
-    const temTermosCarne = termosCarne.filter(t => textoLimpo.includes(t)).length >= 1;
-    
-    const encontrouLojasCem = (padroesLojasCem.some(p => textoLimpo.includes(p)) && temTermosCarne) || 
-                             textoLimpo.includes('VOCÊ REALIZANDO SONHOS') ||
-                             textoLimpo.includes('S A AÇO');
+    // 4. Tentar encontrar o ESTABELECIMENTO (se ainda não tiver)
+    if (!estabelecimento) {
+      const linhasFiltradas = lines.filter(l => {
+        const upper = l.toUpperCase();
+        return l.length > 3 && 
+               !upper.includes('COMPROVANTE') && 
+               !upper.includes('PAGAMENTO') &&
+               !upper.includes('CNPJ') &&
+               !upper.includes('CPF') &&
+               !upper.includes('DATA') &&
+               !upper.includes('VALOR') &&
+               !/\d{10,}/.test(l); // Evita linhas com números longos (códigos de barras/contratos)
+      });
 
-    if (encontrouLojasCem) {
-      estabelecimento = 'Lojas Cem';
-    } else if (textoLimpo.includes('SUPERMERCADO')) {
-      // Tenta extrair o nome completo se tiver "SUPERMERCADO"
-      const linhaSuper = lines.find(l => l.toUpperCase().includes('SUPERMERCADO'));
-      if (linhaSuper) {
-        // Remove CNPJ e outros dados técnicos da linha
-        estabelecimento = linhaSuper
+      if (linhasFiltradas.length > 0) {
+        estabelecimento = linhasFiltradas[0]
           .replace(/CNPJ[:\s]*[\d./-]{14,}/gi, '')
-          .replace(/IE[:\s]*[\d.-]{9,}/gi, '')
           .trim();
-        
-        // Se após a limpeza sobrar algo muito curto, tenta pegar a linha toda sem o CNPJ
-        if (estabelecimento.length < 5) estabelecimento = 'Supermercado';
-      } else {
-        estabelecimento = 'Supermercado';
       }
-    } else if (textoLimpo.includes('MERCADO LIVRE')) {
-      estabelecimento = 'Mercado Livre';
-    } else if (textoLimpo.includes('IFOOD')) {
-      estabelecimento = 'iFood';
-    } else {
-      // Pega a primeira linha que pareça um nome (sem muitos números)
-      const provavelNome = lines.find(l => 
-        l.length > 3 && 
-        !l.includes('COMPROVANTE') && 
-        !l.includes('PAGAMENTO') &&
-        !l.includes('CNPJ') &&
-        !l.includes('CPF') &&
-        !l.includes('CONTRATO') && // Evita linhas de contrato
-        !l.includes('PEDIDO') &&   // Evita linhas de pedido
-        !/\d{5,}/.test(l) // Evita linhas que são apenas números de contrato
-      );
-      estabelecimento = provavelNome || 'Estabelecimento';
     }
 
     const finalEstabelecimento = estabelecimento || 'Estabelecimento';
