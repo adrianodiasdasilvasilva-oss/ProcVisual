@@ -1,12 +1,13 @@
-import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon } from 'lucide-react';
-import { motion } from 'motion/react';
+import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon, Download } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onInstall?: () => void;
 }
 
-export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
+export default function BottomNav({ activeTab, onTabChange, onInstall }: BottomNavProps) {
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
@@ -15,8 +16,28 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-proc-bg/95 backdrop-blur-xl border-t border-white/5 px-4 py-3 pb-8 flex justify-between items-center z-50 shadow-[0_-10px_20px_rgba(0,0,0,0.3)]">
-      {tabs.map((tab) => {
+    <div className="fixed bottom-0 left-0 right-0 z-50">
+      <AnimatePresence>
+        {onInstall && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="px-4 pb-2"
+          >
+            <button
+              onClick={onInstall}
+              className="w-full bg-proc-cyan text-proc-bg font-bold py-3 rounded-2xl flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,209,255,0.3)]"
+            >
+              <Download size={18} />
+              <span className="text-sm">Instalar ProcVisual</span>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      <nav className="bg-proc-bg/95 backdrop-blur-xl border-t border-white/5 px-4 py-3 pb-8 flex justify-between items-center shadow-[0_-10px_20px_rgba(0,0,0,0.3)]">
+        {tabs.map((tab) => {
         const isActive = activeTab === tab.id;
         return (
           <button
@@ -40,6 +61,7 @@ export default function BottomNav({ activeTab, onTabChange }: BottomNavProps) {
           </button>
         );
       })}
-    </nav>
+      </nav>
+    </div>
   );
 }

@@ -1,14 +1,15 @@
 import React from 'react';
-import { LayoutDashboard, PieChart, Wallet, Settings, Bell, LogOut } from 'lucide-react';
+import { LayoutDashboard, PieChart, Wallet, Settings, Bell, LogOut, Download } from 'lucide-react';
 import { auth } from '../firebase';
 import Logo from './Logo';
 
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onInstall?: () => void;
 }
 
-export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: Wallet },
@@ -49,7 +50,16 @@ export default function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         ))}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-white/5">
+      <div className="mt-auto pt-6 border-t border-white/5 space-y-2">
+        {onInstall && (
+          <button 
+            onClick={onInstall}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-proc-cyan bg-proc-cyan/10 hover:bg-proc-cyan/20 transition-all duration-300 group"
+          >
+            <Download size={20} />
+            <span className="font-medium text-sm">Instalar App</span>
+          </button>
+        )}
         <button 
           onClick={() => auth.signOut()}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all duration-300 group"

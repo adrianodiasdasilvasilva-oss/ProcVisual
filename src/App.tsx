@@ -40,6 +40,25 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const handleEditTransactions = () => {
     setActiveTab('lancamentos');
@@ -188,7 +207,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-proc-bg text-white font-sans selection:bg-proc-green/30 flex flex-col md:flex-row">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
       
       <div className="flex-1 flex flex-col min-h-screen overflow-y-auto pb-24 md:pb-0">
         <Header balance={balance} />
@@ -371,7 +390,7 @@ export default function App() {
       </div>
 
       <div className="md:hidden">
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
       </div>
 
       {/* New Transaction Modal */}
