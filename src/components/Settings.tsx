@@ -14,7 +14,9 @@ import {
   Tag,
   Plus,
   Moon,
-  Sun
+  Sun,
+  Send,
+  MessageSquare
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
@@ -29,6 +31,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
+  const [isTestingWhatsApp, setIsTestingWhatsApp] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const [phone, setPhone] = useState('');
@@ -90,6 +93,46 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       setMessage({ type: 'error', text: 'Erro ao atualizar perfil.' });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTestWhatsApp = async () => {
+    if (!phone) {
+      setMessage({ type: 'error', text: 'Por favor, salve seu número de telefone primeiro.' });
+      return;
+    }
+
+    setIsTestingWhatsApp(true);
+    setMessage(null);
+
+    try {
+      const response = await fetch('/api/test-whatsapp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phone: phone,
+          message: `🚀 *TESTE DE CONEXÃO PROCVISUAL*\n\nOlá ${name || 'Usuário'}! Se você recebeu esta mensagem, seu WhatsApp está configurado corretamente.\n\nHorário do teste: ${new Date().toLocaleTimeString('pt-BR')}`
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setMessage({ type: 'success', text: 'Mensagem de teste enviada! Verifique seu WhatsApp.' });
+      } else {
+        console.error('Erro no teste de WhatsApp:', data);
+        setMessage({ 
+          type: 'error', 
+          text: `Erro: ${data.error || 'Falha ao enviar mensagem.'} ${data.details?.message || ''}` 
+        });
+      }
+    } catch (error: any) {
+      console.error('Erro de rede no teste de WhatsApp:', error);
+      setMessage({ type: 'error', text: 'Erro de conexão com o servidor.' });
+    } finally {
+      setIsTestingWhatsApp(false);
     }
   };
 
@@ -254,13 +297,28 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                 <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
                   <Phone size={10} /> Celular
                 </label>
-                <input 
-                  type="text" 
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="(00) 00000-0000"
-                  className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
-                />
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                    className="flex-1 bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleTestWhatsApp}
+                    disabled={isTestingWhatsApp || !phone}
+                    className="px-4 rounded-xl bg-proc-cyan/10 text-proc-cyan border border-proc-cyan/20 hover:bg-proc-cyan/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    title="Testar conexão WhatsApp"
+                  >
+                    {isTestingWhatsApp ? <Loader2 size={16} className="animate-spin" /> : <MessageSquare size={16} />}
+                    <span className="text-xs font-bold uppercase tracking-tighter">Testar</span>
+                  </button>
+                </div>
+                <p className="text-[9px] text-proc-text-sec mt-1 ml-1">
+                  * Use o formato com DDD (ex: 11999999999). O sistema enviará notificações de despesas para este número.
+                </p>
               </div>
             </div>
 

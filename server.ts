@@ -5,24 +5,37 @@ import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import cron from "node-cron";
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc, onSnapshot } from "firebase/firestore";
+import admin from "firebase-admin";
 import fs from "fs";
 
 dotenv.config();
 
-// Read Firebase configuration
-let db: any;
+const serverStartTime = new Date();
+console.log(`>>> [SISTEMA] Servidor iniciado em: ${serverStartTime.toISOString()}`);
+
+// Initialize Firebase Admin SDK
+let dbAdmin: admin.firestore.Firestore;
 try {
   const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
-
-  // Initialize Firebase Client SDK (works in Node.js)
-  const app = initializeApp(firebaseConfig);
-  db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
   
-  console.log(">>> Firebase Backend inicializado com sucesso.");
+  if (admin.apps.length === 0) {
+    admin.initializeApp({
+      projectId: firebaseConfig.projectId
+    });
+  }
+  
+  // Correct way to initialize with a specific database ID in Admin SDK
+  const dbId = firebaseConfig.firestoreDatabaseId;
+  if (dbId && dbId !== '(default)') {
+    dbAdmin = admin.firestore(dbId);
+    console.log(`>>> [SISTEMA] Firebase Admin SDK inicializado para Database: ${dbId}`);
+  } else {
+    dbAdmin = admin.firestore();
+    console.log(">>> [SISTEMA] Firebase Admin SDK inicializado para Database: (default)");
+  }
+  
 } catch (error) {
-  console.error(">>> Erro ao inicializar Firebase Backend:", error);
+  console.error(">>> [SISTEMA] Erro ao inicializar Firebase Admin SDK:", error);
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -42,7 +55,68 @@ async function startServer() {
   });
 
   app.get("/api/test", (req, res) => {
-    res.json({ status: "ok", message: "API is reachable" });
+    res.json({ 
+      status: "ok", 
+      message: "API is reachable",
+      config: {
+        hasWhapiToken: !!WHAPI_TOKEN,
+        whapiTokenPrefix: WHAPI_TOKEN ? WHAPI_TOKEN.substring(0, 5) + "..." : null,
+        firebaseInitialized: !!dbAdmin
+      }
+    });
+  });
+
+  // Diagnostic endpoint to test WhatsApp
+  app.post("/api/test-whatsapp", async (req, res) => {
+    const { phone, message } = req.body;
+    
+    if (!phone) {
+      return res.status(400).json({ error: "Número de telefone ausente." });
+    }
+
+    if (!WHAPI_TOKEN) {
+      return res.status(500).json({ error: "WHAPI_TOKEN não configurado nos Segredos (Secrets)." });
+    }
+
+    console.log(`>>> [DIAGNÓSTICO] Testando WhatsApp para ${phone}...`);
+    
+    // Clean phone number: remove non-digits
+    let cleanNumber = phone.replace(/\D/g, "");
+    if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+      cleanNumber = "55" + cleanNumber;
+    }
+
+    try {
+      const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${WHAPI_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          typing_confirm: true,
+          to: `${cleanNumber}@s.whatsapp.net`,
+          body: message || "Teste de conexão ProcVisual",
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error(">>> [DIAGNÓSTICO] Erro Whapi:", JSON.stringify(data));
+        return res.status(response.status).json({ 
+          success: false, 
+          error: "Erro na API do Whapi", 
+          details: data 
+        });
+      }
+
+      console.log(`>>> [DIAGNÓSTICO] Sucesso para ${cleanNumber}`);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      console.error(">>> [DIAGNÓSTICO] Erro de rede:", error);
+      res.status(500).json({ success: false, error: error.message });
+    }
   });
 
   // API Route for Receipt Processing
@@ -190,7 +264,7 @@ async function startServer() {
   cron.schedule("0 8 * * *", async () => {
     console.log(">>> Iniciando Job de Notificações WhatsApp (08:00)...");
     
-    if (!db) {
+    if (!dbAdmin) {
       console.error(">>> Erro: Banco de dados não inicializado.");
       return;
     }
@@ -200,13 +274,10 @@ async function startServer() {
       today.setHours(0, 0, 0, 0);
 
       // Fetch all unpaid expenses
-      const lancamentosRef = collection(db, "lancamentos");
-      const q = query(
-        lancamentosRef,
-        where("tipo", "==", "expense"),
-        where("pago", "==", false)
-      );
-      const snapshot = await getDocs(q);
+      const snapshot = await dbAdmin.collection("lancamentos")
+        .where("tipo", "==", "expense")
+        .where("pago", "==", false)
+        .get();
 
       if (snapshot.empty) {
         console.log(">>> Nenhuma despesa pendente encontrada.");
@@ -235,8 +306,8 @@ async function startServer() {
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
         // Fetch user phone number
-        const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
-        const userData = userSnap.docs[0]?.data();
+        const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
+        const userData = userSnap.data();
         const telefone = userData?.telefone;
 
         if (!telefone) {
@@ -251,14 +322,14 @@ async function startServer() {
         if (diffDays === 5 && !data.notificado5dias) {
           const message = `Olá! 👋 Você tem uma despesa próxima do vencimento.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence em ${dataVencimentoFormatada}\nNão esqueça de se programar.`;
           await sendWhatsApp(telefone, message);
-          await updateDoc(doc(db, "lancamentos", document.id), { notificado5dias: true });
+          await document.ref.update({ notificado5dias: true });
         }
 
         // Rule: On the due date
         if (diffDays === 0 && !data.notificadoNoDia) {
           const message = `Atenção! ⚠️ Sua despesa vence hoje.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence hoje\nEvite atrasos.`;
           await sendWhatsApp(telefone, message);
-          await updateDoc(doc(db, "lancamentos", document.id), { notificadoNoDia: true });
+          await document.ref.update({ notificadoNoDia: true });
         }
       }
     } catch (error) {
@@ -269,63 +340,92 @@ async function startServer() {
   // --- WhatsApp Notification System (IMMEDIATE TEST MODE) ---
   // This listener will send a notification as soon as a new expense is registered.
   
-  if (db) {
-    const lancamentosRef = collection(db, "lancamentos");
+  if (dbAdmin) {
     let isInitialSnapshot = true;
+    const serverStartTime = Date.now();
 
-    console.log(">>> Configurando Listener de Notificações Imediatas...");
+    console.log(">>> [SISTEMA] Configurando Listener de Notificações Imediatas (Admin SDK)...");
 
-    onSnapshot(lancamentosRef, async (snapshot) => {
-      if (isInitialSnapshot) {
-        isInitialSnapshot = false;
-        console.log(">>> Listener de Notificações Imediatas (TESTE) ativo. Monitorando novos lançamentos...");
-        return;
-      }
+    // Diagnostic: Check connection
+    dbAdmin.collection("lancamentos").limit(1).get()
+      .then(snap => {
+        console.log(`>>> [DIAGNÓSTICO] Conexão Firestore: ${snap.empty ? "Vazia (mas conectada)" : "OK (documentos encontrados)"}`);
+      })
+      .catch(err => {
+        console.error(">>> [DIAGNÓSTICO] Erro de conexão Firestore:", err.message);
+      });
+
+    dbAdmin.collection("lancamentos").onSnapshot(async (snapshot) => {
+      // In Admin SDK, the first snapshot contains all existing documents.
+      // We want to ignore documents that were created BEFORE the server started.
+      
+      console.log(`>>> [NOTIFICAÇÃO] Snapshot recebido: ${snapshot.docChanges().length} mudanças detectadas.`);
 
       for (const change of snapshot.docChanges()) {
-        if (change.type === "added") {
-          const data = change.doc.data();
+        const docId = change.doc.id;
+        const data = change.doc.data();
+        
+        // We only care about NEW documents (added)
+        if (change.type !== "added") continue;
+
+        // Check if the document is actually new (created after server start)
+        // or if it hasn't been notified yet.
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().getTime() : 0;
+        
+        // If it's the initial snapshot, we only process documents that are VERY recent (last 10 seconds)
+        // and haven't been notified.
+        if (isInitialSnapshot && createdAt < (serverStartTime - 10000)) {
+          continue;
+        }
+
+        console.log(`>>> [NOTIFICAÇÃO] Processando documento: ${docId} (Tipo: ${data.tipo})`);
+
+        if (data.tipo === "expense" && !data.notificadoImediato) {
+          console.log(`>>> [NOTIFICAÇÃO] Nova despesa qualificada: ${docId}`);
           
-          // Only notify expenses that haven't been notified immediately yet
-          if (data.tipo === "expense" && !data.notificadoImediato) {
-            console.log(`>>> [TESTE] Nova despesa detectada: ${change.doc.id} (${data.descricao || data.estabelecimento})`);
+          if (!data.userId) {
+            console.warn(`>>> [NOTIFICAÇÃO] Erro: Lançamento ${docId} não possui userId.`);
+            continue;
+          }
+
+          try {
+            // Fetch user document directly by ID
+            const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
             
-            if (!data.userId) {
-              console.warn(`>>> [TESTE] Lançamento ${change.doc.id} não possui userId.`);
+            if (!userSnap.exists) {
+              console.warn(`>>> [NOTIFICAÇÃO] Erro: Usuário ${data.userId} não encontrado no Firestore.`);
               continue;
             }
 
-            try {
-              // Fetch user phone number using getDocs with query (more compatible with client SDK in Node)
-              const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
+            const userData = userSnap.data();
+            const telefone = userData?.telefone;
+
+            if (telefone) {
+              console.log(`>>> [NOTIFICAÇÃO] Enviando para ${userData.nome || data.userId}: ${telefone}`);
               
-              if (userSnap.empty) {
-                console.warn(`>>> [TESTE] Usuário ${data.userId} não encontrado no Firestore.`);
-                continue;
-              }
-
-              const userData = userSnap.docs[0].data();
-              const telefone = userData?.telefone;
-
-              if (telefone) {
-                const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-                const message = `🔔 *TESTE DE NOTIFICAÇÃO IMEDIATA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nEsta é uma notificação de teste enviada imediatamente após o cadastro.`;
-                
-                await sendWhatsApp(telefone, message);
-                
-                // Mark as notified to avoid double notifications
-                await updateDoc(doc(db, "lancamentos", change.doc.id), { notificadoImediato: true });
-              } else {
-                console.warn(`>>> [TESTE] Usuário ${data.userId} (${userData?.nome}) não possui telefone cadastrado.`);
-              }
-            } catch (err) {
-              console.error(`>>> [TESTE] Erro ao processar notificação para ${change.doc.id}:`, err);
+              const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+              const message = `🔔 *NOTIFICAÇÃO DE DESPESA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nLançamento registrado com sucesso no ProcVisual.`;
+              
+              await sendWhatsApp(telefone, message);
+              
+              // Mark as notified
+              await change.doc.ref.update({ notificadoImediato: true });
+              console.log(`>>> [NOTIFICAÇÃO] Sucesso: Documento ${docId} marcado como notificado.`);
+            } else {
+              console.warn(`>>> [NOTIFICAÇÃO] Erro: Usuário ${data.userId} (${userData?.nome}) não possui telefone cadastrado.`);
             }
+          } catch (err) {
+            console.error(`>>> [NOTIFICAÇÃO] Erro crítico ao processar ${docId}:`, err);
           }
         }
       }
-    }, (error) => {
-      console.error(">>> Erro no Listener de Notificações Imediatas:", error);
+      
+      if (isInitialSnapshot) {
+        isInitialSnapshot = false;
+        console.log(">>> [SISTEMA] Carga inicial concluída. Monitorando novos lançamentos...");
+      }
+    }, (error: any) => {
+      console.error(">>> [SISTEMA] Erro fatal no Listener de Notificações:", error);
     });
   }
 }
