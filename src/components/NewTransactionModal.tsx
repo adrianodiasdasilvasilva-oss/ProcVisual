@@ -440,7 +440,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         data: formData.date,
         descricao: formData.description || formData.establishment || 'Sem descrição',
         estabelecimento: formData.establishment || '',
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        pago: transactionToEdit ? (transactionToEdit.pago ?? false) : false,
+        notificado5dias: transactionToEdit ? (transactionToEdit.notificado5dias ?? false) : false,
+        notificadoNoDia: transactionToEdit ? (transactionToEdit.notificadoNoDia ?? false) : false
       };
       
       if (transactionToEdit) {

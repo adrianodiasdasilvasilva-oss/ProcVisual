@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Search, User as UserIcon, LogOut } from 'lucide-react';
+import { Search, User as UserIcon, LogOut } from 'lucide-react';
 import { auth, db } from '../firebase';
 import Logo from './Logo';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -65,23 +65,7 @@ export default function Header({ balance }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-4">
-        <button 
-          onClick={() => auth.signOut()}
-          className="md:hidden p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all"
-        >
-          <LogOut size={20} />
-        </button>
-
-        <button className="p-2.5 rounded-xl bg-proc-secondary/50 border border-white/5 text-proc-text-sec hover:text-white hover:border-white/10 transition-all relative">
-          <Bell size={20} />
-          <div className="absolute top-2 right-2 w-2 h-2 bg-proc-cyan rounded-full border-2 border-proc-bg shadow-[0_0_8px_#00D1FF]" />
-        </button>
-        
-        <div className="flex items-center gap-3 pl-4 border-l border-white/5">
-          <div className="hidden md:block text-right">
-            <p className="text-sm font-bold text-white leading-none">{user?.displayName || 'Usuário'}</p>
-            <p className="text-[10px] text-proc-text-sec mt-1">Premium Plan</p>
-          </div>
+        <div className="flex items-center gap-3 pr-4 border-r border-white/5">
           <div 
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-proc-cyan to-proc-green p-[1px] shadow-[0_0_15px_rgba(0,209,255,0.2)] group relative"
           >
@@ -93,7 +77,18 @@ export default function Header({ balance }: HeaderProps) {
               )}
             </div>
           </div>
+          <div className="hidden md:block text-left">
+            <p className="text-sm font-bold text-white leading-none">{user?.displayName || 'Usuário'}</p>
+            <p className="text-[10px] text-proc-text-sec mt-1">Premium Plan</p>
+          </div>
         </div>
+
+        <button 
+          onClick={() => auth.signOut()}
+          className="md:hidden p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition-all"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
     </header>
   );

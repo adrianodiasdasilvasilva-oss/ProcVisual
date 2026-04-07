@@ -9,11 +9,12 @@ import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import NewTransactionModal from './components/NewTransactionModal';
 import Settings from './components/Settings';
+import InteractiveBalloon from './components/InteractiveBalloon';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
-import { LogIn, Loader2, Edit3, Trash2 } from 'lucide-react';
+import { LogIn, Loader2, Edit3, Trash2, CheckCircle2 } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -28,6 +29,9 @@ export interface Transaction {
   descricao: string;
   estabelecimento: string;
   createdAt: any;
+  pago?: boolean;
+  notificado5dias?: boolean;
+  notificadoNoDia?: boolean;
 }
 
 export default function App() {
@@ -68,6 +72,18 @@ export default function App() {
     setTransactionToDelete(id);
   };
 
+  const handleTogglePaid = async (transaction: Transaction) => {
+    const path = 'lancamentos';
+    try {
+      await setDoc(doc(db, path, transaction.id), {
+        pago: !transaction.pago
+      }, { merge: true });
+    } catch (error) {
+      console.error('Erro ao atualizar status de pagamento:', error);
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!transactionToDelete) return;
     
@@ -84,7 +100,7 @@ export default function App() {
   useEffect(() => {
     const testConnection = async () => {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
+        await getDoc(doc(db, 'test', 'connection'));
       } catch (error) {
         if (error instanceof Error && error.message.includes('the client is offline')) {
           console.error("Please check your Firebase configuration. The client is offline.");
@@ -329,7 +345,21 @@ export default function App() {
                               <p className={`font-bold ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
                                 {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                               </p>
+                              {t.tipo === 'expense' && (
+                                <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
+                                  {t.pago ? 'Pago' : 'Pendente'}
+                                </p>
+                              )}
                             </div>
+                            {t.tipo === 'expense' && (
+                              <button 
+                                onClick={() => handleTogglePaid(t)}
+                                className={`p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
+                                title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
+                              >
+                                <CheckCircle2 size={18} />
+                              </button>
+                            )}
                             <button 
                               onClick={() => handleDeleteTransaction(t.id)}
                               className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
@@ -397,6 +427,13 @@ export default function App() {
       <div className="md:hidden">
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
       </div>
+
+      {user && (
+        <InteractiveBalloon 
+          userData={user} 
+          transactionsCount={transactions.length} 
+        />
+      )}
 
       {/* New Transaction Modal */}
       <NewTransactionModal 

@@ -4,8 +4,26 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
+import cron from "node-cron";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import fs from "fs";
 
 dotenv.config();
+
+// Read Firebase configuration
+let db: any;
+try {
+  const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
+
+  // Initialize Firebase Client SDK (works in Node.js)
+  const app = initializeApp(firebaseConfig);
+  db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  
+  console.log(">>> Firebase Backend inicializado com sucesso.");
+} catch (error) {
+  console.error(">>> Erro ao inicializar Firebase Backend:", error);
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -120,6 +138,122 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Servidor rodando em http://localhost:${PORT}`);
+  });
+
+  // --- WhatsApp Notification System ---
+
+  const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+  const WHAPI_BASE_URL = "https://gate.whapi.cloud";
+
+  async function sendWhatsApp(to: string, message: string) {
+    if (!WHAPI_TOKEN) {
+      console.error(">>> Erro: WHAPI_TOKEN não configurado.");
+      return;
+    }
+
+    try {
+      const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${WHAPI_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          typing_confirm: true,
+          to: to.includes("@") ? to : `${to}@s.whatsapp.net`,
+          body: message,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error(">>> Erro ao enviar WhatsApp via Whapi:", errorData);
+      } else {
+        console.log(`>>> WhatsApp enviado com sucesso para ${to}`);
+      }
+    } catch (error) {
+      console.error(">>> Erro na requisição Whapi:", error);
+    }
+  }
+
+  // Cron Job: Every day at 08:00
+  cron.schedule("0 8 * * *", async () => {
+    console.log(">>> Iniciando Job de Notificações WhatsApp (08:00)...");
+    
+    if (!db) {
+      console.error(">>> Erro: Banco de dados não inicializado.");
+      return;
+    }
+
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Fetch all unpaid expenses
+      const lancamentosRef = collection(db, "lancamentos");
+      const q = query(
+        lancamentosRef,
+        where("tipo", "==", "expense"),
+        where("pago", "==", false)
+      );
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        console.log(">>> Nenhuma despesa pendente encontrada.");
+        return;
+      }
+
+      for (const document of snapshot.docs) {
+        const data = document.data();
+        const vencimento = new Date(data.data);
+        vencimento.setHours(0, 0, 0, 0);
+
+        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.data);
+        createdAt.setHours(0, 0, 0, 0);
+
+        // Rule: Only start notifying from the day after registration
+        if (today.getTime() <= createdAt.getTime()) {
+          continue;
+        }
+
+        // Rule: If created on the same day as the due date, do not notify
+        if (createdAt.getTime() === vencimento.getTime()) {
+          continue;
+        }
+
+        const diffTime = vencimento.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        // Fetch user phone number
+        const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
+        const userData = userSnap.docs[0]?.data();
+        const telefone = userData?.telefone;
+
+        if (!telefone) {
+          console.warn(`>>> Usuário ${data.userId} não possui telefone cadastrado.`);
+          continue;
+        }
+
+        const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+        const dataVencimentoFormatada = vencimento.toLocaleDateString("pt-BR");
+
+        // Rule: 5 days before
+        if (diffDays === 5 && !data.notificado5dias) {
+          const message = `Olá! 👋 Você tem uma despesa próxima do vencimento.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence em ${dataVencimentoFormatada}\nNão esqueça de se programar.`;
+          await sendWhatsApp(telefone, message);
+          await updateDoc(doc(db, "lancamentos", document.id), { notificado5dias: true });
+        }
+
+        // Rule: On the due date
+        if (diffDays === 0 && !data.notificadoNoDia) {
+          const message = `Atenção! ⚠️ Sua despesa vence hoje.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence hoje\nEvite atrasos.`;
+          await sendWhatsApp(telefone, message);
+          await updateDoc(doc(db, "lancamentos", document.id), { notificadoNoDia: true });
+        }
+      }
+    } catch (error) {
+      console.error(">>> Erro no Job de Notificações:", error);
+    }
   });
 }
 
