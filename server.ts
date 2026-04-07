@@ -6,7 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, query, where, getDocs, updateDoc, doc } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, updateDoc, doc, onSnapshot } from "firebase/firestore";
 import fs from "fs";
 
 dotenv.config();
@@ -255,6 +255,51 @@ async function startServer() {
       console.error(">>> Erro no Job de Notificações:", error);
     }
   });
+
+  // --- WhatsApp Notification System (IMMEDIATE TEST MODE) ---
+  // This listener will send a notification as soon as a new expense is registered.
+  
+  if (db) {
+    const lancamentosRef = collection(db, "lancamentos");
+    let isInitialSnapshot = true;
+
+    onSnapshot(lancamentosRef, async (snapshot) => {
+      if (isInitialSnapshot) {
+        isInitialSnapshot = false;
+        console.log(">>> Listener de Notificações Imediatas (TESTE) inicializado (ignorando snapshot inicial).");
+        return;
+      }
+
+      for (const change of snapshot.docChanges()) {
+        if (change.type === "added") {
+          const data = change.doc.data();
+          
+          // Only notify expenses that haven't been notified immediately yet
+          if (data.tipo === "expense" && !data.notificadoImediato) {
+            console.log(`>>> Nova despesa detectada: ${change.doc.id}. Enviando notificação imediata...`);
+            
+            // Fetch user phone number
+            const userRef = doc(db, "usuarios", data.userId);
+            const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
+            const userData = userSnap.docs[0]?.data();
+            const telefone = userData?.telefone;
+
+            if (telefone) {
+              const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+              const message = `🔔 *TESTE DE NOTIFICAÇÃO IMEDIATA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nEsta é uma notificação de teste enviada imediatamente após o cadastro.`;
+              
+              await sendWhatsApp(telefone, message);
+              await updateDoc(doc(db, "lancamentos", change.doc.id), { notificadoImediato: true });
+            } else {
+              console.warn(`>>> Usuário ${data.userId} não possui telefone para notificação imediata.`);
+            }
+          }
+        }
+      }
+    }, (error) => {
+      console.error(">>> Erro no Listener de Notificações Imediatas:", error);
+    });
+  }
 }
 
 startServer();
