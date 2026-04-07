@@ -147,9 +147,19 @@ async function startServer() {
 
   async function sendWhatsApp(to: string, message: string) {
     if (!WHAPI_TOKEN) {
-      console.error(">>> Erro: WHAPI_TOKEN não configurado.");
+      console.error(">>> Erro: WHAPI_TOKEN não configurado nos Segredos (Secrets).");
       return;
     }
+
+    // Clean phone number: remove non-digits
+    let cleanNumber = to.replace(/\D/g, "");
+    
+    // Ensure it has country code 55 (Brazil) if it looks like a local number
+    if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+      cleanNumber = "55" + cleanNumber;
+    }
+
+    console.log(`>>> Tentando enviar WhatsApp para: ${cleanNumber}`);
 
     try {
       const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
@@ -160,19 +170,19 @@ async function startServer() {
         },
         body: JSON.stringify({
           typing_confirm: true,
-          to: to.includes("@") ? to : `${to}@s.whatsapp.net`,
+          to: `${cleanNumber}@s.whatsapp.net`,
           body: message,
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        console.error(">>> Erro ao enviar WhatsApp via Whapi:", errorData);
+        console.error(">>> Erro Whapi (API):", JSON.stringify(errorData));
       } else {
-        console.log(`>>> WhatsApp enviado com sucesso para ${to}`);
+        console.log(`>>> WhatsApp enviado com sucesso para ${cleanNumber}`);
       }
     } catch (error) {
-      console.error(">>> Erro na requisição Whapi:", error);
+      console.error(">>> Erro na requisição Whapi (Network):", error);
     }
   }
 
@@ -263,10 +273,12 @@ async function startServer() {
     const lancamentosRef = collection(db, "lancamentos");
     let isInitialSnapshot = true;
 
+    console.log(">>> Configurando Listener de Notificações Imediatas...");
+
     onSnapshot(lancamentosRef, async (snapshot) => {
       if (isInitialSnapshot) {
         isInitialSnapshot = false;
-        console.log(">>> Listener de Notificações Imediatas (TESTE) inicializado (ignorando snapshot inicial).");
+        console.log(">>> Listener de Notificações Imediatas (TESTE) ativo. Monitorando novos lançamentos...");
         return;
       }
 
@@ -276,22 +288,38 @@ async function startServer() {
           
           // Only notify expenses that haven't been notified immediately yet
           if (data.tipo === "expense" && !data.notificadoImediato) {
-            console.log(`>>> Nova despesa detectada: ${change.doc.id}. Enviando notificação imediata...`);
+            console.log(`>>> [TESTE] Nova despesa detectada: ${change.doc.id} (${data.descricao || data.estabelecimento})`);
             
-            // Fetch user phone number
-            const userRef = doc(db, "usuarios", data.userId);
-            const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
-            const userData = userSnap.docs[0]?.data();
-            const telefone = userData?.telefone;
+            if (!data.userId) {
+              console.warn(`>>> [TESTE] Lançamento ${change.doc.id} não possui userId.`);
+              continue;
+            }
 
-            if (telefone) {
-              const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-              const message = `🔔 *TESTE DE NOTIFICAÇÃO IMEDIATA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nEsta é uma notificação de teste enviada imediatamente após o cadastro.`;
+            try {
+              // Fetch user phone number using getDocs with query (more compatible with client SDK in Node)
+              const userSnap = await getDocs(query(collection(db, "usuarios"), where("__name__", "==", data.userId)));
               
-              await sendWhatsApp(telefone, message);
-              await updateDoc(doc(db, "lancamentos", change.doc.id), { notificadoImediato: true });
-            } else {
-              console.warn(`>>> Usuário ${data.userId} não possui telefone para notificação imediata.`);
+              if (userSnap.empty) {
+                console.warn(`>>> [TESTE] Usuário ${data.userId} não encontrado no Firestore.`);
+                continue;
+              }
+
+              const userData = userSnap.docs[0].data();
+              const telefone = userData?.telefone;
+
+              if (telefone) {
+                const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+                const message = `🔔 *TESTE DE NOTIFICAÇÃO IMEDIATA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nEsta é uma notificação de teste enviada imediatamente após o cadastro.`;
+                
+                await sendWhatsApp(telefone, message);
+                
+                // Mark as notified to avoid double notifications
+                await updateDoc(doc(db, "lancamentos", change.doc.id), { notificadoImediato: true });
+              } else {
+                console.warn(`>>> [TESTE] Usuário ${data.userId} (${userData?.nome}) não possui telefone cadastrado.`);
+              }
+            } catch (err) {
+              console.error(`>>> [TESTE] Erro ao processar notificação para ${change.doc.id}:`, err);
             }
           }
         }
