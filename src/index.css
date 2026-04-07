@@ -3,16 +3,37 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --color-proc-bg: #08121E;
-  --color-proc-secondary: #112236;
-  --color-proc-cyan: #00D1FF;
-  --color-proc-green: #00E676;
-  --color-proc-text-sec: #94A3B8;
+  
+  /* Default (Dark) Theme Variables */
+  --color-proc-bg: var(--proc-bg, #08121E);
+  --color-proc-secondary: var(--proc-secondary, #112236);
+  --color-proc-cyan: var(--proc-cyan, #00D1FF);
+  --color-proc-green: var(--proc-green, #00E676);
+  --color-proc-text-sec: var(--proc-text-sec, #94A3B8);
+  --color-proc-text-main: var(--proc-text-main, #FFFFFF);
+}
+
+:root {
+  --proc-bg: #08121E;
+  --proc-secondary: #112236;
+  --proc-cyan: #00D1FF;
+  --proc-green: #00E676;
+  --proc-text-sec: #94A3B8;
+  --proc-text-main: #FFFFFF;
+}
+
+:root.light {
+  --proc-bg: #D1D5DB;
+  --proc-secondary: #F3F4F6;
+  --proc-cyan: #0369A1;
+  --proc-green: #047857;
+  --proc-text-sec: #4B5563;
+  --proc-text-main: #111827;
 }
 
 @layer base {
   body {
-    @apply bg-proc-bg text-white antialiased;
+    @apply bg-proc-bg text-proc-text-main antialiased transition-colors duration-300;
   }
 }
 
@@ -39,11 +60,13 @@
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--proc-text-sec);
+    opacity: 0.2;
     border-radius: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--proc-text-main);
+    opacity: 0.3;
   }
 }
 

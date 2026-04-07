@@ -12,11 +12,18 @@ import {
   CheckCircle2, 
   AlertCircle,
   Tag,
-  Plus
+  Plus,
+  Moon,
+  Sun
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
-export default function Settings() {
+interface SettingsProps {
+  theme: 'dark' | 'light';
+  onToggleTheme: () => void;
+}
+
+export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [userData, setUserData] = useState<any>(null);
   const [customCategories, setCustomCategories] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,6 +32,7 @@ export default function Settings() {
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
   const [photo, setPhoto] = useState('');
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -39,6 +47,7 @@ export default function Settings() {
         const data = doc.data();
         setUserData(data);
         setPhone(data.telefone || '');
+        setName(data.nome || '');
         setPhoto(data.fotoURL || '');
       }
       setIsLoading(false);
@@ -70,6 +79,7 @@ export default function Settings() {
     try {
       const userRef = doc(db, path, auth.currentUser.uid);
       await setDoc(userRef, {
+        nome: name,
         telefone: phone,
         fotoURL: photo,
         updatedAt: serverTimestamp()
@@ -160,7 +170,7 @@ export default function Settings() {
   return (
     <div className="max-w-4xl mx-auto space-y-8 pb-20">
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold text-white tracking-tight">Configurações</h2>
+        <h2 className="text-3xl font-bold text-proc-text-main tracking-tight">Configurações</h2>
       </div>
 
       <AnimatePresence>
@@ -182,12 +192,12 @@ export default function Settings() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
         {/* Profile Section */}
-        <section className="bg-proc-secondary/20 border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+        <section className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
               <User size={20} />
             </div>
-            <h3 className="text-xl font-bold text-white">Perfil do Usuário</h3>
+            <h3 className="text-xl font-bold text-proc-text-main">Perfil do Usuário</h3>
           </div>
 
           <form onSubmit={handleSaveProfile} className="space-y-6">
@@ -223,9 +233,10 @@ export default function Settings() {
                 <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Nome</label>
                 <input 
                   type="text" 
-                  value={userData?.nome || ''} 
-                  disabled
-                  className="w-full bg-proc-bg/30 border border-white/5 rounded-xl py-3 px-4 text-proc-text-sec text-sm cursor-not-allowed"
+                  value={name} 
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Seu nome completo"
+                  className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                 />
               </div>
 
@@ -248,7 +259,7 @@ export default function Settings() {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="(00) 00000-0000"
-                  className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                  className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                 />
               </div>
             </div>
@@ -264,13 +275,59 @@ export default function Settings() {
           </form>
         </section>
 
+        {/* Theme & Display Section */}
+        <section className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+              {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} />}
+            </div>
+            <h3 className="text-xl font-bold text-proc-text-main">Aparência</h3>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm text-proc-text-sec">
+              Escolha entre o modo escuro (padrão) e o modo claro para uma melhor experiência visual.
+            </p>
+
+            <div className="flex gap-4">
+              <button
+                onClick={() => theme === 'light' && onToggleTheme()}
+                className={`flex-1 p-4 rounded-2xl border transition-all flex flex-col items-center gap-3 ${
+                  theme === 'dark' 
+                    ? 'bg-proc-cyan/10 border-proc-cyan text-proc-cyan shadow-[0_0_20px_rgba(0,209,255,0.1)]' 
+                    : 'bg-proc-bg/50 border-white/5 text-proc-text-sec hover:bg-white/5'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-full bg-proc-bg border border-white/10 flex items-center justify-center shadow-inner">
+                  <Moon size={24} />
+                </div>
+                <span className="font-bold text-xs uppercase tracking-widest">Modo Escuro</span>
+              </button>
+
+              <button
+                onClick={() => theme === 'dark' && onToggleTheme()}
+                className={`flex-1 p-4 rounded-2xl border transition-all flex flex-col items-center gap-3 ${
+                  theme === 'light' 
+                    ? 'bg-proc-cyan/10 border-proc-cyan text-proc-cyan shadow-[0_0_20px_rgba(0,209,255,0.1)]' 
+                    : 'bg-proc-bg/50 border-white/5 text-proc-text-sec hover:bg-white/5'
+                }`}
+              >
+                <div className="w-12 h-12 rounded-full bg-white border border-black/5 flex items-center justify-center shadow-inner">
+                  <Sun size={24} className="text-amber-500" />
+                </div>
+                <span className="font-bold text-xs uppercase tracking-widest">Modo Claro</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Categories Section */}
-        <section className="bg-proc-secondary/20 border border-white/5 rounded-[2.5rem] p-8 space-y-6">
+        <section className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-proc-green/10 flex items-center justify-center text-proc-green">
               <Tag size={20} />
             </div>
-            <h3 className="text-xl font-bold text-white">Categorias Personalizadas</h3>
+            <h3 className="text-xl font-bold text-proc-text-main">Categorias Personalizadas</h3>
           </div>
 
           <p className="text-sm text-proc-text-sec">
@@ -280,10 +337,10 @@ export default function Settings() {
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {customCategories.length > 0 ? (
               customCategories.map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 border border-white/5 group hover:bg-white/10 transition-all">
+                <div key={cat.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 border border-white/10 group hover:bg-proc-secondary/50 transition-all">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-proc-cyan" />
-                    <span className="text-white font-medium">{cat.nome}</span>
+                    <span className="text-proc-text-main font-medium">{cat.nome}</span>
                   </div>
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}

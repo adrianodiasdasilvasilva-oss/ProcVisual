@@ -27,14 +27,14 @@ export default function QuickCards({ income, expense }: QuickCardsProps) {
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: index * 0.1 }}
-          className={`bg-proc-secondary/20 p-4 rounded-3xl border border-white/5 ${card.glow} flex items-center gap-4 hover:bg-proc-secondary/40 transition-all`}
+          className={`bg-proc-secondary/20 p-4 rounded-3xl border border-white/10 ${card.glow} flex items-center gap-4 hover:bg-proc-secondary/40 transition-all`}
         >
-          <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center ${card.color} shrink-0`}>
+          <div className={`w-10 h-10 rounded-xl bg-proc-secondary/50 flex items-center justify-center ${card.color} shrink-0`}>
             <card.icon size={20} />
           </div>
           <div>
             <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest leading-none mb-1">{card.title}</p>
-            <p className="text-sm font-bold text-white leading-none">{card.value}</p>
+            <p className="text-sm font-bold text-proc-text-main leading-none">{card.value}</p>
           </div>
         </motion.div>
       ))}

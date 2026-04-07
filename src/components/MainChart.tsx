@@ -34,7 +34,7 @@ export default function MainChart({ transactions }: MainChartProps) {
   }
 
   return (
-    <div className="p-6 rounded-[2rem] border border-white/5 mb-6">
+    <div className="p-6 rounded-[2rem] border border-white/10 mb-6 bg-proc-secondary/10">
       <div className="flex justify-between items-end mb-6">
         <h3 className="text-sm font-semibold text-proc-text-sec uppercase tracking-widest">Despesas por Categoria</h3>
         <span className="text-xs font-bold text-proc-cyan">Abril 2026</span>
@@ -63,18 +63,19 @@ export default function MainChart({ transactions }: MainChartProps) {
               type="category" 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fill: '#94A3B8', fontSize: 10, fontWeight: 600 }} 
+              tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 600 }} 
               width={80}
             />
             <Tooltip 
-              cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+              cursor={{ fill: 'var(--proc-text-sec)', opacity: 0.05 }}
               contentStyle={{ 
-                backgroundColor: '#112236', 
-                border: '1px solid rgba(255,255,255,0.1)',
+                backgroundColor: 'var(--proc-secondary)', 
+                border: '1px solid var(--proc-text-sec)',
                 borderRadius: '12px',
                 fontSize: '12px',
-                color: '#fff'
+                color: 'var(--proc-text-main)'
               }}
+              itemStyle={{ color: 'var(--proc-text-main)' }}
               formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`}
             />
             <Bar 
@@ -87,7 +88,7 @@ export default function MainChart({ transactions }: MainChartProps) {
                 dataKey="percent" 
                 position="right" 
                 formatter={(val: number) => `${val}%`}
-                style={{ fill: '#00D1FF', fontSize: 11, fontWeight: 'bold' }}
+                style={{ fill: 'var(--proc-cyan)', fontSize: 11, fontWeight: 'bold' }}
                 offset={12}
               />
               {data.map((entry, index) => (

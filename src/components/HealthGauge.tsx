@@ -15,7 +15,7 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
   const isCritical = percentage <= 0;
 
   return (
-    <div className="relative bg-gradient-to-br from-proc-secondary/40 to-proc-bg p-6 rounded-[2.5rem] border border-white/5 shadow-2xl overflow-hidden mb-0">
+    <div className="relative bg-gradient-to-br from-proc-secondary/40 to-proc-bg p-6 rounded-[2.5rem] border border-white/10 shadow-2xl overflow-hidden mb-0">
       {/* Background Glow */}
       <div className={`absolute -top-20 -right-20 w-40 h-40 blur-[80px] rounded-full transition-colors duration-1000 ${
         percentage >= 80 ? 'bg-proc-green/10' :
@@ -30,7 +30,8 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
           <svg height="160" width="160" className="absolute left-1/2 -translate-x-1/2 top-0">
             {/* Background track */}
             <circle
-              stroke="rgba(255,255,255,0.05)"
+              stroke="var(--proc-text-sec)"
+              strokeOpacity="0.1"
               fill="transparent"
               strokeWidth={stroke}
               strokeDasharray={circumference + ' ' + circumference}
@@ -64,21 +65,21 @@ export default function HealthGauge({ percentage }: HealthGaugeProps) {
           
           {/* Pointer */}
           <motion.div 
-            className={`absolute bottom-0 left-1/2 w-1 h-16 origin-bottom rounded-full transition-colors duration-1000 ${isCritical ? 'bg-red-500' : 'bg-white'}`}
+            className={`absolute bottom-0 left-1/2 w-1 h-16 origin-bottom rounded-full transition-colors duration-1000 ${isCritical ? 'bg-red-500' : 'bg-proc-text-main'}`}
             initial={{ rotate: -90 }}
             animate={{ rotate: -90 + (percentage * 1.8) }}
             transition={{ duration: 1.5, ease: "easeOut" }}
             style={{ left: 'calc(50% - 2px)' }}
           >
             <div className={`w-3 h-3 rounded-full absolute -top-1 -left-1 transition-all duration-1000 ${
-              isCritical ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-white shadow-[0_0_10px_rgba(255,255,255,0.5)]'
+              isCritical ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]' : 'bg-proc-text-main shadow-[0_0_10px_rgba(255,255,255,0.5)]'
             }`} />
           </motion.div>
         </div>
 
         <div className="mt-2 text-center">
           <motion.span 
-            className="text-4xl font-bold text-white block"
+            className="text-4xl font-bold text-proc-text-main block"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
           >

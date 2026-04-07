@@ -23,7 +23,7 @@ export default function ActionButtons({ onNewTransaction, onEditTransactions }: 
         whileHover={{ scale: 1.02, y: -2 }}
         whileTap={{ scale: 0.98 }}
         onClick={onEditTransactions}
-        className="flex-1 md:flex-none md:px-8 flex items-center justify-center gap-2 bg-proc-secondary/50 border border-white/10 text-white py-3.5 md:py-3 rounded-2xl font-bold hover:bg-proc-secondary/80 hover:border-white/20 transition-all"
+        className="flex-1 md:flex-none md:px-8 flex items-center justify-center gap-2 bg-proc-secondary/50 border border-white/10 text-proc-text-main py-3.5 md:py-3 rounded-2xl font-bold hover:bg-proc-secondary/80 hover:border-white/20 transition-all"
       >
         <RefreshCw size={18} strokeWidth={2.5} className="text-proc-cyan" />
         <span className="text-sm">Editar lançamentos</span>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, User as UserIcon, LogOut } from 'lucide-react';
+import { Search, User as UserIcon, LogOut, Sun, Moon } from 'lucide-react';
 import { auth, db } from '../firebase';
 import Logo from './Logo';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -11,11 +11,12 @@ interface HeaderProps {
 export default function Header({ balance }: HeaderProps) {
   const user = auth.currentUser;
   const [photoURL, setPhotoURL] = useState<string | null>(user?.photoURL || null);
+  const [displayName, setDisplayName] = useState<string | null>(user?.displayName || null);
 
   useEffect(() => {
     if (!user) return;
 
-    // Listen to user data in Firestore for the profile picture
+    // Listen to user data in Firestore for the profile picture and name
     const userRef = doc(db, 'usuarios', user.uid);
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
@@ -23,18 +24,23 @@ export default function Header({ balance }: HeaderProps) {
         if (data.fotoURL) {
           setPhotoURL(data.fotoURL);
         }
+        if (data.nome) {
+          setDisplayName(data.nome);
+        }
       }
     });
 
     return () => unsubscribe();
   }, [user]);
 
+  const firstName = displayName ? displayName.split(' ')[0] : '';
+
   return (
-    <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-white/5">
+    <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-white/10">
       <div className="flex items-center gap-3 md:hidden">
         <Logo size="small" className="h-7" />
         <div className="flex flex-col">
-          <h1 className="text-lg font-bold tracking-tight text-white leading-none">
+          <h1 className="text-lg font-bold tracking-tight text-proc-text-main leading-none">
             Proc<span className="text-proc-cyan">Visual</span>
           </h1>
           <div className="flex items-center gap-1.5 mt-0.5">
@@ -44,6 +50,12 @@ export default function Header({ balance }: HeaderProps) {
             </span>
           </div>
         </div>
+        {firstName && (
+          <div className="ml-1 pl-3 border-l border-proc-text-sec/20 flex flex-col justify-center">
+            <span className="text-[10px] text-proc-text-sec uppercase tracking-widest font-bold leading-none mb-1">Olá,</span>
+            <span className="text-xs font-bold text-proc-cyan leading-none">{firstName}</span>
+          </div>
+        )}
       </div>
 
       <div className="hidden md:flex items-center gap-6 flex-1">
@@ -52,7 +64,7 @@ export default function Header({ balance }: HeaderProps) {
           <input 
             type="text" 
             placeholder="Pesquisar lançamentos, categorias..." 
-            className="w-full bg-proc-secondary/30 border border-white/5 rounded-2xl py-2.5 pl-12 pr-4 text-sm text-white placeholder:text-proc-text-sec focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all"
+            className="w-full bg-proc-secondary/30 border border-white/10 rounded-2xl py-2.5 pl-12 pr-4 text-sm text-proc-text-main placeholder:text-proc-text-sec focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all"
           />
         </div>
         
@@ -78,7 +90,7 @@ export default function Header({ balance }: HeaderProps) {
             </div>
           </div>
           <div className="hidden md:block text-left">
-            <p className="text-sm font-bold text-white leading-none">{user?.displayName || 'Usuário'}</p>
+            <p className="text-sm font-bold text-proc-text-main leading-none">{displayName || user?.displayName || 'Usuário'}</p>
             <p className="text-[10px] text-proc-text-sec mt-1">Premium Plan</p>
           </div>
         </div>

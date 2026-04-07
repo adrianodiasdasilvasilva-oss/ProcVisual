@@ -503,7 +503,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                     <ArrowLeft size={18} />
                   </button>
                 )}
-                <h3 className="text-lg font-bold text-white">
+                <h3 className="text-lg font-bold text-proc-text-main">
                   {view === 'selection' && 'Novo Lançamento'}
                   {view === 'manual' && (transactionToEdit ? 'Editar Lançamento' : 'Inserir Lançamento')}
                   {view === 'receipt' && 'Enviar Comprovante'}
@@ -531,7 +531,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       <Edit3 size={24} />
                     </div>
                     <div>
-                      <p className="font-bold text-white">Lançamento Manual</p>
+                      <p className="font-bold text-proc-text-main">Lançamento Manual</p>
                       <p className="text-xs text-proc-text-sec">Digite os dados manualmente</p>
                     </div>
                   </button>
@@ -544,7 +544,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       <Camera size={24} />
                     </div>
                     <div>
-                      <p className="font-bold text-white">Enviar Comprovante</p>
+                      <p className="font-bold text-proc-text-main">Enviar Comprovante</p>
                       <p className="text-xs text-proc-text-sec">Tire uma foto ou envie da galeria</p>
                     </div>
                   </button>
@@ -604,7 +604,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         value={formData.value}
                         onChange={(e) => setFormData({...formData, value: e.target.value})}
                         placeholder="0,00"
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors text-lg"
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-proc-text-main font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors text-lg"
                       />
                     </div>
                   </div>
@@ -618,7 +618,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       value={formData.establishment}
                       onChange={(e) => setFormData({...formData, establishment: e.target.value})}
                       placeholder="Nome da loja ou local"
-                      className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                      className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                     />
                   </div>
 
@@ -637,15 +637,15 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                             setFormData({...formData, category: e.target.value});
                           }
                         }}
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
                       >
                         {predefinedCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
+                          <option key={cat} value={cat} className="bg-proc-bg text-proc-text-main">{cat}</option>
                         ))}
                         {userCustomCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
+                          <option key={cat} value={cat} className="bg-proc-bg text-proc-text-main">{cat}</option>
                         ))}
-                        <option value="Personalizada">Personalizada...</option>
+                        <option value="Personalizada" className="bg-proc-bg text-proc-text-main">Personalizada...</option>
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -656,7 +656,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         type="date" 
                         value={formData.date}
                         onChange={(e) => setFormData({...formData, date: e.target.value})}
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                       />
                     </div>
                   </div>
@@ -675,7 +675,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         value={customCategory}
                         onChange={(e) => setCustomCategory(e.target.value)}
                         placeholder="Ex: Presentes, Viagem..."
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                         required
                       />
                     </motion.div>

@@ -45,6 +45,27 @@ export default function App() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const root = window.document.documentElement;
+    // Only apply light theme if user is logged in
+    if (theme === 'light' && user) {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme, user]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  };
 
   useEffect(() => {
     const handler = (e: any) => {
@@ -227,7 +248,7 @@ export default function App() {
     : Math.max(0, Math.min(100, ((totalIncome - totalExpense) / totalIncome) * 100));
 
   return (
-    <div className="min-h-screen bg-proc-bg text-white font-sans selection:bg-proc-green/30 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-proc-bg text-proc-text-main font-sans selection:bg-proc-green/30 flex flex-col md:flex-row">
       <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
       
       <div className="flex-1 flex flex-col min-h-screen overflow-y-auto pb-24 md:pb-0">
@@ -235,7 +256,7 @@ export default function App() {
         
         <main className="w-full max-w-7xl mx-auto px-4 md:px-8 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <Filters />
+            <Filters theme={theme} onToggleTheme={toggleTheme} />
             <div className="hidden md:block">
               <ActionButtons 
                 onNewTransaction={() => setIsModalOpen(true)} 
@@ -279,17 +300,17 @@ export default function App() {
                         <MainChart transactions={transactions} />
                         
                         {/* Desktop Activity Feed Placeholder or List */}
-                        <div className="bg-proc-secondary/20 border border-white/5 rounded-[2.5rem] p-6">
-                          <h3 className="text-white font-bold text-lg mb-4">Atividade Recente</h3>
+                        <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
+                          <h3 className="text-proc-text-main font-bold text-lg mb-4">Atividade Recente</h3>
                           <div className="space-y-4">
                             {transactions.slice(0, 5).map((t) => (
-                              <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-all">
+                              <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
                                 <div className="flex items-center gap-4">
                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
                                     <div className="w-2 h-2 rounded-full bg-current" />
                                   </div>
                                   <div>
-                                    <p className="text-white font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
+                                    <p className="text-proc-text-main font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
                                     <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
                                   </div>
                                 </div>
@@ -317,12 +338,12 @@ export default function App() {
                   exit={{ opacity: 0, y: -20 }}
                   className="md:col-span-12"
                 >
-                  <div className="bg-proc-secondary/20 border border-white/5 rounded-[2.5rem] p-6">
+                  <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
                     <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-white font-bold text-xl">Gerenciar Lançamentos</h3>
+                      <h3 className="text-proc-text-main font-bold text-xl">Gerenciar Lançamentos</h3>
                       <button 
                         onClick={() => setActiveTab('dashboard')}
-                        className="text-proc-text-sec hover:text-white transition-colors"
+                        className="text-proc-text-sec hover:text-proc-text-main transition-colors"
                       >
                         Voltar para Dashboard
                       </button>
@@ -330,13 +351,13 @@ export default function App() {
                     
                     <div className="space-y-4">
                       {transactions.map((t) => (
-                        <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-white/5 hover:bg-white/10 transition-all border border-white/5">
+                        <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all border border-white/10">
                           <div className="flex items-center gap-4">
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
                               <div className="w-2.5 h-2.5 rounded-full bg-current" />
                             </div>
                             <div>
-                              <p className="text-white font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
+                              <p className="text-proc-text-main font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
                               <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
                             </div>
                           </div>
@@ -396,7 +417,7 @@ export default function App() {
                   exit={{ opacity: 0, y: -20 }}
                   className="md:col-span-12"
                 >
-                  <Settings />
+                  <Settings theme={theme} onToggleTheme={toggleTheme} />
                 </motion.div>
               ) : (
                 <motion.div
@@ -411,7 +432,7 @@ export default function App() {
                       <div className="w-6 h-6 rounded-full bg-proc-cyan/40" />
                     </div>
                   </div>
-                  <h2 className="text-2xl font-bold text-white mb-2 uppercase tracking-widest">
+                  <h2 className="text-2xl font-bold text-proc-text-main mb-2 uppercase tracking-widest">
                     {activeTab}
                   </h2>
                   <p className="text-proc-text-sec text-sm max-w-[200px] mx-auto">
@@ -465,14 +486,14 @@ export default function App() {
               <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
                 <Trash2 size={32} />
               </div>
-              <h3 className="text-xl font-bold text-white text-center mb-2">Excluir Lançamento?</h3>
+              <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir Lançamento?</h3>
               <p className="text-proc-text-sec text-center mb-8">
                 Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.
               </p>
               <div className="flex gap-3">
                 <button
                   onClick={() => setTransactionToDelete(null)}
-                  className="flex-1 py-4 rounded-2xl bg-white/5 text-white font-bold hover:bg-white/10 transition-all"
+                  className="flex-1 py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10"
                 >
                   Cancelar
                 </button>

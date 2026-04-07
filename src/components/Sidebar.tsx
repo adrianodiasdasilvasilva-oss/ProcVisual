@@ -18,11 +18,11 @@ export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarPr
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-white/5 h-screen sticky top-0 p-6">
+    <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-white/10 h-screen sticky top-0 p-6">
       <div className="mb-10 flex items-center gap-3">
         <Logo size="small" className="h-8" />
         <div>
-          <h1 className="text-xl font-bold text-white tracking-tighter leading-none">
+          <h1 className="text-xl font-bold text-proc-text-main tracking-tighter leading-none">
             Proc<span className="text-proc-cyan">Visual</span>
           </h1>
           <p className="text-[8px] text-proc-text-sec uppercase tracking-[0.2em] font-bold mt-0.5">Intelligence Finance</p>
@@ -37,10 +37,10 @@ export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarPr
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
               activeTab === item.id 
                 ? 'bg-proc-cyan/10 text-proc-cyan shadow-[0_0_20px_rgba(0,209,255,0.1)]' 
-                : 'text-proc-text-sec hover:bg-white/5 hover:text-white'
+                : 'text-proc-text-sec hover:bg-proc-text-main/5 hover:text-proc-text-main'
             }`}
           >
-            <item.icon size={20} className={activeTab === item.id ? 'text-proc-cyan' : 'group-hover:text-white'} />
+            <item.icon size={20} className={activeTab === item.id ? 'text-proc-cyan' : 'group-hover:text-proc-text-main'} />
             <span className="font-medium text-sm">{item.label}</span>
             {activeTab === item.id && (
               <div className="ml-auto w-1.5 h-1.5 rounded-full bg-proc-cyan shadow-[0_0_8px_#00D1FF]" />
@@ -49,7 +49,7 @@ export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarPr
         ))}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-white/5 space-y-2">
+      <div className="mt-auto pt-6 border-t border-white/10 space-y-2">
         {onInstall && (
           <button 
             onClick={onInstall}
