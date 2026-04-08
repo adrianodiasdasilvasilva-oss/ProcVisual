@@ -77,7 +77,10 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isOwner(userId);
     }
 
     // Lancamentos Collection

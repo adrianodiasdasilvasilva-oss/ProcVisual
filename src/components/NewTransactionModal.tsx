@@ -39,6 +39,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
+  const [notificationStatus, setNotificationStatus] = useState<{success: boolean, message?: string} | null>(null);
+
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const [customCategory, setCustomCategory] = useState('');
   const [userCustomCategories, setUserCustomCategories] = useState<string[]>([]);
@@ -63,6 +65,21 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     establishment: ''
   });
 
+  const [userPhone, setUserPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!auth.currentUser || !isOpen) return;
+
+    const userRef = doc(db, 'usuarios', auth.currentUser.uid);
+    const unsubscribe = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        setUserPhone(doc.data().telefone || null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [isOpen]);
+
   useEffect(() => {
     if (!auth.currentUser || !isOpen) return;
 
@@ -84,7 +101,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       setIsCustomCategory(!isPredefined);
       setCustomCategory(!isPredefined ? transactionToEdit.categoria : '');
       setFormData({
-        type: transactionToEdit.tipo,
+        type: (transactionToEdit.tipo as string) === 'despesa' ? 'expense' : ((transactionToEdit.tipo as string) === 'receita' ? 'income' : transactionToEdit.tipo),
         value: transactionToEdit.valor.toString(),
         category: isPredefined ? transactionToEdit.categoria : 'Personalizada',
         date: transactionToEdit.data,
@@ -103,6 +120,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setIsOcrRunning(false);
     setIsSaving(false);
     setErrorMessage(null);
+    setNotificationStatus(null);
     setIsCustomCategory(false);
     setCustomCategory('');
     setFormData({
@@ -434,31 +452,35 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
       const payload: any = {
         userId: auth.currentUser.uid,
-        tipo: formData.type,
+        tipo: formData.type, // 'income' or 'expense'
         valor: parseFloat(cleanValue),
         categoria: finalCategory || 'Outros',
         data: formData.date,
         descricao: formData.description || formData.establishment || 'Sem descrição',
         estabelecimento: formData.establishment || '',
+        telefone: userPhone, // Store phone for scheduled notifications
         updatedAt: serverTimestamp(),
         pago: transactionToEdit ? (transactionToEdit.pago ?? false) : false,
         notificado5dias: transactionToEdit ? (transactionToEdit.notificado5dias ?? false) : false,
         notificadoNoDia: transactionToEdit ? (transactionToEdit.notificadoNoDia ?? false) : false
       };
       
+      let transactionId = transactionToEdit?.id;
       if (transactionToEdit) {
         console.log('Atualizando lançamento no Firestore:', transactionToEdit.id, payload);
         await updateDoc(doc(db, path, transactionToEdit.id), payload);
       } else {
         payload.createdAt = serverTimestamp();
         console.log('Payload para Firestore:', payload);
-        await addDoc(collection(db, path), payload);
+        const docRef = await addDoc(collection(db, path), payload);
+        transactionId = docRef.id;
       }
-      
+
+      // WhatsApp notification trigger removed as per user request (only scheduled notifications)
       setView('success');
       setTimeout(() => {
         handleClose();
-      }, 1500);
+      }, 2000);
     } catch (error) {
       console.error('Erro ao salvar no Firestore:', error);
       setIsSaving(false);
@@ -827,6 +849,44 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                     <p className="text-xl font-bold text-white">Lançamento Salvo!</p>
                     <p className="text-sm text-proc-text-sec mt-1">Seu saldo foi atualizado com sucesso.</p>
                   </div>
+
+                  {/* Notification Status Box */}
+                  <div className={`w-full p-4 rounded-2xl border ${
+                    notificationStatus?.success 
+                      ? 'bg-proc-green/10 border-proc-green/20 text-proc-green' 
+                      : notificationStatus === null 
+                        ? 'bg-proc-cyan/10 border-proc-cyan/20 text-proc-cyan'
+                        : 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+                  }`}>
+                    <div className="flex items-center gap-3">
+                      {notificationStatus === null ? (
+                        <Loader2 size={18} className="animate-spin" />
+                      ) : notificationStatus.success ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <X size={18} />
+                      )}
+                      <p className="text-[10px] font-bold uppercase tracking-widest">
+                        {notificationStatus === null && 'Enviando Notificação...'}
+                        {notificationStatus?.success && 'WhatsApp Enviado!'}
+                        {notificationStatus?.success === false && 'Erro na Notificação'}
+                      </p>
+                    </div>
+                    {notificationStatus?.success === false && (
+                      <p className="text-[10px] mt-2 opacity-80 leading-relaxed">
+                        {notificationStatus.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {!notificationStatus?.success && notificationStatus !== null && (
+                    <button 
+                      onClick={handleClose}
+                      className="mt-2 w-full py-4 rounded-2xl bg-proc-secondary text-proc-text-main font-bold border border-white/10 hover:bg-proc-secondary/80 transition-all"
+                    >
+                      Fechar
+                    </button>
+                  )}
                 </div>
               )}
             </div>

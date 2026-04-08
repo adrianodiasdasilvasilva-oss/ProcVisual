@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import admin from "firebase-admin";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import fs from "fs";
 
 dotenv.config();
@@ -13,37 +14,180 @@ dotenv.config();
 const serverStartTime = new Date();
 console.log(`>>> [SISTEMA] Servidor iniciado em: ${serverStartTime.toISOString()}`);
 
-// Initialize Firebase Admin SDK
-let dbAdmin: admin.firestore.Firestore;
-try {
-  const firebaseConfig = JSON.parse(fs.readFileSync("./firebase-applet-config.json", "utf-8"));
-  
-  if (admin.apps.length === 0) {
-    admin.initializeApp({
-      projectId: firebaseConfig.projectId
-    });
-  }
-  
-  // Correct way to initialize with a specific database ID in Admin SDK
-  const dbId = firebaseConfig.firestoreDatabaseId;
-  if (dbId && dbId !== '(default)') {
-    dbAdmin = admin.firestore(dbId);
-    console.log(`>>> [SISTEMA] Firebase Admin SDK inicializado para Database: ${dbId}`);
-  } else {
-    dbAdmin = admin.firestore();
-    console.log(">>> [SISTEMA] Firebase Admin SDK inicializado para Database: (default)");
-  }
-  
-} catch (error) {
-  console.error(">>> [SISTEMA] Erro ao inicializar Firebase Admin SDK:", error);
-}
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize Firebase Admin SDK (Global Scope)
+let dbAdmin: admin.firestore.Firestore | null = null;
+
+async function initializeFirebaseAdmin() {
+  try {
+    if (dbAdmin) return dbAdmin;
+
+    console.log(">>> [SISTEMA] Lendo configuração do Firebase...");
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    
+    if (!fs.existsSync(configPath)) {
+      console.error(">>> [SISTEMA] Erro: Arquivo firebase-applet-config.json não encontrado!");
+      return null;
+    }
+    
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const projectId = firebaseConfig.projectId;
+    const dbId = firebaseConfig.firestoreDatabaseId;
+
+    console.log(">>> [SISTEMA] Configurando Admin para Projeto:", projectId);
+    
+    if (admin.apps.length === 0) {
+      // In Cloud Run, initializeApp() without arguments uses the default service account
+      admin.initializeApp({
+        projectId: projectId
+      });
+      console.log(">>> [SISTEMA] Firebase Admin inicializado.");
+    }
+    
+    // Strategy: Get Firestore instance for the specific database
+    try {
+      if (dbId && dbId !== '(default)') {
+        dbAdmin = getFirestore(dbId);
+        console.log(`>>> [SISTEMA] Conectando ao banco nomeado: ${dbId}`);
+      } else {
+        dbAdmin = getFirestore();
+        console.log(">>> [SISTEMA] Conectando ao banco: (default)");
+      }
+      
+      // Verification
+      const collections = await dbAdmin.listCollections();
+      console.log(`>>> [SISTEMA] Conexão OK. Coleções encontradas: ${collections.length}`);
+    } catch (err: any) {
+      console.error(`>>> [SISTEMA] Erro na conexão inicial: ${err.message}`);
+      if (err.message.includes('PERMISSION_DENIED')) {
+        console.error(">>> [SISTEMA] DICA: Verifique se a conta de serviço tem a função 'Cloud Datastore User' ou 'Firebase Firestore Admin'.");
+      }
+      
+      // Fallback to default if named failed
+      if (dbId && dbId !== '(default)') {
+        console.log(">>> [SISTEMA] Tentando fallback para (default)...");
+        dbAdmin = getFirestore();
+      }
+    }
+
+    return dbAdmin;
+
+  } catch (error: any) {
+    console.error(">>> [SISTEMA] Erro crítico na inicialização:", error.message);
+    return null;
+  }
+}
+
+// Call initialization immediately
+initializeFirebaseAdmin();
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
+
+  const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+  const WHAPI_BASE_URL = "https://gate.whapi.cloud";
+
+  console.log(`>>> [SISTEMA] WHAPI_TOKEN configurado (dentro do startServer): ${WHAPI_TOKEN ? "SIM (Inicia com " + WHAPI_TOKEN.substring(0, 5) + ")" : "NÃO"}`);
+
+  // --- WhatsApp Notification System ---
+
+  async function checkWhapiStatus() {
+    if (!WHAPI_TOKEN) {
+      return { success: false, error: "Token não configurado nos Segredos (Secrets)." };
+    }
+
+    try {
+      // 1. Try /health first
+      const healthRes = await fetch(`${WHAPI_BASE_URL}/health`, {
+        headers: { "Authorization": `Bearer ${WHAPI_TOKEN}` }
+      });
+      const healthData = await healthRes.json();
+      
+      // 2. Try /users/me as fallback to get user info if connected
+      const userRes = await fetch(`${WHAPI_BASE_URL}/users/me`, {
+        headers: { "Authorization": `Bearer ${WHAPI_TOKEN}` }
+      });
+      const userData = await userRes.ok ? await userRes.json() : null;
+
+      console.log(">>> [WHATSAPP] Debug Health:", JSON.stringify(healthData));
+      if (userData) console.log(">>> [WHATSAPP] Debug User:", JSON.stringify(userData));
+
+      const statusText = healthData.status?.text || "UNKNOWN";
+      const hasUserId = healthData.user?.id || (userData && userData.id);
+      
+      // If we have a user ID, it means we are connected, even if status is still 'AUTH' or 'INITIALIZING'
+      const isReady = statusText === "OK" || !!hasUserId;
+
+      return { 
+        success: !!isReady, 
+        error: isReady ? null : `Status: ${statusText}`,
+        data: { 
+          health: healthData, 
+          user: userData || healthData.user,
+          statusText: statusText
+        },
+        details: healthData
+      };
+    } catch (error: any) {
+      console.error(">>> [WHATSAPP] Erro na verificação:", error.message);
+      return { success: false, error: "Erro de conexão com a API" };
+    }
+  }
+
+  async function sendWhatsApp(to: string, message: string) {
+    if (!WHAPI_TOKEN) {
+      return { success: false, error: "WHAPI_TOKEN não configurado." };
+    }
+
+    // Clean phone number: remove non-digits
+    let cleanNumber = to.replace(/\D/g, "");
+    
+    // Ensure it has country code 55 (Brazil) if it looks like a local number (10 or 11 digits)
+    if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+      cleanNumber = "55" + cleanNumber;
+    }
+
+    // Whapi expects the recipient in this format
+    const recipient = `${cleanNumber}@s.whatsapp.net`;
+    console.log(`>>> [WHATSAPP] Tentando enviar mensagem para: ${recipient}`);
+
+    try {
+      const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${WHAPI_TOKEN}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({
+          to: recipient,
+          body: message,
+          typing_time: 0 // Immediate
+        }),
+      });
+
+      const responseData = await response.json();
+      const status = response.status;
+
+      if (!response.ok) {
+        console.error(`>>> [WHATSAPP] Falha no envio (Status ${status}):`, JSON.stringify(responseData));
+        return { 
+          success: false, 
+          error: `Erro na API Whapi (${status})`, 
+          details: responseData 
+        };
+      }
+
+      console.log(`>>> [WHATSAPP] Mensagem enviada com sucesso! ID: ${responseData.id}`);
+      return { success: true, data: responseData };
+    } catch (error: any) {
+      console.error(">>> [WHATSAPP] Erro de rede ao enviar mensagem:", error.message);
+      return { success: false, error: `Erro de rede: ${error.message}` };
+    }
+  }
 
   // Increase payload size for images
   app.use(express.json({ limit: '10mb' }));
@@ -52,6 +196,12 @@ async function startServer() {
   app.use((req, res, next) => {
     console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     next();
+  });
+
+  app.get("/api/whapi-status", async (req, res) => {
+    console.log(">>> [SISTEMA] Verificando status da instância Whapi...");
+    const status = await checkWhapiStatus();
+    res.json(status);
   });
 
   app.get("/api/test", (req, res) => {
@@ -66,57 +216,157 @@ async function startServer() {
     });
   });
 
-  // Diagnostic endpoint to test WhatsApp
-  app.post("/api/test-whatsapp", async (req, res) => {
-    const { phone, message } = req.body;
+  // API Route for WhatsApp Notifications (Direct Trigger)
+  app.post("/api/notify-transaction", async (req, res) => {
+    const { userId, transactionId, data, phone } = req.body;
     
-    if (!phone) {
-      return res.status(400).json({ error: "Número de telefone ausente." });
-    }
-
-    if (!WHAPI_TOKEN) {
-      return res.status(500).json({ error: "WHAPI_TOKEN não configurado nos Segredos (Secrets)." });
-    }
-
-    console.log(`>>> [DIAGNÓSTICO] Testando WhatsApp para ${phone}...`);
+    console.log(`>>> [NOTIFICAÇÃO] Solicitação recebida. User: ${userId}, Doc: ${transactionId}, Phone: ${phone ? 'PROVIDO' : 'NÃO PROVIDO'}`);
+    console.log(`>>> [NOTIFICAÇÃO] Token presente: ${!!WHAPI_TOKEN}`);
     
-    // Clean phone number: remove non-digits
-    let cleanNumber = phone.replace(/\D/g, "");
-    if (cleanNumber.length === 10 || cleanNumber.length === 11) {
-      cleanNumber = "55" + cleanNumber;
+    if (!userId || !data) {
+      console.error(">>> [NOTIFICAÇÃO] Erro: Dados incompletos.");
+      return res.status(400).json({ error: "Dados incompletos para notificação." });
     }
 
+    if (!dbAdmin) {
+      console.warn(">>> [NOTIFICAÇÃO] dbAdmin não inicializado no boot. Tentando inicializar agora...");
+      await initializeFirebaseAdmin();
+      if (!dbAdmin) {
+        console.error(">>> [NOTIFICAÇÃO] Falha crítica: dbAdmin não pôde ser inicializado.");
+        return res.status(500).json({ error: "Banco de dados não inicializado no servidor." });
+      }
+    }
+
+    const cleanUserId = String(userId).trim();
+    
     try {
-      const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHAPI_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          typing_confirm: true,
-          to: `${cleanNumber}@s.whatsapp.net`,
-          body: message || "Teste de conexão ProcVisual",
-        }),
-      });
-
-      const data = await response.json();
+      console.log(`>>> [DEBUG] Acessando Firestore. Projeto: ${dbAdmin.projectId}, Banco: ${dbAdmin.databaseId}`);
+      console.log(`>>> [DEBUG] Caminho: usuarios/${cleanUserId}`);
       
-      if (!response.ok) {
-        console.error(">>> [DIAGNÓSTICO] Erro Whapi:", JSON.stringify(data));
-        return res.status(response.status).json({ 
-          success: false, 
-          error: "Erro na API do Whapi", 
-          details: data 
+      // 1. Check Whapi Status
+      const status = await checkWhapiStatus();
+      
+      if (!status.success && !status.data?.user?.id) {
+        console.error(">>> [DEBUG] Abortando: Whapi não está pronto.");
+        return res.status(500).json({ 
+          error: "Instância WhatsApp não está conectada.", 
+          details: status.error 
         });
       }
 
-      console.log(`>>> [DIAGNÓSTICO] Sucesso para ${cleanNumber}`);
-      res.json({ success: true, data });
+      // 2. Fetch user phone number from Firestore (if not provided in body)
+      let telefone = phone;
+      
+      if (!telefone) {
+        console.log(`>>> [DEBUG] Telefone não provido no body. Buscando no Firestore para ID: ${cleanUserId}`);
+        let userSnap;
+        try {
+          userSnap = await dbAdmin.collection("usuarios").doc(cleanUserId).get();
+        } catch (firestoreErr: any) {
+          console.error(">>> [DEBUG] ERRO DE PERMISSÃO FIRESTORE:", firestoreErr.message);
+          return res.status(500).json({ 
+            error: "Erro de permissão no banco de dados do servidor.", 
+            details: firestoreErr.message,
+            code: firestoreErr.code,
+            path: `usuarios/${cleanUserId}`,
+            projectId: dbAdmin.projectId,
+            databaseId: dbAdmin.databaseId
+          });
+        }
+        
+        if (!userSnap.exists) {
+          console.error(`>>> [DEBUG] Documento não encontrado na coleção 'usuarios' para o ID: ${cleanUserId}`);
+          return res.status(404).json({ 
+            error: "Usuário não encontrado no banco de dados.",
+            debug: { searchedId: cleanUserId }
+          });
+        }
+
+        const userData = userSnap.data();
+        telefone = userData?.telefone;
+        console.log(`>>> [DEBUG] Dados do usuário recuperados do Firestore.`);
+      } else {
+        console.log(`>>> [DEBUG] Usando telefone provido pelo cliente: ${telefone}`);
+      }
+      
+      if (!telefone) {
+        console.error(`>>> [DEBUG] Campo 'telefone' está vazio para o usuário ${cleanUserId}`);
+        return res.status(400).json({ error: "Você precisa cadastrar seu telefone nas Configurações." });
+      }
+
+      // 3. Prepare the message
+      const valor = typeof data.valor === 'number' ? data.valor : parseFloat(String(data.valor || 0).replace(',', '.'));
+      const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+      const dataFormatada = data.data ? new Date(data.data + "T12:00:00").toLocaleDateString("pt-BR") : "N/A";
+      
+      const tipo = (data.tipo || '').toLowerCase();
+      const isIncome = tipo === 'income' || tipo === 'receita';
+      
+      const emoji = isIncome ? '✅' : '💸';
+      const titulo = isIncome ? 'NOVA RECEITA REGISTRADA' : 'NOVA DESPESA REGISTRADA';
+      const labelDesc = isIncome ? 'Origem' : 'Descrição';
+      
+      const message = `*${emoji} ${titulo}*\n\n` +
+                      `*${labelDesc}:* ${data.descricao || data.estabelecimento || "Sem descrição"}\n` +
+                      `*Valor:* R$ ${valorFormatado}\n` +
+                      `*Data:* ${dataFormatada}\n\n` +
+                      `_Enviado automaticamente por ProcVisual_`;
+
+      console.log(`>>> [NOTIFICAÇÃO] Enviando WhatsApp para ${telefone}...`);
+      const result = await sendWhatsApp(telefone, message);
+
+      if (!result.success) {
+        console.error(">>> [NOTIFICAÇÃO] Erro ao enviar via Whapi:", result.error);
+        return res.status(500).json({ error: result.error, details: result.details });
+      }
+
+      // 4. Mark as notified in Firestore
+      if (transactionId) {
+        try {
+          await dbAdmin.collection("lancamentos").doc(transactionId).update({ 
+            notificadoImediato: true,
+            whatsappMessageId: result.data?.id
+          });
+        } catch (dbErr) {
+          console.warn(">>> [NOTIFICAÇÃO] Erro ao atualizar status no Firestore (não crítico):", dbErr);
+        }
+      }
+
+      console.log(">>> [NOTIFICAÇÃO] Processo concluído com sucesso.");
+      res.json({ success: true, messageId: result.data?.id });
     } catch (error: any) {
-      console.error(">>> [DIAGNÓSTICO] Erro de rede:", error);
-      res.status(500).json({ success: false, error: error.message });
+      console.error(">>> [NOTIFICAÇÃO] Erro crítico no processo:", error);
+      res.status(500).json({ error: error.message });
     }
+  });
+
+  // API Route for Testing WhatsApp
+  app.post("/api/test-whatsapp", async (req, res) => {
+    const { phone, message } = req.body;
+
+    if (!phone || !message) {
+      return res.status(400).json({ error: "Telefone ou mensagem ausente." });
+    }
+
+    console.log(`>>> [TESTE] Solicitado teste para: ${phone}`);
+    
+    // Check status first
+    const status = await checkWhapiStatus();
+    if (!status.success) {
+      console.error(">>> [TESTE] Instância Whapi não está pronta:", status.error);
+      return res.status(500).json({ 
+        error: "Instância Whapi não está pronta ou token inválido.", 
+        details: status.data || status.error 
+      });
+    }
+
+    const result = await sendWhatsApp(phone, message);
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error, details: result.details });
+    }
+
+    res.json({ success: true });
   });
 
   // API Route for Receipt Processing
@@ -215,50 +465,7 @@ async function startServer() {
   });
 
   // --- WhatsApp Notification System ---
-
-  const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
-  const WHAPI_BASE_URL = "https://gate.whapi.cloud";
-
-  async function sendWhatsApp(to: string, message: string) {
-    if (!WHAPI_TOKEN) {
-      console.error(">>> Erro: WHAPI_TOKEN não configurado nos Segredos (Secrets).");
-      return;
-    }
-
-    // Clean phone number: remove non-digits
-    let cleanNumber = to.replace(/\D/g, "");
-    
-    // Ensure it has country code 55 (Brazil) if it looks like a local number
-    if (cleanNumber.length === 10 || cleanNumber.length === 11) {
-      cleanNumber = "55" + cleanNumber;
-    }
-
-    console.log(`>>> Tentando enviar WhatsApp para: ${cleanNumber}`);
-
-    try {
-      const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHAPI_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          typing_confirm: true,
-          to: `${cleanNumber}@s.whatsapp.net`,
-          body: message,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error(">>> Erro Whapi (API):", JSON.stringify(errorData));
-      } else {
-        console.log(`>>> WhatsApp enviado com sucesso para ${cleanNumber}`);
-      }
-    } catch (error) {
-      console.error(">>> Erro na requisição Whapi (Network):", error);
-    }
-  }
+  // (Function sendWhatsApp moved up to be accessible by routes)
 
   // Cron Job: Every day at 08:00
   cron.schedule("0 8 * * *", async () => {
@@ -303,15 +510,25 @@ async function startServer() {
         }
 
         const diffTime = vencimento.getTime() - today.getTime();
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-        // Fetch user phone number
-        const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
-        const userData = userSnap.data();
-        const telefone = userData?.telefone;
+        console.log(`>>> [JOB] Analisando: ${data.descricao || data.estabelecimento} | Vencimento: ${data.data} | Dias Restantes: ${diffDays}`);
+
+        // Fetch user phone number (Prioritize phone stored in transaction)
+        let telefone = data.telefone;
+        
+        if (!telefone) {
+          try {
+            const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
+            const userData = userSnap.data();
+            telefone = userData?.telefone;
+          } catch (err: any) {
+            console.warn(`>>> [JOB] Erro ao buscar telefone do usuário ${data.userId}: ${err.message}`);
+          }
+        }
 
         if (!telefone) {
-          console.warn(`>>> Usuário ${data.userId} não possui telefone cadastrado.`);
+          console.warn(`>>> [JOB] Usuário ${data.userId} não possui telefone cadastrado.`);
           continue;
         }
 
@@ -320,16 +537,22 @@ async function startServer() {
 
         // Rule: 5 days before
         if (diffDays === 5 && !data.notificado5dias) {
-          const message = `Olá! 👋 Você tem uma despesa próxima do vencimento.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence em ${dataVencimentoFormatada}\nNão esqueça de se programar.`;
-          await sendWhatsApp(telefone, message);
-          await document.ref.update({ notificado5dias: true });
+          const message = `⚠️ *AVISO DE VENCIMENTO*\n\nOlá! 👋 Você tem uma despesa próxima do vencimento:\n\n📄 *Descrição:* ${data.descricao || data.estabelecimento}\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* ${dataVencimentoFormatada}\n\nNão esqueça de se programar para evitar atrasos.`;
+          const result = await sendWhatsApp(telefone, message);
+          if (result.success) {
+            await document.ref.update({ notificado5dias: true });
+            console.log(`>>> [JOB] Notificação de 5 dias enviada para ${telefone}`);
+          }
         }
 
         // Rule: On the due date
         if (diffDays === 0 && !data.notificadoNoDia) {
-          const message = `Atenção! ⚠️ Sua despesa vence hoje.\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vence hoje\nEvite atrasos.`;
-          await sendWhatsApp(telefone, message);
-          await document.ref.update({ notificadoNoDia: true });
+          const message = `🚨 *VENCIMENTO HOJE*\n\nAtenção! ⚠️ Sua despesa vence hoje:\n\n📄 *Descrição:* ${data.descricao || data.estabelecimento}\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* HOJE (${dataVencimentoFormatada})\n\nRealize o pagamento para evitar juros.`;
+          const result = await sendWhatsApp(telefone, message);
+          if (result.success) {
+            await document.ref.update({ notificadoNoDia: true });
+            console.log(`>>> [JOB] Notificação de vencimento hoje enviada para ${telefone}`);
+          }
         }
       }
     } catch (error) {
@@ -338,95 +561,13 @@ async function startServer() {
   });
 
   // --- WhatsApp Notification System (IMMEDIATE TEST MODE) ---
-  // This listener will send a notification as soon as a new expense is registered.
+  // REMOVED: Unreliable Firestore listener. Replaced by direct API call /api/notify-transaction.
   
   if (dbAdmin) {
-    let isInitialSnapshot = true;
-    const serverStartTime = Date.now();
-
-    console.log(">>> [SISTEMA] Configurando Listener de Notificações Imediatas (Admin SDK)...");
-
-    // Diagnostic: Check connection
-    dbAdmin.collection("lancamentos").limit(1).get()
-      .then(snap => {
-        console.log(`>>> [DIAGNÓSTICO] Conexão Firestore: ${snap.empty ? "Vazia (mas conectada)" : "OK (documentos encontrados)"}`);
-      })
-      .catch(err => {
-        console.error(">>> [DIAGNÓSTICO] Erro de conexão Firestore:", err.message);
-      });
-
-    dbAdmin.collection("lancamentos").onSnapshot(async (snapshot) => {
-      // In Admin SDK, the first snapshot contains all existing documents.
-      // We want to ignore documents that were created BEFORE the server started.
-      
-      console.log(`>>> [NOTIFICAÇÃO] Snapshot recebido: ${snapshot.docChanges().length} mudanças detectadas.`);
-
-      for (const change of snapshot.docChanges()) {
-        const docId = change.doc.id;
-        const data = change.doc.data();
-        
-        // We only care about NEW documents (added)
-        if (change.type !== "added") continue;
-
-        // Check if the document is actually new (created after server start)
-        // or if it hasn't been notified yet.
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate().getTime() : 0;
-        
-        // If it's the initial snapshot, we only process documents that are VERY recent (last 10 seconds)
-        // and haven't been notified.
-        if (isInitialSnapshot && createdAt < (serverStartTime - 10000)) {
-          continue;
-        }
-
-        console.log(`>>> [NOTIFICAÇÃO] Processando documento: ${docId} (Tipo: ${data.tipo})`);
-
-        if (data.tipo === "expense" && !data.notificadoImediato) {
-          console.log(`>>> [NOTIFICAÇÃO] Nova despesa qualificada: ${docId}`);
-          
-          if (!data.userId) {
-            console.warn(`>>> [NOTIFICAÇÃO] Erro: Lançamento ${docId} não possui userId.`);
-            continue;
-          }
-
-          try {
-            // Fetch user document directly by ID
-            const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
-            
-            if (!userSnap.exists) {
-              console.warn(`>>> [NOTIFICAÇÃO] Erro: Usuário ${data.userId} não encontrado no Firestore.`);
-              continue;
-            }
-
-            const userData = userSnap.data();
-            const telefone = userData?.telefone;
-
-            if (telefone) {
-              console.log(`>>> [NOTIFICAÇÃO] Enviando para ${userData.nome || data.userId}: ${telefone}`);
-              
-              const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-              const message = `🔔 *NOTIFICAÇÃO DE DESPESA*\n\n📄 ${data.descricao || data.estabelecimento}\n💰 R$ ${valorFormatado}\n📅 Vencimento: ${new Date(data.data).toLocaleDateString("pt-BR")}\n\nLançamento registrado com sucesso no ProcVisual.`;
-              
-              await sendWhatsApp(telefone, message);
-              
-              // Mark as notified
-              await change.doc.ref.update({ notificadoImediato: true });
-              console.log(`>>> [NOTIFICAÇÃO] Sucesso: Documento ${docId} marcado como notificado.`);
-            } else {
-              console.warn(`>>> [NOTIFICAÇÃO] Erro: Usuário ${data.userId} (${userData?.nome}) não possui telefone cadastrado.`);
-            }
-          } catch (err) {
-            console.error(`>>> [NOTIFICAÇÃO] Erro crítico ao processar ${docId}:`, err);
-          }
-        }
-      }
-      
-      if (isInitialSnapshot) {
-        isInitialSnapshot = false;
-        console.log(">>> [SISTEMA] Carga inicial concluída. Monitorando novos lançamentos...");
-      }
-    }, (error: any) => {
-      console.error(">>> [SISTEMA] Erro fatal no Listener de Notificações:", error);
-    });
+    // Heartbeat to keep the server logs active
+    setInterval(() => {
+      console.log(`>>> [HEARTBEAT] Servidor ativo: ${new Date().toLocaleTimeString()}`);
+    }, 60000);
   }
 }
 

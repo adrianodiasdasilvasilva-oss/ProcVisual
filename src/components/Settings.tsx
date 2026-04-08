@@ -32,6 +32,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
   const [isTestingWhatsApp, setIsTestingWhatsApp] = useState(false);
+  const [whapiStatus, setWhapiStatus] = useState<{ success: boolean, data?: any, error?: string } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const [phone, setPhone] = useState('');
@@ -70,6 +71,19 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       unsubscribeUser();
       unsubscribeCategories();
     };
+  }, []);
+
+  useEffect(() => {
+    const fetchWhapiStatus = async () => {
+      try {
+        const response = await fetch('/api/whapi-status');
+        const data = await response.json();
+        setWhapiStatus(data);
+      } catch (err) {
+        console.error('Erro ao buscar status Whapi:', err);
+      }
+    };
+    fetchWhapiStatus();
   }, []);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -316,6 +330,24 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                     <span className="text-xs font-bold uppercase tracking-tighter">Testar</span>
                   </button>
                 </div>
+                
+                {whapiStatus && (
+                  <div className={`mt-2 p-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${
+                    whapiStatus.success ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'
+                  }`}>
+                    <div className={`w-1.5 h-1.5 rounded-full ${whapiStatus.success ? 'bg-proc-green animate-pulse' : 'bg-red-500'}`} />
+                    {whapiStatus.success 
+                      ? `Instância Conectada: ${whapiStatus.data?.user?.id || whapiStatus.data?.health?.status?.text || 'OK'}` 
+                      : `Erro: ${whapiStatus.error}${whapiStatus.details?.message ? ' - ' + whapiStatus.details.message : ''}`}
+                  </div>
+                )}
+
+                {whapiStatus && !whapiStatus.success && (
+                  <div className="mt-2 p-2 bg-black/20 rounded text-[8px] font-mono text-proc-text-sec break-all">
+                    DEBUG: {JSON.stringify(whapiStatus.data || whapiStatus.details)}
+                  </div>
+                )}
+
                 <p className="text-[9px] text-proc-text-sec mt-1 ml-1">
                   * Use o formato com DDD (ex: 11999999999). O sistema enviará notificações de despesas para este número.
                 </p>
