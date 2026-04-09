@@ -16,7 +16,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
-import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare } from 'lucide-react';
+import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -34,12 +34,16 @@ export interface Transaction {
   pago?: boolean;
   notificado5dias?: boolean;
   notificadoNoDia?: boolean;
+  groupId?: string; // To group installments
+  parcela?: number;
+  totalParcelas?: number;
 }
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,9 +53,11 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [filterYear, setFilterYear] = useState('2026');
-  const [filterMonth, setFilterMonth] = useState('Abril');
+  const [filterYears, setFilterYears] = useState<string[]>(['2026']);
+  const [filterMonths, setFilterMonths] = useState<string[]>(['Abril']);
   const [filterCategory, setFilterCategory] = useState('Todas Categorias');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
@@ -117,19 +123,43 @@ export default function App() {
     'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
   };
 
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    // Always include current year and surrounding years as a baseline
+    const currentYear = new Date().getFullYear();
+    years.add((currentYear - 1).toString());
+    years.add(currentYear.toString());
+    years.add((currentYear + 1).toString());
+    
+    // Add years from transactions
+    transactions.forEach(t => {
+      const year = new Date(t.data + 'T12:00:00').getFullYear().toString();
+      years.add(year);
+    });
+    
+    return Array.from(years).sort();
+  }, [transactions]);
+
+  const availableCategories = useMemo(() => {
+    const predefined = ['Todas Categorias', 'Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação'];
+    // Merge with custom categories and remove duplicates
+    const all = Array.from(new Set([...predefined, ...customCategories]));
+    return all;
+  }, [customCategories]);
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
       const tDate = new Date(t.data + 'T12:00:00');
       const tYear = tDate.getFullYear().toString();
       const tMonth = tDate.getMonth();
       
-      const yearMatch = tYear === filterYear;
-      const monthMatch = tMonth === monthMap[filterMonth];
+      const yearMatch = filterYears.length === 0 || filterYears.includes(tYear);
+      const monthMatch = filterMonths.length === 0 || filterMonths.some(m => monthMap[m] === tMonth);
       const categoryMatch = filterCategory === 'Todas Categorias' || t.categoria === filterCategory;
       
       return yearMatch && monthMatch && categoryMatch;
     });
-  }, [transactions, filterYear, filterMonth, filterCategory]);
+  }, [transactions, filterYears, filterMonths, filterCategory]);
 
   const confirmDelete = async () => {
     if (!transactionToDelete) return;
@@ -149,6 +179,20 @@ export default function App() {
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
+
+  const searchedTransactions = useMemo(() => {
+    if (!searchTerm.trim()) return transactions;
+    
+    const normalize = (str: string) => 
+      str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    
+    const term = normalize(searchTerm);
+    
+    return transactions.filter(t => 
+      normalize(t.estabelecimento || '').includes(term) || 
+      normalize(t.descricao || '').includes(term)
+    );
+  }, [transactions, searchTerm]);
 
   const handleSelectAll = () => {
     if (selectedIds.length === transactions.length && transactions.length > 0) {
@@ -202,14 +246,17 @@ export default function App() {
               fotoURL: currentUser.photoURL || ''
             };
             await setDoc(userRef, userData);
+            setProfile(userData);
             console.log('Novo usuário criado no Firestore');
           } else {
+            setProfile(userSnap.data());
             console.log('Usuário já existe no Firestore');
           }
         } catch (error) {
           console.error('Error ensuring user in Firestore:', error);
         }
       } else {
+        setProfile(null);
         setIsLoading(false);
       }
     });
@@ -241,6 +288,24 @@ export default function App() {
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, path);
       setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Real-time Categories Listener
+  useEffect(() => {
+    if (!user) {
+      setCustomCategories([]);
+      return;
+    }
+
+    const categoriesRef = collection(db, 'categorias');
+    const q = query(categoriesRef, where('userId', '==', user.uid));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const cats = snapshot.docs.map(doc => doc.data().nome as string);
+      setCustomCategories(cats);
     });
 
     return () => unsubscribe();
@@ -311,12 +376,14 @@ export default function App() {
             <Filters 
               theme={theme} 
               onToggleTheme={toggleTheme} 
-              year={filterYear}
-              month={filterMonth}
+              years={filterYears}
+              months={filterMonths}
               category={filterCategory}
+              availableYears={availableYears}
+              availableCategories={availableCategories}
               onFilterChange={(f) => {
-                if (f.year) setFilterYear(f.year);
-                if (f.month) setFilterMonth(f.month);
+                if (f.years) setFilterYears(f.years);
+                if (f.months) setFilterMonths(f.months);
                 if (f.category) setFilterCategory(f.category);
               }}
             />
@@ -362,8 +429,8 @@ export default function App() {
                       <div className="md:col-span-8 space-y-6">
                         <MainChart 
                           transactions={filteredTransactions} 
-                          month={filterMonth}
-                          year={filterYear}
+                          month={filterMonths.length === 1 ? filterMonths[0] : filterMonths.length > 1 ? `${filterMonths[0]}...` : 'Todos'}
+                          year={filterYears.length === 1 ? filterYears[0] : filterYears.length > 1 ? `${filterYears[0]}...` : 'Todos'}
                         />
                         
                         {/* Desktop Activity Feed Placeholder or List */}
@@ -441,8 +508,28 @@ export default function App() {
                       </div>
                     </div>
                     
+                    {/* Search Bar */}
+                    <div className="mb-6 relative group">
+                      <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-text-sec group-focus-within:text-proc-cyan transition-colors" />
+                      <input 
+                        type="text"
+                        placeholder="Buscar por estabelecimento ou descrição..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-bg transition-all"
+                      />
+                      {searchTerm && (
+                        <button 
+                          onClick={() => setSearchTerm('')}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-proc-text-sec hover:text-white transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+
                     <div className="space-y-4">
-                      {transactions.map((t) => (
+                      {searchedTransactions.map((t) => (
                         <div 
                           key={t.id} 
                           className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
@@ -510,6 +597,11 @@ export default function App() {
                           </div>
                         </div>
                       ))}
+                      {transactions.length > 0 && searchedTransactions.length === 0 && (
+                        <div className="py-20 text-center">
+                          <p className="text-proc-text-sec">Nenhum lançamento encontrado para "{searchTerm}".</p>
+                        </div>
+                      )}
                       {transactions.length === 0 && (
                         <div className="py-20 text-center">
                           <p className="text-proc-text-sec">Nenhum lançamento encontrado para gerenciar.</p>
@@ -526,7 +618,12 @@ export default function App() {
                   exit={{ opacity: 0, y: -20 }}
                   className="md:col-span-12"
                 >
-                  <AnalysisTab transactions={transactions} />
+                  <AnalysisTab 
+                    transactions={transactions} 
+                    filteredTransactions={filteredTransactions}
+                    selectedYears={filterYears}
+                    selectedMonths={filterMonths}
+                  />
                 </motion.div>
               ) : activeTab === 'relatorios' ? (
                 <motion.div
@@ -537,8 +634,10 @@ export default function App() {
                   className="md:col-span-12"
                 >
                   <ReportsTab 
-                    transactions={transactions} 
-                    userName={user?.displayName || 'Usuário'} 
+                    transactions={filteredTransactions} 
+                    userName={profile?.nome || user?.displayName || 'Usuário'} 
+                    selectedYears={filterYears}
+                    selectedMonths={filterMonths}
                   />
                 </motion.div>
               ) : activeTab === 'configuracoes' ? (

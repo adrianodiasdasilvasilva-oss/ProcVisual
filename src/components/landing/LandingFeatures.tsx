@@ -47,7 +47,7 @@ export default function LandingFeatures() {
             Tudo o que você precisa para <br /> <span className="text-proc-cyan">dominar suas finanças</span>
           </h3>
           <p className="text-proc-text-sec text-lg max-w-2xl mx-auto">
-            O ProcVisual combina tecnologia de ponta com design intuitivo para transformar sua relação com o dinheiro.
+            A ProcVisual combina tecnologia de ponta com design intuitivo para transformar sua relação com o dinheiro.
           </p>
         </div>
 

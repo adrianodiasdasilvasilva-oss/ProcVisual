@@ -1,17 +1,17 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  LineChart, 
-  Line, 
   XAxis, 
   YAxis, 
   CartesianGrid, 
   Tooltip, 
   ResponsiveContainer, 
   Area, 
-  AreaChart,
   ReferenceLine,
-  Dot
+  Legend,
+  Bar,
+  ComposedChart,
+  Line
 } from 'recharts';
 import { 
   ChevronLeft, 
@@ -22,76 +22,92 @@ import {
   Info,
   ArrowUpRight,
   ArrowDownRight,
-  Target
+  Target,
+  BarChart3
 } from 'lucide-react';
 import { Transaction } from '../App';
 
 interface AnalysisTabProps {
   transactions: Transaction[];
+  filteredTransactions: Transaction[];
+  selectedYears: string[];
+  selectedMonths: string[];
 }
 
-type Period = '7d' | '30d' | '3m' | '1y';
-
-export default function AnalysisTab({ transactions }: AnalysisTabProps) {
-  const [period, setPeriod] = useState<Period>('30d');
+export default function AnalysisTab({ transactions, filteredTransactions, selectedYears, selectedMonths }: AnalysisTabProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
 
+  const monthMap: { [key: string]: number } = {
+    'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
+    'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+  };
+
+  // Helper to format date consistently
+  const toDateStr = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // --- Chart Logic ---
   const chartData = useMemo(() => {
-    if (transactions.length === 0) return [];
+    // We'll group by month for the comparative chart
+    const monthlyData: { [key: string]: { month: string, year: number, income: number, expense: number, balance: number, sortKey: number } } = {};
 
-    const now = new Date();
-    let startDate = new Date();
+    const source = filteredTransactions.length > 0 ? filteredTransactions : transactions;
     
-    switch (period) {
-      case '7d': startDate.setDate(now.getDate() - 7); break;
-      case '30d': startDate.setDate(now.getDate() - 30); break;
-      case '3m': startDate.setMonth(now.getMonth() - 3); break;
-      case '1y': startDate.setFullYear(now.getFullYear() - 1); break;
+    source.forEach(t => {
+      try {
+        const d = new Date(t.data + 'T12:00:00');
+        if (isNaN(d.getTime())) return;
+        
+        const year = d.getFullYear();
+        const monthIdx = d.getMonth();
+        const monthName = Object.keys(monthMap).find(key => monthMap[key] === monthIdx) || '';
+        const key = `${year}-${monthIdx}`;
+
+        if (!monthlyData[key]) {
+          monthlyData[key] = {
+            month: monthName,
+            year: year,
+            income: 0,
+            expense: 0,
+            balance: 0,
+            sortKey: year * 100 + monthIdx
+          };
+        }
+
+        if (t.tipo === 'income') monthlyData[key].income += t.valor;
+        else monthlyData[key].expense += t.valor;
+        monthlyData[key].balance = monthlyData[key].income - monthlyData[key].expense;
+      } catch (e) {
+        console.error('Error processing transaction for chart:', t);
+      }
+    });
+
+    // Convert to array and sort by date
+    let result = Object.values(monthlyData).sort((a, b) => a.sortKey - b.sortKey);
+
+    // Filter based on selected years and months if applicable
+    if (selectedYears.length > 0) {
+      result = result.filter(d => selectedYears.includes(String(d.year)));
+    }
+    if (selectedMonths.length > 0) {
+      result = result.filter(d => selectedMonths.includes(d.month));
     }
 
-    startDate.setHours(0, 0, 0, 0);
-
-    // Get all transactions before startDate to calculate initial balance
-    const initialBalance = transactions
-      .filter(t => new Date(t.data) < startDate)
-      .reduce((acc, t) => acc + (t.tipo === 'income' ? t.valor : -t.valor), 0);
-
-    // Group transactions by date within the period
-    const grouped = transactions
-      .filter(t => new Date(t.data) >= startDate && new Date(t.data) <= now)
-      .reduce((acc: any, t) => {
-        const dateStr = t.data;
-        if (!acc[dateStr]) acc[dateStr] = { income: 0, expense: 0 };
-        if (t.tipo === 'income') acc[dateStr].income += t.valor;
-        else acc[dateStr].expense += t.valor;
-        return acc;
-      }, {});
-
-    // Generate all dates in the range
-    const data = [];
-    let currentBalance = initialBalance;
-    const tempDate = new Date(startDate);
-    
-    while (tempDate <= now) {
-      const dateStr = tempDate.toISOString().split('T')[0];
-      const dayData = grouped[dateStr] || { income: 0, expense: 0 };
-      currentBalance += dayData.income - dayData.expense;
-      
-      data.push({
-        date: dateStr,
-        displayDate: tempDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
-        balance: currentBalance,
-        income: dayData.income,
-        expense: dayData.expense
-      });
-      
-      tempDate.setDate(tempDate.getDate() + 1);
+    // If no filters and too much data, maybe limit to last 12 months
+    if (selectedYears.length === 0 && selectedMonths.length === 0 && result.length > 12) {
+      result = result.slice(-12);
     }
 
-    return data;
-  }, [transactions, period]);
+    return result.map(d => ({
+      ...d,
+      displayDate: `${d.month.substring(0, 3)}/${String(d.year).substring(2)}`
+    }));
+  }, [transactions, filteredTransactions, selectedYears, selectedMonths]);
 
   // --- Calendar Logic ---
   const calendarDays = useMemo(() => {
@@ -166,24 +182,24 @@ export default function AnalysisTab({ transactions }: AnalysisTabProps) {
       const data = payload[0].payload;
       return (
         <div className="bg-proc-secondary/90 backdrop-blur-md border border-white/10 p-4 rounded-2xl shadow-2xl">
-          <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-2">{new Date(data.date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-          <div className="space-y-1">
+          <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-2">
+            {data.month} de {data.year}
+          </p>
+          <div className="space-y-2">
             <div className="flex justify-between gap-8">
-              <span className="text-xs text-proc-text-sec">Saldo:</span>
+              <span className="text-xs text-proc-text-sec">Resultado:</span>
               <span className={`text-xs font-bold ${data.balance < 0 ? 'text-red-500' : 'text-proc-cyan'}`}>{formatCurrency(data.balance)}</span>
             </div>
-            {data.income > 0 && (
+            <div className="border-t border-white/5 pt-2 space-y-1">
               <div className="flex justify-between gap-8">
-                <span className="text-xs text-proc-text-sec">Receitas:</span>
+                <span className="text-xs text-proc-green">Total Receitas:</span>
                 <span className="text-xs font-bold text-proc-green">+{formatCurrency(data.income)}</span>
               </div>
-            )}
-            {data.expense > 0 && (
               <div className="flex justify-between gap-8">
-                <span className="text-xs text-proc-text-sec">Despesas:</span>
+                <span className="text-xs text-red-500">Total Despesas:</span>
                 <span className="text-xs font-bold text-red-500">-{formatCurrency(data.expense)}</span>
               </div>
-            )}
+            </div>
           </div>
         </div>
       );
@@ -225,7 +241,7 @@ export default function AnalysisTab({ transactions }: AnalysisTabProps) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Component 1: Balance Evolution Chart */}
+        {/* Component 1: Daily Cash Flow Chart */}
         <motion.section 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -234,92 +250,82 @@ export default function AnalysisTab({ transactions }: AnalysisTabProps) {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-                <TrendingUp size={24} />
+                <BarChart3 size={24} />
               </div>
               <div>
-                <h3 className="text-xl font-bold text-proc-text-main">Evolução do Saldo</h3>
-                <p className="text-xs text-proc-text-sec">Acompanhe o crescimento do seu patrimônio</p>
+                <h3 className="text-xl font-bold text-proc-text-main">Receita vs Despesa</h3>
+                <p className="text-xs text-proc-text-sec">Comparativo mensal de entradas e saídas</p>
               </div>
-            </div>
-
-            <div className="flex bg-proc-bg/50 p-1 rounded-2xl border border-white/5">
-              {(['7d', '30d', '3m', '1y'] as Period[]).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPeriod(p)}
-                  className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest transition-all ${
-                    period === p 
-                      ? 'bg-proc-cyan text-proc-bg shadow-lg shadow-proc-cyan/20' 
-                      : 'text-proc-text-sec hover:text-proc-text-main'
-                  }`}
-                >
-                  {p === '7d' ? '7 Dias' : p === '30d' ? '30 Dias' : p === '3m' ? '3 Meses' : '1 Ano'}
-                </button>
-              ))}
             </div>
           </div>
 
-          <div className="h-[350px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00D1FF" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#00D1FF" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                <XAxis 
-                  dataKey="displayDate" 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                  minTickGap={30}
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                  tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
-                />
-                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(0, 209, 255, 0.2)', strokeWidth: 2 }} />
-                <Area 
-                  type="monotone" 
-                  dataKey="balance" 
-                  stroke="#00D1FF" 
-                  strokeWidth={3}
-                  fillOpacity={1} 
-                  fill="url(#colorBalance)" 
-                  animationDuration={1500}
-                />
-                {/* Mark points with income/expense */}
-                {chartData.map((entry, index) => {
-                  if (entry.income > 0 || entry.expense > 0) {
-                    return (
-                      <ReferenceLine 
-                        key={index}
-                        x={entry.displayDate} 
-                        stroke="transparent"
-                        label={(props) => {
-                          const { viewBox } = props;
-                          return (
-                            <g>
-                              {entry.income > 0 && (
-                                <circle cx={viewBox.x} cy={viewBox.y - 10} r="3" fill="#00E676" />
-                              )}
-                              {entry.expense > 0 && (
-                                <circle cx={viewBox.x} cy={viewBox.y + 10} r="3" fill="#F87171" />
-                              )}
-                            </g>
-                          );
-                        }}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="h-[350px] w-full relative">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis 
+                    dataKey="displayDate" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                    minTickGap={30}
+                  />
+                  <YAxis 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                    tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
+                  <Legend 
+                    verticalAlign="top" 
+                    align="right" 
+                    iconType="circle"
+                    content={(props) => {
+                      const { payload } = props;
+                      return (
+                        <div className="flex justify-end gap-6 mb-4">
+                          {payload?.map((entry: any, index: number) => (
+                            <div key={`item-${index}`} className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar 
+                    dataKey="income" 
+                    name="Receitas" 
+                    fill="#00E676" 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={20}
+                  />
+                  <Bar 
+                    dataKey="expense" 
+                    name="Despesas" 
+                    fill="#F87171" 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={20}
+                  />
+                  <Bar
+                    dataKey="balance"
+                    name="Saldo Líquido"
+                    fill="#00D1FF"
+                    radius={[4, 4, 0, 0]}
+                    barSize={20}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
+                <Info className="text-proc-text-sec mb-2" size={32} />
+                <p className="text-proc-text-sec text-sm font-medium">Sem dados para o período selecionado</p>
+                <p className="text-proc-text-sec/50 text-xs mt-1">Tente ajustar os filtros de data no topo da página</p>
+              </div>
+            )}
           </div>
         </motion.section>
 

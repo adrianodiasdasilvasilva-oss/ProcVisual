@@ -33,7 +33,7 @@ export default function LandingHowItWorks() {
         <div className="text-center mb-24">
           <h2 className="text-[10px] font-bold text-proc-green uppercase tracking-[0.3em] mb-4">Processo</h2>
           <h3 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">
-            Como o <span className="text-proc-green">ProcVisual</span> funciona
+            Como a <span className="text-proc-green">ProcVisual</span> funciona
           </h3>
           <p className="text-proc-text-sec text-lg max-w-2xl mx-auto">
             Três passos simples para transformar sua gestão financeira pessoal.

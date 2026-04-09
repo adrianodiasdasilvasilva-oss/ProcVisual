@@ -21,7 +21,7 @@ export default function InteractiveBalloon({ userData, transactionsCount }: Inte
   const messages: Message[] = [
     {
       id: 'welcome',
-      text: transactionsCount === 0 ? 'Seja bem Vindo ao ProcVisual!' : 'Bem vindo de volta!',
+      text: transactionsCount === 0 ? 'Seja bem-vindo à ProcVisual!' : 'Bem-vindo de volta!',
       icon: <Sparkles className="text-proc-cyan" size={18} />,
     },
     {

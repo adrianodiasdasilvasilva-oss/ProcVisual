@@ -2,7 +2,7 @@
   "entities": {
     "usuario": {
       "title": "Usuário",
-      "description": "Perfil do usuário do sistema ProcVisual",
+      "description": "Perfil do usuário da ProcVisual",
       "type": "object",
       "properties": {
         "nome": {

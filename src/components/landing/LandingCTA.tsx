@@ -31,7 +31,7 @@ export default function LandingCTA({ onStart }: LandingCTAProps) {
             </h2>
             
             <p className="text-lg md:text-xl text-proc-text-sec mb-12 leading-relaxed">
-              Junte-se a milhares de pessoas que já transformaram sua gestão financeira com o ProcVisual. Sem cartões, sem compromisso.
+              Junte-se a milhares de pessoas que já transformaram sua gestão financeira com a ProcVisual. Sem cartões, sem compromisso.
             </p>
 
             <button 

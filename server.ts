@@ -308,7 +308,7 @@ async function startServer() {
                       `*${labelDesc}:* ${data.descricao || data.estabelecimento || "Sem descrição"}\n` +
                       `*Valor:* R$ ${valorFormatado}\n` +
                       `*Data:* ${dataFormatada}\n\n` +
-                      `_Enviado automaticamente por ProcVisual_`;
+                      `_Enviado automaticamente pela ProcVisual_`;
 
       console.log(`>>> [NOTIFICAÇÃO] Enviando WhatsApp para ${telefone}...`);
       const result = await sendWhatsApp(telefone, message);

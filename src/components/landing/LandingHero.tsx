@@ -32,7 +32,7 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
           </h1>
           
           <p className="text-lg md:text-xl text-proc-text-sec leading-relaxed mb-10 max-w-xl">
-            Registre despesas, envie comprovantes e acompanhe sua saúde financeira automaticamente com a tecnologia OCR e IA do ProcVisual.
+            Registre despesas, envie comprovantes e acompanhe sua saúde financeira automaticamente com a tecnologia OCR e IA da ProcVisual.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">

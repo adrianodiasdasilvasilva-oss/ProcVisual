@@ -17,90 +17,66 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { Transaction } from '../App';
-import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
-
-// Extend jsPDF with autotable
-declare module 'jspdf' {
-  interface jsPDF {
-    autoTable: (options: any) => jsPDF;
-  }
-}
+import { useEffect } from 'react';
 
 interface ReportsTabProps {
   transactions: Transaction[];
   userName: string;
+  selectedYears: string[];
+  selectedMonths: string[];
 }
 
-type Period = 'this_month' | 'last_month' | 'last_3_months' | 'custom';
 type ReportType = 'complete' | 'income' | 'expense';
 type SummaryType = 'short' | 'detailed' | 'numbers' | 'suggestions';
 
-export default function ReportsTab({ transactions, userName }: ReportsTabProps) {
-  const [period, setPeriod] = useState<Period>('this_month');
+export default function ReportsTab({ transactions, userName, selectedYears, selectedMonths }: ReportsTabProps) {
   const [reportType, setReportType] = useState<ReportType>('complete');
   const [summaryType, setSummaryType] = useState<SummaryType>('detailed');
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState('');
   const [includeSummaryInWA, setIncludeSummaryInWA] = useState(true);
+  const [logoBase64, setLogoBase64] = useState<string | null>(null);
 
-  // Get unique categories from transactions
-  const categories = useMemo(() => {
-    const cats = new Set(transactions.map(t => t.categoria));
-    return Array.from(cats).sort();
-  }, [transactions]);
+  useEffect(() => {
+    const getBase64ImageFromURL = (url: string): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.setAttribute('crossOrigin', 'anonymous');
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0);
+          const dataURL = canvas.toDataURL('image/png');
+          resolve(dataURL);
+        };
+        img.onerror = error => reject(error);
+        img.src = url;
+      });
+    };
 
-  // Filter transactions based on selection
+    const loadLogo = async () => {
+      try {
+        const base64 = await getBase64ImageFromURL('https://i.imgur.com/mPPZOMY.png');
+        setLogoBase64(base64);
+      } catch (error) {
+        console.error('Error loading logo for PDF:', error);
+      }
+    };
+    loadLogo();
+  }, []);
+
+  // Filter transactions based on report type (income/expense/complete)
   const filteredTransactions = useMemo(() => {
-    const now = new Date();
-    let startDate = new Date();
-    let endDate = new Date();
-
-    switch (period) {
-      case 'this_month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'last_month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-        break;
-      case 'last_3_months':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-        break;
-    }
-
     return transactions.filter(t => {
-      const tDate = new Date(t.data);
-      const inPeriod = tDate >= startDate && tDate <= endDate;
       const inType = reportType === 'complete' || t.tipo === reportType;
-      const inCategory = selectedCategories.length === 0 || selectedCategories.includes(t.categoria);
-      return inPeriod && inType && inCategory;
+      return inType;
     });
-  }, [transactions, period, reportType, selectedCategories]);
-
-  // Previous period for comparison
-  const prevPeriodTransactions = useMemo(() => {
-    const now = new Date();
-    let startDate = new Date();
-    let endDate = new Date();
-
-    if (period === 'this_month') {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-    } else if (period === 'last_month') {
-      startDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-      endDate = new Date(now.getFullYear(), now.getMonth() - 1, 0);
-    } else {
-      return []; // Skip for other periods for simplicity
-    }
-
-    return transactions.filter(t => {
-      const tDate = new Date(t.data);
-      return tDate >= startDate && tDate <= endDate;
-    });
-  }, [transactions, period]);
+  }, [transactions, reportType]);
 
   // Calculate Summary Data
   const summaryData = useMemo(() => {
@@ -126,12 +102,6 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
 
     const topDay = Object.entries(dayStats).sort((a: any, b: any) => b[1] - a[1])[0] || ['', 0];
 
-    // Comparison
-    const prevIncome = prevPeriodTransactions.filter(t => t.tipo === 'income').reduce((acc, t) => acc + t.valor, 0);
-    const prevExpense = prevPeriodTransactions.filter(t => t.tipo === 'expense').reduce((acc, t) => acc + t.valor, 0);
-    
-    const expenseDiff = prevExpense > 0 ? ((totalExpense - prevExpense) / prevExpense) * 100 : 0;
-
     return {
       totalIncome,
       totalExpense,
@@ -139,17 +109,40 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
       topCategory: topCategory[0],
       topCategoryValue: topCategory[1],
       topDay: topDay[0],
-      topDayValue: topDay[1],
-      expenseDiff
+      topDayValue: topDay[1]
     };
-  }, [filteredTransactions, prevPeriodTransactions]);
+  }, [filteredTransactions]);
+
+  const getFormattedPeriod = () => {
+    const monthNames = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ'];
+    const monthMap: { [key: string]: number } = {
+      'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
+      'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+    };
+
+    if (selectedMonths.length === 0 || selectedMonths.length === 12) {
+      if (selectedYears.length === 1) return `ANO_${selectedYears[0]}`;
+      return `VARIOS_ANOS`;
+    }
+
+    const sortedMonths = [...selectedMonths].sort((a, b) => monthMap[a] - monthMap[b]);
+    const monthLabels = sortedMonths.map(m => monthNames[monthMap[m]]);
+    
+    let periodStr = monthLabels.join('_');
+    if (selectedYears.length === 1) {
+      periodStr += `_${selectedYears[0].slice(-2)}`;
+    } else if (selectedYears.length > 1) {
+      periodStr += `_MULT_ANOS`;
+    }
+    
+    return periodStr;
+  };
 
   const generateSummaryText = () => {
-    const { totalIncome, totalExpense, balance, topCategory, topDay, expenseDiff } = summaryData;
-    const periodLabel = period === 'this_month' ? 'Este Mês' : period === 'last_month' ? 'Mês Anterior' : 'Últimos 3 Meses';
+    const { totalIncome, totalExpense, balance, topCategory, topDay } = summaryData;
     
     let text = `*Resumo financeiro - ProcVisual*\n\n`;
-    text += `Período: ${periodLabel}\n\n`;
+    text += `Período: ${getFormattedPeriod()}\n\n`;
     text += `Receitas: R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `Despesas: R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
     text += `Saldo: R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
@@ -160,17 +153,11 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
         text += `Dia mais caro: ${new Date(topDay + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n`;
       }
 
-      if (summaryType === 'detailed' || summaryType === 'suggestions') {
-        if (expenseDiff !== 0) {
-          text += `Você gastou ${Math.abs(expenseDiff).toFixed(1)}% ${expenseDiff > 0 ? 'a mais' : 'a menos'} que o mês anterior.\n`;
-        }
-        
-        if (summaryType === 'suggestions') {
-          if (topCategory !== 'Nenhuma') {
-            text += `Sugestão: Analise seus gastos em "${topCategory}" para identificar possíveis economias.`;
-          } else {
-            text += `Sugestão: Continue mantendo o controle rigoroso dos seus lançamentos.`;
-          }
+      if (summaryType === 'suggestions') {
+        if (topCategory !== 'Nenhuma') {
+          text += `Sugestão: Analise seus gastos em "${topCategory}" para identificar possíveis economias.`;
+        } else {
+          text += `Sugestão: Continue mantendo o controle rigoroso dos seus lançamentos.`;
         }
       }
     }
@@ -190,19 +177,27 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
       doc.setFillColor(0, 209, 255); // Proc Cyan
       doc.rect(0, 0, pageWidth, 40, 'F');
       
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(24);
-      doc.text('ProcVisual', 20, 25);
+      if (logoBase64) {
+        // Add Logo
+        doc.addImage(logoBase64, 'PNG', 20, 10, 20, 20);
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.text('ProcVisual', 45, 25);
+      } else {
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.text('ProcVisual', 20, 25);
+      }
       
       doc.setFontSize(10);
-      doc.text('Relatório Financeiro Pessoal', 20, 32);
+      doc.text('Relatório Financeiro Pessoal', logoBase64 ? 45 : 20, 32);
       
       // User Info
       doc.setTextColor(60, 60, 60);
       doc.setFontSize(12);
       doc.text(`Usuário: ${userName}`, 20, 55);
       doc.text(`Data de Emissão: ${new Date().toLocaleDateString('pt-BR')}`, 20, 62);
-      doc.text(`Período: ${period}`, 20, 69);
+      doc.text(`Período: ${getFormattedPeriod()}`, 20, 69);
       
       // Summary Box
       doc.setDrawColor(230, 230, 230);
@@ -228,7 +223,7 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
         `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
       ]);
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: 135,
         head: [['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor']],
         body: tableData,
@@ -242,10 +237,10 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(150, 150, 150);
-        doc.text('Gerado pelo ProcVisual - Inteligência Financeira', pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
+        doc.text('Gerado pela ProcVisual - Inteligência Financeira', pageWidth / 2, doc.internal.pageSize.getHeight() - 10, { align: 'center' });
       }
 
-      doc.save(`Relatorio_Financeiro_ProcVisual_${new Date().getMonth() + 1}_${new Date().getFullYear()}.pdf`);
+      doc.save(`Relatorio_Financeiro_da_ProcVisual_${getFormattedPeriod()}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
     } finally {
@@ -261,35 +256,49 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
     try {
       const wb = XLSX.utils.book_new();
       
-      // Summary Sheet
-      const summarySheetData = [
-        ['Resumo Financeiro ProcVisual'],
-        ['Período', period],
-        ['Usuário', userName],
+      // Prepare data in a structure similar to the PDF
+      const reportData = [
+        ['PROC-VISUAL - RELATÓRIO FINANCEIRO PESSOAL'],
         [''],
-        ['Total Receitas', summaryData.totalIncome],
-        ['Total Despesas', summaryData.totalExpense],
-        ['Saldo Final', summaryData.balance],
+        ['INFORMAÇÕES DO RELATÓRIO'],
+        ['Usuário:', userName],
+        ['Data de Emissão:', new Date().toLocaleDateString('pt-BR')],
+        ['Período:', getFormattedPeriod()],
         [''],
-        ['Maior Gasto', summaryData.topCategory],
-        ['Dia mais caro', summaryData.topDay]
+        ['RESUMO DO PERÍODO'],
+        ['Receitas:', summaryData.totalIncome],
+        ['Despesas:', summaryData.totalExpense],
+        ['Saldo Final:', summaryData.balance],
+        [''],
+        ['DETALHAMENTO DE LANÇAMENTOS'],
+        ['Data', 'Descrição', 'Categoria', 'Tipo', 'Valor', 'Status'],
+        ...filteredTransactions.map(t => [
+          new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR'),
+          t.descricao || t.estabelecimento || 'Sem descrição',
+          t.categoria,
+          t.tipo === 'income' ? 'Receita' : 'Despesa',
+          t.valor,
+          t.pago ? 'Pago' : 'Pendente'
+        ]),
+        [''],
+        ['Gerado pela ProcVisual - Inteligência Financeira']
       ];
-      const wsSummary = XLSX.utils.aoa_to_sheet(summarySheetData);
-      XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumo');
 
-      // Transactions Sheet
-      const transData = filteredTransactions.map(t => ({
-        Data: t.data,
-        Descrição: t.descricao || t.estabelecimento,
-        Categoria: t.categoria,
-        Tipo: t.tipo === 'income' ? 'Receita' : 'Despesa',
-        Valor: t.valor,
-        Status: t.pago ? 'Pago' : 'Pendente'
-      }));
-      const wsTrans = XLSX.utils.json_to_sheet(transData);
-      XLSX.utils.book_append_sheet(wb, wsTrans, 'Transações');
+      const ws = XLSX.utils.aoa_to_sheet(reportData);
+      
+      // Set column widths for better readability
+      ws['!cols'] = [
+        { wch: 15 }, // Data / Labels
+        { wch: 45 }, // Descrição / Values
+        { wch: 20 }, // Categoria
+        { wch: 12 }, // Tipo
+        { wch: 15 }, // Valor
+        { wch: 12 }  // Status
+      ];
 
-      XLSX.writeFile(wb, `Relatorio_ProcVisual_${new Date().getMonth() + 1}_${new Date().getFullYear()}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, 'Relatório Financeiro');
+
+      XLSX.writeFile(wb, `Relatorio_da_ProcVisual_${getFormattedPeriod()}.xlsx`);
     } catch (error) {
       console.error('Error generating Excel:', error);
     } finally {
@@ -301,15 +310,9 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
   const handleShareWhatsApp = () => {
     const summary = generateSummaryText();
     const message = encodeURIComponent(
-      `Segue meu resumo financeiro:\n\n${summary}\n\nGerado pelo ProcVisual`
+      `Segue meu resumo financeiro:\n\n${summary}\n\nGerado pela ProcVisual`
     );
     window.open(`https://wa.me/?text=${message}`, '_blank');
-  };
-
-  const toggleCategory = (cat: string) => {
-    setSelectedCategories(prev => 
-      prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat]
-    );
   };
 
   return (
@@ -337,27 +340,8 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 gap-8">
             <div className="space-y-6">
-              <div>
-                <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-3 block">Período</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(['this_month', 'last_month', 'last_3_months', 'custom'] as Period[]).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setPeriod(p)}
-                      className={`px-4 py-3 rounded-2xl text-xs font-bold transition-all border ${
-                        period === p 
-                          ? 'bg-proc-cyan/10 border-proc-cyan text-proc-cyan' 
-                          : 'bg-proc-bg/50 border-white/5 text-proc-text-sec hover:border-white/20'
-                      }`}
-                    >
-                      {p === 'this_month' ? 'Este Mês' : p === 'last_month' ? 'Mês Anterior' : p === 'last_3_months' ? '3 Meses' : 'Personalizado'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <div>
                 <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-3 block">Tipo de Lançamento</label>
                 <div className="flex bg-proc-bg/50 p-1 rounded-2xl border border-white/5">
@@ -376,31 +360,9 @@ export default function ReportsTab({ transactions, userName }: ReportsTabProps) 
                   ))}
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-3 block">Categorias</label>
-              <div className="bg-proc-bg/50 border border-white/5 rounded-2xl p-4 max-h-[200px] overflow-y-auto custom-scrollbar">
-                <div className="flex flex-wrap gap-2">
-                  {categories.map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => toggleCategory(cat)}
-                      className={`px-3 py-1.5 rounded-full text-[10px] font-bold transition-all border ${
-                        selectedCategories.includes(cat)
-                          ? 'bg-proc-cyan/20 border-proc-cyan text-proc-cyan'
-                          : 'bg-white/5 border-white/10 text-proc-text-sec hover:bg-white/10'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                  {categories.length === 0 && (
-                    <p className="text-xs text-proc-text-sec italic">Nenhuma categoria encontrada.</p>
-                  )}
-                </div>
-              </div>
-              <p className="text-[10px] text-proc-text-sec mt-3 italic">Se nenhuma for selecionada, todas serão incluídas.</p>
+              <p className="text-[10px] text-proc-text-sec mt-3 italic">
+                O relatório será gerado com base nos filtros principais (Ano e Mês) selecionados no topo da página.
+              </p>
             </div>
           </div>
         </motion.section>

@@ -437,7 +437,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     try {
       const cleanValue = formData.value.replace(',', '.');
       const finalCategory = isCustomCategory ? customCategory : formData.category;
-      const numInstallments = formData.type === 'expense' ? Math.max(1, Number(formData.installments) || 1) : 1;
+      const numInstallments = Math.max(1, Number(formData.installments) || 1);
       
       // If it's a custom category, save it to the 'categorias' collection if it doesn't exist
       if (isCustomCategory && customCategory) {
@@ -473,11 +473,48 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       if (transactionToEdit) {
         console.log('Atualizando lançamento no Firestore:', transactionToEdit.id, payload);
         await updateDoc(doc(db, path, transactionToEdit.id), payload);
+
+        // If it belongs to a group (installments), update other installments in the group
+        if (transactionToEdit.groupId) {
+          console.log('Atualizando outras parcelas do grupo:', transactionToEdit.groupId);
+          const q = query(
+            collection(db, path), 
+            where('groupId', '==', transactionToEdit.groupId),
+            where('userId', '==', auth.currentUser.uid)
+          );
+          const snapshot = await getDocs(q);
+          
+          const updatePromises = snapshot.docs
+            .filter(doc => doc.id !== transactionToEdit.id)
+            .map(d => {
+              // For other installments, we update category, establishment, value, and base description
+              // But we keep their specific dates and installment numbers
+              const docData = d.data();
+              const installmentPayload: any = {
+                valor: payload.valor,
+                categoria: payload.categoria,
+                estabelecimento: payload.estabelecimento,
+                updatedAt: serverTimestamp()
+              };
+
+              // Update description while preserving installment info if it exists
+              if (docData.parcela && docData.totalParcelas) {
+                installmentPayload.descricao = `${formData.description || formData.establishment || 'Sem descrição'} (${docData.parcela}/${docData.totalParcelas})`;
+              } else {
+                installmentPayload.descricao = payload.descricao;
+              }
+
+              return updateDoc(doc(db, path, d.id), installmentPayload);
+            });
+          
+          await Promise.all(updatePromises);
+        }
       } else {
         payload.createdAt = serverTimestamp();
         
         if (numInstallments > 1) {
-          console.log(`Criando ${numInstallments} parcelas...`);
+          const groupId = `group_${Date.now()}_${auth.currentUser.uid}`;
+          console.log(`Criando ${numInstallments} parcelas com groupId: ${groupId}`);
           const baseDate = new Date(formData.date + 'T12:00:00');
           const batchPromises = [];
           
@@ -488,9 +525,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
             const installmentPayload = {
               ...payload,
               data: installmentDate.toISOString().split('T')[0],
-              descricao: `${payload.descricao} (${i + 1}/${numInstallments})`,
+              descricao: `${formData.description || formData.establishment || 'Sem descrição'} (${i + 1}/${numInstallments})`,
               parcela: i + 1,
-              totalParcelas: numInstallments
+              totalParcelas: numInstallments,
+              groupId: groupId
             };
             
             batchPromises.push(addDoc(collection(db, path), installmentPayload));
@@ -711,10 +749,11 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                     </div>
                   </div>
 
-                  {formData.type === 'expense' && !transactionToEdit && (
+                  {!transactionToEdit && (
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
-                        <ArrowLeft size={10} className="rotate-180" /> Repetir em quantas parcelas?
+                        <ArrowLeft size={10} className="rotate-180" /> 
+                        {formData.type === 'expense' ? 'Repetir em quantas parcelas?' : 'Repetir em quantos meses?'}
                       </label>
                       <div className="relative">
                         <input 
