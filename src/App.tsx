@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import Filters from './components/Filters';
 import ActionButtons from './components/ActionButtons';
@@ -9,6 +9,8 @@ import BottomNav from './components/BottomNav';
 import Sidebar from './components/Sidebar';
 import NewTransactionModal from './components/NewTransactionModal';
 import Settings from './components/Settings';
+import AnalysisTab from './components/AnalysisTab';
+import ReportsTab from './components/ReportsTab';
 import InteractiveBalloon from './components/InteractiveBalloon';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
@@ -47,6 +49,9 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [filterYear, setFilterYear] = useState('2026');
+  const [filterMonth, setFilterMonth] = useState('Abril');
+  const [filterCategory, setFilterCategory] = useState('Todas Categorias');
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('theme') as 'dark' | 'light') || 'dark';
@@ -106,6 +111,25 @@ export default function App() {
       handleFirestoreError(error, OperationType.UPDATE, path);
     }
   };
+
+  const monthMap: { [key: string]: number } = {
+    'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
+    'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+  };
+
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter(t => {
+      const tDate = new Date(t.data + 'T12:00:00');
+      const tYear = tDate.getFullYear().toString();
+      const tMonth = tDate.getMonth();
+      
+      const yearMatch = tYear === filterYear;
+      const monthMatch = tMonth === monthMap[filterMonth];
+      const categoryMatch = filterCategory === 'Todas Categorias' || t.categoria === filterCategory;
+      
+      return yearMatch && monthMatch && categoryMatch;
+    });
+  }, [transactions, filterYear, filterMonth, filterCategory]);
 
   const confirmDelete = async () => {
     if (!transactionToDelete) return;
@@ -260,11 +284,11 @@ export default function App() {
     return <LandingPage onLogin={() => setShowLogin(true)} />;
   }
 
-  const totalIncome = transactions
+  const totalIncome = filteredTransactions
     .filter(t => t.tipo === 'income')
     .reduce((acc, curr) => acc + curr.valor, 0);
     
-  const totalExpense = transactions
+  const totalExpense = filteredTransactions
     .filter(t => t.tipo === 'expense')
     .reduce((acc, curr) => acc + curr.valor, 0);
 
@@ -284,7 +308,18 @@ export default function App() {
         
         <main className="w-full max-w-7xl mx-auto px-4 md:px-8 py-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-            <Filters theme={theme} onToggleTheme={toggleTheme} />
+            <Filters 
+              theme={theme} 
+              onToggleTheme={toggleTheme} 
+              year={filterYear}
+              month={filterMonth}
+              category={filterCategory}
+              onFilterChange={(f) => {
+                if (f.year) setFilterYear(f.year);
+                if (f.month) setFilterMonth(f.month);
+                if (f.category) setFilterCategory(f.category);
+              }}
+            />
             <div className="hidden md:block">
               <ActionButtons 
                 onNewTransaction={() => setIsModalOpen(true)} 
@@ -325,13 +360,17 @@ export default function App() {
 
                       {/* Right Column - Chart & Activity */}
                       <div className="md:col-span-8 space-y-6">
-                        <MainChart transactions={transactions} />
+                        <MainChart 
+                          transactions={filteredTransactions} 
+                          month={filterMonth}
+                          year={filterYear}
+                        />
                         
                         {/* Desktop Activity Feed Placeholder or List */}
                         <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
-                          <h3 className="text-proc-text-main font-bold text-lg mb-4">Atividade Recente</h3>
-                          <div className="space-y-4">
-                            {transactions.slice(0, 5).map((t) => (
+                          <h3 className="text-proc-text-main font-bold text-lg mb-4">Lançamentos do mês</h3>
+                          <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                            {filteredTransactions.map((t) => (
                               <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
                                 <div className="flex items-center gap-4">
                                   <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
@@ -339,7 +378,7 @@ export default function App() {
                                   </div>
                                   <div>
                                     <p className="text-proc-text-main font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                                    <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
+                                    <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -349,7 +388,7 @@ export default function App() {
                                 </div>
                               </div>
                             ))}
-                            {transactions.length === 0 && (
+                            {filteredTransactions.length === 0 && (
                               <p className="text-proc-text-sec text-center py-8">Nenhum lançamento encontrado.</p>
                             )}
                           </div>
@@ -478,6 +517,29 @@ export default function App() {
                       )}
                     </div>
                   </div>
+                </motion.div>
+              ) : activeTab === 'analise' ? (
+                <motion.div
+                  key="analise"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="md:col-span-12"
+                >
+                  <AnalysisTab transactions={transactions} />
+                </motion.div>
+              ) : activeTab === 'relatorios' ? (
+                <motion.div
+                  key="relatorios"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="md:col-span-12"
+                >
+                  <ReportsTab 
+                    transactions={transactions} 
+                    userName={user?.displayName || 'Usuário'} 
+                  />
                 </motion.div>
               ) : activeTab === 'configuracoes' ? (
                 <motion.div

@@ -3,9 +3,11 @@ import { Transaction } from '../App';
 
 interface MainChartProps {
   transactions: Transaction[];
+  month: string;
+  year: string;
 }
 
-export default function MainChart({ transactions }: MainChartProps) {
+export default function MainChart({ transactions, month, year }: MainChartProps) {
   // Group expenses by category
   const expensesByCategory = transactions
     .filter(t => t.tipo === 'expense')
@@ -37,7 +39,7 @@ export default function MainChart({ transactions }: MainChartProps) {
     <div className="p-6 rounded-[2rem] border border-white/10 mb-6 bg-proc-secondary/10">
       <div className="flex justify-between items-end mb-6">
         <h3 className="text-sm font-semibold text-proc-text-sec uppercase tracking-widest">Despesas por Categoria</h3>
-        <span className="text-xs font-bold text-proc-cyan">Abril 2026</span>
+        <span className="text-xs font-bold text-proc-cyan">{month} {year}</span>
       </div>
       
       <div className="h-64 w-full">

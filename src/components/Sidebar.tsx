@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, PieChart, Wallet, Settings, LogOut, Download } from 'lucide-react';
+import { LayoutDashboard, PieChart, Wallet, Settings, LogOut, Download, BarChart2 } from 'lucide-react';
 import { auth } from '../firebase';
 import Logo from './Logo';
 
@@ -13,7 +13,8 @@ export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarPr
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: Wallet },
-    { id: 'relatorios', label: 'Relatórios', icon: PieChart },
+    { id: 'analise', label: 'Análise', icon: PieChart },
+    { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
     { id: 'configuracoes', label: 'Configurações', icon: Settings },
   ];
 

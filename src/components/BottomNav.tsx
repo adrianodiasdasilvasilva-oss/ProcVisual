@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon, Download, ChevronUp, ChevronDown } from 'lucide-react';
+import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon, Download, ChevronUp, ChevronDown, PieChart } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BottomNavProps {
@@ -14,7 +14,8 @@ export default function BottomNav({ activeTab, onTabChange, onInstall }: BottomN
   const tabs = [
     { id: 'dashboard', label: 'Home', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
-    { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+    { id: 'analise', label: 'Análise', icon: BarChart2 },
+    { id: 'relatorios', label: 'Relatórios', icon: PieChart },
     { id: 'configuracoes', label: 'Configurações', icon: SettingsIcon },
   ];
 

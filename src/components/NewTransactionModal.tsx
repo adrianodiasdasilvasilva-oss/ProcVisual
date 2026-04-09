@@ -62,7 +62,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     category: 'Outros',
     date: new Date().toISOString().split('T')[0],
     description: '',
-    establishment: ''
+    establishment: '',
+    installments: 1
   });
 
   const [userPhone, setUserPhone] = useState<string | null>(null);
@@ -129,7 +130,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       category: 'Outros',
       date: new Date().toISOString().split('T')[0],
       description: '',
-      establishment: ''
+      establishment: '',
+      installments: 1
     });
   };
 
@@ -190,7 +192,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         date: extractedData.data || new Date().toISOString().split('T')[0],
         establishment: extractedData.estabelecimento || '',
         category: extractedData.categoria || 'Outros',
-        description: extractedData.descricao || extractedData.estabelecimento || ''
+        description: extractedData.descricao || extractedData.estabelecimento || '',
+        installments: 1
       });
 
       setOcrProgress(100);
@@ -434,6 +437,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     try {
       const cleanValue = formData.value.replace(',', '.');
       const finalCategory = isCustomCategory ? customCategory : formData.category;
+      const numInstallments = formData.type === 'expense' ? Math.max(1, Number(formData.installments) || 1) : 1;
       
       // If it's a custom category, save it to the 'categorias' collection if it doesn't exist
       if (isCustomCategory && customCategory) {
@@ -471,9 +475,33 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         await updateDoc(doc(db, path, transactionToEdit.id), payload);
       } else {
         payload.createdAt = serverTimestamp();
-        console.log('Payload para Firestore:', payload);
-        const docRef = await addDoc(collection(db, path), payload);
-        transactionId = docRef.id;
+        
+        if (numInstallments > 1) {
+          console.log(`Criando ${numInstallments} parcelas...`);
+          const baseDate = new Date(formData.date + 'T12:00:00');
+          const batchPromises = [];
+          
+          for (let i = 0; i < numInstallments; i++) {
+            const installmentDate = new Date(baseDate);
+            installmentDate.setMonth(baseDate.getMonth() + i);
+            
+            const installmentPayload = {
+              ...payload,
+              data: installmentDate.toISOString().split('T')[0],
+              descricao: `${payload.descricao} (${i + 1}/${numInstallments})`,
+              parcela: i + 1,
+              totalParcelas: numInstallments
+            };
+            
+            batchPromises.push(addDoc(collection(db, path), installmentPayload));
+          }
+          
+          await Promise.all(batchPromises);
+        } else {
+          console.log('Payload para Firestore:', payload);
+          const docRef = await addDoc(collection(db, path), payload);
+          transactionId = docRef.id;
+        }
       }
 
       // WhatsApp notification trigger removed as per user request (only scheduled notifications)
@@ -682,6 +710,30 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       />
                     </div>
                   </div>
+
+                  {formData.type === 'expense' && !transactionToEdit && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                        <ArrowLeft size={10} className="rotate-180" /> Repetir em quantas parcelas?
+                      </label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          min="1"
+                          max="48"
+                          value={formData.installments}
+                          onChange={(e) => setFormData({...formData, installments: e.target.value === '' ? '' : parseInt(e.target.value)})}
+                          className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                        />
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-proc-text-sec uppercase">
+                          Meses
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-proc-text-sec ml-1 italic">
+                        O lançamento será repetido mensalmente a partir da data selecionada.
+                      </p>
+                    </div>
+                  )}
 
                   {isCustomCategory && (
                     <motion.div 
