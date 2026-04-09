@@ -240,7 +240,7 @@ async function startServer() {
     const cleanUserId = String(userId).trim();
     
     try {
-      console.log(`>>> [DEBUG] Acessando Firestore. Projeto: ${dbAdmin.projectId}, Banco: ${dbAdmin.databaseId}`);
+      console.log(`>>> [DEBUG] Acessando Firestore.`);
       console.log(`>>> [DEBUG] Caminho: usuarios/${cleanUserId}`);
       
       // 1. Check Whapi Status
@@ -268,9 +268,7 @@ async function startServer() {
             error: "Erro de permissão no banco de dados do servidor.", 
             details: firestoreErr.message,
             code: firestoreErr.code,
-            path: `usuarios/${cleanUserId}`,
-            projectId: dbAdmin.projectId,
-            databaseId: dbAdmin.databaseId
+            path: `usuarios/${cleanUserId}`
           });
         }
         

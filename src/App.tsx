@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
-import { LogIn, Loader2, Edit3, Trash2, CheckCircle2 } from 'lucide-react';
+import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -44,6 +44,8 @@ export default function App() {
   const [showLogin, setShowLogin] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -112,6 +114,32 @@ export default function App() {
     try {
       await deleteDoc(doc(db, path, transactionToDelete));
       setTransactionToDelete(null);
+      setSelectedIds(prev => prev.filter(id => id !== transactionToDelete));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === transactions.length && transactions.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(transactions.map(t => t.id));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    const path = 'lancamentos';
+    try {
+      await Promise.all(selectedIds.map(id => deleteDoc(doc(db, path, id))));
+      setSelectedIds([]);
+      setShowBulkDeleteConfirm(false);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
@@ -339,20 +367,60 @@ export default function App() {
                   className="md:col-span-12"
                 >
                   <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
-                    <div className="flex items-center justify-between mb-6">
-                      <h3 className="text-proc-text-main font-bold text-xl">Gerenciar Lançamentos</h3>
-                      <button 
-                        onClick={() => setActiveTab('dashboard')}
-                        className="text-proc-text-sec hover:text-proc-text-main transition-colors"
-                      >
-                        Voltar para Dashboard
-                      </button>
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                      <div className="flex items-center gap-4">
+                        <h3 className="text-proc-text-main font-bold text-xl">Gerenciar Lançamentos</h3>
+                        <div className="px-3 py-1 rounded-full bg-proc-cyan/10 text-proc-cyan text-[10px] font-bold uppercase tracking-widest">
+                          {transactions.length} Total
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {transactions.length > 0 && (
+                          <button 
+                            onClick={handleSelectAll}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-proc-text-main text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+                          >
+                            {selectedIds.length === transactions.length ? <CheckSquare size={16} /> : <Square size={16} />}
+                            {selectedIds.length === transactions.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
+                          </button>
+                        )}
+                        {selectedIds.length > 0 && (
+                          <button 
+                            onClick={() => setShowBulkDeleteConfirm(true)}
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-bold uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                          >
+                            <Trash2 size={16} />
+                            Excluir ({selectedIds.length})
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => setActiveTab('dashboard')}
+                          className="text-proc-text-sec hover:text-proc-text-main transition-colors text-sm font-medium"
+                        >
+                          Voltar para Dashboard
+                        </button>
+                      </div>
                     </div>
                     
                     <div className="space-y-4">
                       {transactions.map((t) => (
-                        <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all border border-white/10">
+                        <div 
+                          key={t.id} 
+                          className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
+                            selectedIds.includes(t.id) 
+                              ? 'bg-proc-cyan/5 border-proc-cyan/30' 
+                              : 'bg-proc-secondary/30 hover:bg-proc-secondary/50 border-white/10'
+                          }`}
+                        >
                           <div className="flex items-center gap-4">
+                            <button 
+                              onClick={() => handleToggleSelect(t.id)}
+                              className={`p-2 rounded-lg transition-all ${
+                                selectedIds.includes(t.id) ? 'text-proc-cyan' : 'text-proc-text-sec hover:text-proc-text-main'
+                              }`}
+                            >
+                              {selectedIds.includes(t.id) ? <CheckSquare size={20} /> : <Square size={20} />}
+                            </button>
                             <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
                               <div className="w-2.5 h-2.5 rounded-full bg-current" />
                             </div>
@@ -372,32 +440,34 @@ export default function App() {
                                 </p>
                               )}
                             </div>
-                            {t.tipo === 'expense' && (
+                            <div className="flex items-center gap-2">
+                              {t.tipo === 'expense' && (
+                                <button 
+                                  onClick={() => handleTogglePaid(t)}
+                                  className={`p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
+                                  title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
+                                >
+                                  <CheckCircle2 size={18} />
+                                </button>
+                              )}
                               <button 
-                                onClick={() => handleTogglePaid(t)}
-                                className={`p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
-                                title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
+                                onClick={() => {
+                                  setEditingTransaction(t);
+                                  setIsModalOpen(true);
+                                }}
+                                className="p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
+                                title="Editar"
                               >
-                                <CheckCircle2 size={18} />
+                                <Edit3 size={18} />
                               </button>
-                            )}
-                            <button 
-                              onClick={() => handleDeleteTransaction(t.id)}
-                              className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
-                              title="Excluir"
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setEditingTransaction(t);
-                                setIsModalOpen(true);
-                              }}
-                              className="p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
-                              title="Editar"
-                            >
-                              <Edit3 size={18} />
-                            </button>
+                              <button 
+                                onClick={() => handleDeleteTransaction(t.id)}
+                                className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                title="Excluir"
+                              >
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -502,6 +572,49 @@ export default function App() {
                   className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
                 >
                   Excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showBulkDeleteConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBulkDeleteConfirm(false)}
+              className="absolute inset-0 bg-proc-bg/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-proc-secondary border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full shadow-2xl"
+            >
+              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir {selectedIds.length} Lançamentos?</h3>
+              <p className="text-proc-text-sec text-center mb-8">
+                Tem certeza que deseja excluir todos os lançamentos selecionados? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowBulkDeleteConfirm(false)}
+                  className="flex-1 py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Excluir Tudo
                 </button>
               </div>
             </motion.div>

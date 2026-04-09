@@ -42,6 +42,8 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
+
   useEffect(() => {
     if (!auth.currentUser) return;
 
@@ -205,11 +207,13 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
     }
   };
 
-  const handleDeleteCategory = async (id: string) => {
+  const confirmDeleteCategory = async () => {
+    if (!categoryToDelete) return;
     const path = 'categorias';
     try {
-      await deleteDoc(doc(db, path, id));
+      await deleteDoc(doc(db, path, categoryToDelete));
       setMessage({ type: 'success', text: 'Categoria excluída!' });
+      setCategoryToDelete(null);
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
       setMessage({ type: 'error', text: 'Erro ao excluir categoria.' });
@@ -285,74 +289,47 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
               <p className="text-xs text-proc-text-sec">Clique na câmera para alterar sua foto</p>
             </div>
 
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Nome</label>
-                <input 
-                  type="text" 
-                  value={name} 
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Seu nome completo"
-                  className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">E-mail</label>
-                <input 
-                  type="email" 
-                  value={userData?.email || ''} 
-                  disabled
-                  className="w-full bg-proc-bg/30 border border-white/5 rounded-xl py-3 px-4 text-proc-text-sec text-sm cursor-not-allowed"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
-                  <Phone size={10} /> Celular
-                </label>
-                <div className="flex gap-2">
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">Nome</label>
                   <input 
                     type="text" 
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder="(00) 00000-0000"
-                    className="flex-1 bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                    value={name} 
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Seu nome completo"
+                    className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                   />
-                  <button
-                    type="button"
-                    onClick={handleTestWhatsApp}
-                    disabled={isTestingWhatsApp || !phone}
-                    className="px-4 rounded-xl bg-proc-cyan/10 text-proc-cyan border border-proc-cyan/20 hover:bg-proc-cyan/20 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                    title="Testar conexão WhatsApp"
-                  >
-                    {isTestingWhatsApp ? <Loader2 size={16} className="animate-spin" /> : <MessageSquare size={16} />}
-                    <span className="text-xs font-bold uppercase tracking-tighter">Testar</span>
-                  </button>
                 </div>
-                
-                {whapiStatus && (
-                  <div className={`mt-2 p-2 rounded-lg text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 ${
-                    whapiStatus.success ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'
-                  }`}>
-                    <div className={`w-1.5 h-1.5 rounded-full ${whapiStatus.success ? 'bg-proc-green animate-pulse' : 'bg-red-500'}`} />
-                    {whapiStatus.success 
-                      ? `Instância Conectada: ${whapiStatus.data?.user?.id || whapiStatus.data?.health?.status?.text || 'OK'}` 
-                      : `Erro: ${whapiStatus.error}${whapiStatus.details?.message ? ' - ' + whapiStatus.details.message : ''}`}
-                  </div>
-                )}
 
-                {whapiStatus && !whapiStatus.success && (
-                  <div className="mt-2 p-2 bg-black/20 rounded text-[8px] font-mono text-proc-text-sec break-all">
-                    DEBUG: {JSON.stringify(whapiStatus.data || whapiStatus.details)}
-                  </div>
-                )}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">E-mail</label>
+                  <input 
+                    type="email" 
+                    value={userData?.email || ''} 
+                    disabled
+                    className="w-full bg-proc-bg/30 border border-white/5 rounded-xl py-3 px-4 text-proc-text-sec text-sm cursor-not-allowed"
+                  />
+                </div>
 
-                <p className="text-[9px] text-proc-text-sec mt-1 ml-1">
-                  * Use o formato com DDD (ex: 11999999999). O sistema enviará notificações de despesas para este número.
-                </p>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                    <Phone size={10} /> Celular
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="(00) 00000-0000"
+                      className="flex-1 bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
+                    />
+                  </div>
+                  
+                  <p className="text-[9px] text-proc-text-sec mt-1 ml-1">
+                    * Use o formato com DDD (ex: 11999999999). O sistema enviará notificações de despesas para este número.
+                  </p>
+                </div>
               </div>
-            </div>
 
             <button
               type="submit"
@@ -427,17 +404,17 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
           <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
             {customCategories.length > 0 ? (
               customCategories.map((cat) => (
-                <div key={cat.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 border border-white/10 group hover:bg-proc-secondary/50 transition-all">
+                <div key={cat.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 border border-white/10 hover:bg-proc-secondary/50 transition-all">
                   <div className="flex items-center gap-3">
                     <div className="w-2 h-2 rounded-full bg-proc-cyan" />
                     <span className="text-proc-text-main font-medium">{cat.nome}</span>
                   </div>
                   <button
-                    onClick={() => handleDeleteCategory(cat.id)}
-                    className="p-2 rounded-lg bg-red-500/10 text-red-500 opacity-0 group-hover:opacity-100 transition-all hover:bg-red-500/20"
+                    onClick={() => setCategoryToDelete(cat.id)}
+                    className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
                     title="Excluir categoria"
                   >
-                    <Trash2 size={16} />
+                    <Trash2 size={18} />
                   </button>
                 </div>
               ))
@@ -471,6 +448,49 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
         onCropComplete={handleCropComplete}
         isSaving={isCropping}
       />
+
+      {/* Category Delete Confirmation Modal */}
+      <AnimatePresence>
+        {categoryToDelete && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCategoryToDelete(null)}
+              className="absolute inset-0 bg-proc-bg/80 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-proc-secondary border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full shadow-2xl"
+            >
+              <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir Categoria?</h3>
+              <p className="text-proc-text-sec text-center mb-8">
+                Tem certeza que deseja excluir esta categoria personalizada?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setCategoryToDelete(null)}
+                  className="flex-1 py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmDeleteCategory}
+                  className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
