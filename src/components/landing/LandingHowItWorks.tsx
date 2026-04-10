@@ -7,7 +7,7 @@ export default function LandingHowItWorks() {
     {
       icon: UserPlus,
       title: 'Crie sua conta',
-      description: 'Acesse instantaneamente com sua conta Google em segundos.',
+      description: 'Acesse instantaneamente com sua conta Google.',
       color: 'text-proc-cyan',
       bg: 'bg-proc-cyan/10',
     },

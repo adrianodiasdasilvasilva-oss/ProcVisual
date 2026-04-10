@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, ArrowRight } from 'lucide-react';
+import { Play, ArrowRight, TrendingUp, TrendingDown, Camera } from 'lucide-react';
 
 interface LandingHeroProps {
   onStart: () => void;
@@ -19,14 +19,6 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-proc-cyan/10 border border-proc-cyan/20 text-proc-cyan text-xs font-bold uppercase tracking-widest mb-8">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-proc-cyan opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-proc-cyan"></span>
-            </span>
-            Nova Versão 2.0 Disponível
-          </div>
-          
           <h1 className="text-5xl md:text-7xl font-bold text-white leading-[1.1] mb-8 tracking-tight">
             Controle suas finanças com <span className="text-proc-cyan">inteligência</span>
           </h1>
@@ -51,22 +43,6 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
               Ver como funciona
             </button>
           </div>
-
-          <div className="mt-12 flex items-center gap-4">
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4].map((i) => (
-                <img 
-                  key={i}
-                  src={`https://i.pravatar.cc/100?img=${i + 10}`} 
-                  alt="User avatar" 
-                  className="w-10 h-10 rounded-full border-2 border-proc-bg"
-                />
-              ))}
-            </div>
-            <p className="text-sm text-proc-text-sec">
-              <span className="text-white font-bold">+2.000 usuários</span> já estão economizando hoje.
-            </p>
-          </div>
         </motion.div>
 
         <motion.div
@@ -75,39 +51,50 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
           transition={{ duration: 1, delay: 0.2, ease: "easeOut" }}
           className="relative"
         >
-          {/* Mockup Frame */}
+          {/* Mockup Frame simulating the real Dashboard */}
           <div className="relative z-10 bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-4 shadow-2xl backdrop-blur-sm">
-            <div className="bg-proc-bg rounded-[1.5rem] overflow-hidden border border-white/5 shadow-inner aspect-[4/3]">
-              <img 
-                src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&q=80&w=1000" 
-                alt="Dashboard Preview" 
-                className="w-full h-full object-cover opacity-80"
-              />
-              {/* Overlay UI elements */}
-              <div className="absolute top-12 left-12 p-4 bg-proc-bg/80 backdrop-blur-md rounded-2xl border border-white/10 shadow-xl">
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-8 h-8 rounded-lg bg-proc-green/20 flex items-center justify-center text-proc-green">
+            <div className="bg-proc-bg rounded-[1.5rem] overflow-hidden border border-white/5 shadow-inner aspect-[4/3] p-6 flex flex-col gap-6">
+              {/* Simulated Header */}
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-xl font-bold text-white">Olá, Adriano!</p>
+                  <p className="text-[10px] text-proc-text-sec uppercase tracking-widest">Seu saldo hoje</p>
+                </div>
+                <div className="px-4 py-2 bg-proc-cyan/10 border border-proc-cyan/20 rounded-xl">
+                  <span className="text-lg font-bold text-proc-cyan">R$ 12.450,80</span>
+                </div>
+              </div>
+
+              {/* Simulated Cards */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-proc-secondary/40 p-4 rounded-2xl border border-white/5">
+                  <div className="w-8 h-8 rounded-lg bg-proc-green/10 flex items-center justify-center text-proc-green mb-3">
                     <TrendingUp size={16} />
                   </div>
-                  <span className="text-xs text-proc-text-sec font-bold uppercase tracking-widest">Economia</span>
+                  <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">Receitas</p>
+                  <p className="text-sm font-bold text-white">R$ 8.200</p>
                 </div>
-                <p className="text-xl font-bold text-white">R$ 2.450,00</p>
+                <div className="bg-proc-secondary/40 p-4 rounded-2xl border border-white/5">
+                  <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 mb-3">
+                    <TrendingDown size={16} />
+                  </div>
+                  <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">Despesas</p>
+                  <p className="text-sm font-bold text-white">R$ 3.450</p>
+                </div>
+              </div>
+
+              {/* Simulated Chart Area */}
+              <div className="flex-1 bg-proc-secondary/20 rounded-2xl border border-white/5 flex items-end justify-around p-4">
+                {[30, 50, 40, 70, 45, 90, 60].map((h, i) => (
+                  <div 
+                    key={i}
+                    className="w-4 bg-proc-cyan/20 rounded-t-md border-t border-proc-cyan/40"
+                    style={{ height: `${h}%` }}
+                  />
+                ))}
               </div>
             </div>
           </div>
-
-          {/* Floating elements */}
-          <motion.div 
-            animate={{ y: [0, -20, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-10 -right-10 p-6 bg-proc-secondary/80 backdrop-blur-xl rounded-3xl border border-white/10 shadow-2xl z-20"
-          >
-            <div className="w-12 h-12 rounded-2xl bg-proc-cyan/20 flex items-center justify-center text-proc-cyan mb-4">
-              <Camera size={24} />
-            </div>
-            <p className="text-sm font-bold text-white mb-1">OCR Ativo</p>
-            <p className="text-[10px] text-proc-text-sec uppercase tracking-widest">Lendo comprovante...</p>
-          </motion.div>
 
           <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-proc-cyan/20 blur-[60px] rounded-full pointer-events-none" />
         </motion.div>
@@ -116,4 +103,3 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
   );
 }
 
-import { TrendingUp, Camera } from 'lucide-react';

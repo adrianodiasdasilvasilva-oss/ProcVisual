@@ -40,7 +40,7 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: Log
       } else if (err.code === 'auth/invalid-email') {
         setError('E-mail inválido.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        setError('Domínio não autorizado para redefinição. Entre em contato com o suporte.');
+        setError('Domínio não autorizado para redefinição. Entre em contato com o suporte em procvisual.dashboard@gmail.com.');
       } else {
         setError(`Erro ao enviar e-mail: ${err.message || 'Tente novamente.'}`);
       }

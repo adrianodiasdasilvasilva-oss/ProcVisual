@@ -16,7 +16,8 @@ import {
   Moon,
   Sun,
   Send,
-  MessageSquare
+  MessageSquare,
+  Mail
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
@@ -432,6 +433,34 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
             <p className="text-xs text-proc-text-sec mt-1">
               Novas categorias são criadas automaticamente quando você escolhe "Personalizada" ao adicionar um lançamento.
             </p>
+          </div>
+        </section>
+        
+        {/* Suporte Section */}
+        <section className="p-8 rounded-[2.5rem] bg-proc-secondary border border-white/5 space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+              <Mail size={24} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-proc-text-main">Suporte</h2>
+              <p className="text-sm text-proc-text-sec">Precisa de ajuda ou tem alguma dúvida?</p>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-proc-bg/50 border border-white/5 flex flex-col items-center text-center">
+            <p className="text-sm text-proc-text-sec leading-relaxed">
+              Nossa equipe está pronta para te ajudar. Para entrar em contato com a ProcVisual, basta enviar um e-mail para o endereço abaixo:
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-3 p-4 rounded-xl bg-proc-cyan/5 border border-proc-cyan/10 w-full">
+              <Mail size={18} className="text-proc-cyan" />
+              <a 
+                href="mailto:procvisual.dashboard@gmail.com" 
+                className="text-proc-text-main font-bold hover:text-proc-cyan transition-colors"
+              >
+                procvisual.dashboard@gmail.com
+              </a>
+            </div>
           </div>
         </section>
       </div>

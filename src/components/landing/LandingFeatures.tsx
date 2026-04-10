@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Camera, LayoutDashboard, Wallet, BarChart3 } from 'lucide-react';
+import { Camera, LayoutDashboard, Wallet, BarChart3, MessageCircle } from 'lucide-react';
 
 export default function LandingFeatures() {
   const features = [
@@ -13,20 +13,20 @@ export default function LandingFeatures() {
       glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
     },
     {
+      icon: MessageCircle,
+      title: 'Notificações via WhatsApp',
+      description: 'Receba lembretes inteligentes das suas despesas e evite juros por esquecimento.',
+      color: 'text-[#25D366]',
+      bg: 'bg-[#25D366]/10',
+      glow: 'shadow-[0_0_30px_rgba(37,211,102,0.15)]',
+    },
+    {
       icon: LayoutDashboard,
       title: 'Dashboard inteligente',
       description: 'Visualize sua saúde financeira em tempo real com gráficos e indicadores modernos.',
       color: 'text-proc-green',
       bg: 'bg-proc-green/10',
       glow: 'shadow-[0_0_30px_rgba(0,230,118,0.15)]',
-    },
-    {
-      icon: Wallet,
-      title: 'Controle de receitas e despesas',
-      description: 'Gerencie seu fluxo de caixa de forma simples e intuitiva, sem planilhas complexas.',
-      color: 'text-proc-cyan',
-      bg: 'bg-proc-cyan/10',
-      glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
     },
     {
       icon: BarChart3,

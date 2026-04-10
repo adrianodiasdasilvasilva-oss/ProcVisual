@@ -1,22 +1,16 @@
 import React from 'react';
-import { Github, Twitter, Instagram, Linkedin, Heart } from 'lucide-react';
+import { Instagram, Heart } from 'lucide-react';
 import Logo from '../Logo';
 
-export default function LandingFooter() {
+interface LandingFooterProps {
+  onOpenLegal: (type: 'terms' | 'privacy') => void;
+}
+
+export default function LandingFooter({ onOpenLegal }: LandingFooterProps) {
   const currentYear = new Date().getFullYear();
 
-  const links = [
-    { name: 'Termos', href: '#' },
-    { name: 'Privacidade', href: '#' },
-    { name: 'Suporte', href: '#' },
-    { name: 'Blog', href: '#' },
-  ];
-
   const social = [
-    { icon: Twitter, href: '#' },
-    { icon: Instagram, href: '#' },
-    { icon: Linkedin, href: '#' },
-    { icon: Github, href: '#' },
+    { icon: Instagram, href: 'https://www.instagram.com/procvisual', label: '@procvisual' },
   ];
 
   return (
@@ -38,18 +32,42 @@ export default function LandingFooter() {
           <div className="flex flex-wrap gap-8 md:gap-16">
             <div className="flex flex-col gap-4">
               <h5 className="text-white font-bold text-sm uppercase tracking-widest">Produto</h5>
-              {links.map((link) => (
-                <a key={link.name} href={link.href} className="text-proc-text-sec text-sm hover:text-proc-cyan transition-colors">
-                  {link.name}
+              <button 
+                onClick={() => onOpenLegal('terms')}
+                className="text-left text-proc-text-sec text-sm hover:text-proc-cyan transition-colors"
+              >
+                Termos
+              </button>
+              <button 
+                onClick={() => onOpenLegal('privacy')}
+                className="text-left text-proc-text-sec text-sm hover:text-proc-cyan transition-colors"
+              >
+                Privacidade
+              </button>
+              <a href="mailto:procvisual.dashboard@gmail.com" className="text-proc-text-sec text-sm hover:text-proc-cyan transition-colors">Suporte</a>
+            </div>
+            <div className="flex flex-col gap-4">
+              <h5 className="text-white font-bold text-sm uppercase tracking-widest">Suporte</h5>
+              <p className="text-proc-text-sec text-sm max-w-[200px] leading-relaxed">
+                Para entrar em contato com a ProcVisual, envie um e-mail para:
+                <a href="mailto:procvisual.dashboard@gmail.com" className="block text-proc-cyan mt-1 font-medium hover:underline">
+                  procvisual.dashboard@gmail.com
                 </a>
-              ))}
+              </p>
             </div>
             <div className="flex flex-col gap-4">
               <h5 className="text-white font-bold text-sm uppercase tracking-widest">Social</h5>
               <div className="flex gap-4">
                 {social.map((item, i) => (
-                  <a key={i} href={item.href} className="w-10 h-10 rounded-xl bg-proc-secondary/50 border border-white/5 flex items-center justify-center text-proc-text-sec hover:text-white hover:border-white/10 transition-all">
-                    <item.icon size={18} />
+                  <a 
+                    key={i} 
+                    href={item.href} 
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-3 px-4 py-2 rounded-xl bg-proc-secondary/50 border border-white/5 text-proc-text-sec hover:text-white hover:border-white/10 transition-all group"
+                  >
+                    <item.icon size={18} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-xs font-medium">{item.label}</span>
                   </a>
                 ))}
               </div>
