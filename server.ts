@@ -8,6 +8,7 @@ import cron from "node-cron";
 import admin from "firebase-admin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import fs from "fs";
+import whatsappWebhook from "./api/webhook-whatsapp.js";
 
 dotenv.config();
 
@@ -436,6 +437,10 @@ async function startServer() {
         details: error.message 
       });
     }
+  });
+
+  app.post("/api/webhook-whatsapp", (req, res) => {
+    whatsappWebhook(req, res);
   });
 
   // Catch-all for other /api routes to prevent HTML fallback
