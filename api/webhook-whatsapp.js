@@ -61,7 +61,8 @@ export default async function handler(req, res) {
         }
 
         if (type === 'text') {
-          const texto = message.body || "";
+          const texto = message.text?.body || message.body || "";
+          console.log(`>>> [WEBHOOK] Texto extraído: "${texto}"`);
           console.log("Processando texto de:", numero, "Texto:", texto);
           console.log("Extraindo valor");
 
