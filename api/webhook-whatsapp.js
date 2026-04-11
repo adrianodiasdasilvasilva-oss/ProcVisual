@@ -104,7 +104,7 @@ export default async function handler(req, res) {
             const descricao = parts.join(' ');
 
             if (!isNaN(valor)) {
-              await saveAndConfirm(db, numero, descricao, valor, "whatsapp");
+              await saveAndConfirm(db, numero, descricao, valor, "whatsapp", message.timestamp);
             }
           }
         } else if (type === 'image') {
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
                 if (result.valor && !isNaN(parseFloat(result.valor))) {
                   const valor = parseFloat(result.valor);
                   const descricao = result.estabelecimento || result.descricao || "Comprovante via WhatsApp";
-                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_imagem");
+                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_imagem", message.timestamp);
                 } else {
                   console.log(">>> [WHATSAPP] Gemini não encontrou valor numérico na imagem.");
                 }
@@ -215,7 +215,7 @@ export default async function handler(req, res) {
                 if (result.valor && !isNaN(parseFloat(result.valor))) {
                   const valor = parseFloat(result.valor);
                   const descricao = result.descricao || "Despesa via Áudio";
-                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_audio");
+                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_audio", message.timestamp);
                 } else {
                   console.log(">>> [WHATSAPP] Gemini não encontrou valor numérico no áudio.");
                 }
@@ -278,7 +278,7 @@ Retorne apenas o nome da categoria.`;
   }
 }
 
-async function saveAndConfirm(db, numero, descricao, valor, origem) {
+async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = null) {
   try {
     console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor}`);
     
@@ -287,9 +287,7 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     const cleanNumero = rawNumero.replace(/\D/g, "");
     console.log(`>>> [WHATSAPP] Telefone do remetente: ${cleanNumero}`);
     
-    // 2. Use a "pending" userId to avoid reading the "usuarios" collection 
-    // (which would require admin permissions that are hard to set up on Vercel)
-    // The frontend will "claim" these transactions when the user logs in.
+    // 2. Use a "pending" userId
     const userId = "whatsapp_pending"; 
 
     // 3. Categorize automatically using AI
@@ -300,11 +298,23 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     console.log(">>> [WHATSAPP] Salvando no Firebase (lancamentos)...");
     
     // 4. Prepare data for "lancamentos" collection
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // Use message timestamp adjusted for Brazil (UTC-3)
+    let today;
+    if (timestamp) {
+      const date = new Date(timestamp * 1000);
+      // Adjust for Brazil (UTC-3)
+      date.setHours(date.getHours() - 3);
+      today = date.toISOString().split('T')[0];
+    } else {
+      // Fallback to current time adjusted for Brazil
+      const now = new Date();
+      now.setHours(now.getHours() - 3);
+      today = now.toISOString().split('T')[0];
+    }
     
     const transactionData = {
       userId,
-      telefone: cleanNumero, // Store phone to allow the user to claim it later
+      telefone: cleanNumero,
       tipo: 'expense',
       valor,
       categoria,
