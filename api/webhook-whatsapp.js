@@ -93,10 +93,22 @@ export default async function handler(req, res) {
           const texto = message.text?.body || message.body || "";
           console.log(`>>> [WEBHOOK] Texto extraído: "${texto}"`);
           console.log("Processando texto de:", numero, "Texto:", texto);
-          console.log("Extraindo valor");
+          console.log("Extraindo valor e parcelas");
+
+          // Detect installments pattern like (1/10) or 1/10
+          let parcela = 1;
+          let totalParcelas = 1;
+          const parcelaMatch = texto.match(/(\d+)\s*\/\s*(\d+)/);
+          if (parcelaMatch) {
+            parcela = parseInt(parcelaMatch[1]);
+            totalParcelas = parseInt(parcelaMatch[2]);
+            console.log(`>>> [WEBHOOK] Parcelas detectadas: ${parcela}/${totalParcelas}`);
+          }
 
           // Basic parsing: "Description Value"
-          const parts = texto.trim().split(/\s+/);
+          // Remove the installment part from text before parsing description/value
+          const textoLimpo = texto.replace(/[\(\[]?\d+\s*\/\s*\d+[\)\]]?/g, '').trim();
+          const parts = textoLimpo.split(/\s+/);
           
           if (parts.length >= 2) {
             const valorStr = parts.pop();
@@ -104,7 +116,7 @@ export default async function handler(req, res) {
             const descricao = parts.join(' ');
 
             if (!isNaN(valor)) {
-              await saveAndConfirm(db, numero, descricao, valor, "whatsapp", message.timestamp);
+              await saveAndConfirm(db, numero, descricao, valor, "whatsapp", message.timestamp, parcela, totalParcelas);
             }
           }
         } else if (type === 'image') {
@@ -132,6 +144,8 @@ export default async function handler(req, res) {
                   - estabelecimento: O nome curto e direto do estabelecimento ou emissor (ex: Lojas Cem).
                   - valor: O valor total (apenas números, use ponto para decimais).
                   - descricao: Uma breve descrição do que foi pago.
+                  - parcela: O número da parcela atual (se houver, ex: 1). Padrão: 1.
+                  - totalParcelas: O número total de parcelas (se houver, ex: 10). Padrão: 1.
                   Responda APENAS o JSON puro, sem blocos de código markdown.
                 `;
 
@@ -154,7 +168,9 @@ export default async function handler(req, res) {
                 if (result.valor && !isNaN(parseFloat(result.valor))) {
                   const valor = parseFloat(result.valor);
                   const descricao = result.estabelecimento || result.descricao || "Comprovante via WhatsApp";
-                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_imagem", message.timestamp);
+                  const p = parseInt(result.parcela) || 1;
+                  const tp = parseInt(result.totalParcelas) || 1;
+                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_imagem", message.timestamp, p, tp);
                 } else {
                   console.log(">>> [WHATSAPP] Gemini não encontrou valor numérico na imagem.");
                 }
@@ -189,9 +205,11 @@ export default async function handler(req, res) {
                   Transcreva este áudio e extraia as informações de despesa em formato JSON:
                   - descricao: O que foi pago (ex: Uber, Mercado, Almoço).
                   - valor: O valor total (apenas números, use ponto para decimais).
+                  - parcela: O número da parcela atual (se houver, ex: 1). Padrão: 1.
+                  - totalParcelas: O número total de parcelas (se houver, ex: 10). Padrão: 1.
                   
-                  Exemplo de áudio: "Gastei 25 reais no Uber"
-                  Resposta: {"descricao": "Uber", "valor": 25}
+                  Exemplo de áudio: "Gastei 280 reais nas Lojas Cem em 10 parcelas"
+                  Resposta: {"descricao": "Lojas Cem", "valor": 280, "parcela": 1, "totalParcelas": 10}
                   
                   Responda APENAS o JSON puro, sem blocos de código markdown.
                 `;
@@ -215,7 +233,9 @@ export default async function handler(req, res) {
                 if (result.valor && !isNaN(parseFloat(result.valor))) {
                   const valor = parseFloat(result.valor);
                   const descricao = result.descricao || "Despesa via Áudio";
-                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_audio", message.timestamp);
+                  const p = parseInt(result.parcela) || 1;
+                  const tp = parseInt(result.totalParcelas) || 1;
+                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp_audio", message.timestamp, p, tp);
                 } else {
                   console.log(">>> [WHATSAPP] Gemini não encontrou valor numérico no áudio.");
                 }
@@ -278,9 +298,9 @@ Retorne apenas o nome da categoria.`;
   }
 }
 
-async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = null) {
+async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = null, parcela = 1, totalParcelas = 1) {
   try {
-    console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor}`);
+    console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor} (${parcela}/${totalParcelas})`);
     
     // 1. Clean phone number
     const rawNumero = numero.split('@')[0];
@@ -297,48 +317,66 @@ async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = 
 
     console.log(">>> [WHATSAPP] Salvando no Firebase (lancamentos)...");
     
-    // 4. Prepare data for "lancamentos" collection
-    // Use message timestamp adjusted for Brazil (UTC-3)
-    let today;
+    // 4. Prepare base date
+    let baseDate;
     if (timestamp) {
-      const date = new Date(timestamp * 1000);
-      // Adjust for Brazil (UTC-3)
-      date.setHours(date.getHours() - 3);
-      today = date.toISOString().split('T')[0];
+      baseDate = new Date(timestamp * 1000);
+      baseDate.setHours(baseDate.getHours() - 3); // Adjust for Brazil (UTC-3)
     } else {
-      // Fallback to current time adjusted for Brazil
-      const now = new Date();
-      now.setHours(now.getHours() - 3);
-      today = now.toISOString().split('T')[0];
+      baseDate = new Date();
+      baseDate.setHours(baseDate.getHours() - 3);
     }
-    
-    const transactionData = {
-      userId,
-      telefone: cleanNumero,
-      tipo: 'expense',
-      valor,
-      categoria,
-      data: today,
-      descricao: descricao,
-      estabelecimento: descricao,
-      origem,
-      createdAt: serverTimestamp(),
-      pago: true
-    };
 
-    const docRef = await addDoc(collection(db, "lancamentos"), transactionData);
-    console.log(`>>> [WHATSAPP] Despesa salva como PENDENTE! ID: ${docRef.id}`);
-    console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero}`);
+    // 5. Create Group ID for installments
+    const groupId = totalParcelas > 1 ? `wa_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : null;
+    
+    // 6. Loop to create all installments from current to total
+    const createdIds = [];
+    for (let i = parcela; i <= totalParcelas; i++) {
+      // Calculate date for this installment (add months)
+      const installmentDate = new Date(baseDate);
+      installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
+      const dateStr = installmentDate.toISOString().split('T')[0];
+
+      const transactionData = {
+        userId,
+        telefone: cleanNumero,
+        tipo: 'expense',
+        valor,
+        categoria,
+        data: dateStr,
+        descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
+        estabelecimento: descricao,
+        origem,
+        createdAt: serverTimestamp(),
+        pago: i === parcela, // Only the first one is marked as paid by default
+        parcela: i,
+        totalParcelas,
+        groupId
+      };
+
+      const docRef = await addDoc(collection(db, "lancamentos"), transactionData);
+      createdIds.push(docRef.id);
+    }
+
+    console.log(`>>> [WHATSAPP] ${createdIds.length} despesa(s) salva(s) como PENDENTE! IDs: ${createdIds.join(', ')}`);
+    console.log(`>>> [WHATSAPP] Registro concluído: ${descricao} | R$ ${valor} | Parcelas: ${parcela}/${totalParcelas}`);
 
     // Send confirmation message via Whapi
     const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
     if (WHAPI_TOKEN) {
       const valorFormatado = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-      let prefix = "Despesa registrada";
-      if (origem === "whatsapp_imagem") prefix = "Comprovante recebido e registrado";
-      if (origem === "whatsapp_audio") prefix = "Despesa registrada por áudio";
+      let prefix = totalParcelas > 1 ? "Parcelamento registrado" : "Despesa registrada";
+      if (origem === "whatsapp_imagem") prefix = totalParcelas > 1 ? "Comprovante parcelado registrado" : "Comprovante recebido e registrado";
+      if (origem === "whatsapp_audio") prefix = totalParcelas > 1 ? "Parcelamento registrado por áudio" : "Despesa registrada por áudio";
       
-      const confirmacao = `${prefix}: ${descricao} - R$ ${valorFormatado}`;
+      let confirmacao = `${prefix}: ${descricao} - R$ ${valorFormatado}`;
+      if (totalParcelas > 1) {
+        confirmacao += ` (${parcela}/${totalParcelas})`;
+        if (parcela < totalParcelas) {
+          confirmacao += `\nLançadas ${totalParcelas - parcela + 1} parcelas futuras.`;
+        }
+      }
       
       try {
         const response = await fetch('https://gate.whapi.cloud/messages/text', {
