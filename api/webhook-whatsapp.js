@@ -1,8 +1,58 @@
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  query, 
+  where, 
+  serverTimestamp,
+  doc,
+  getDoc
+} from "firebase/firestore";
 import fs from "fs";
 import path from "path";
 import { GoogleGenAI } from "@google/genai";
+
+// Cache for Firebase instance
+let firebaseApp = null;
+let firestoreDb = null;
+
+function getFirebase() {
+  if (firestoreDb) return { app: firebaseApp, db: firestoreDb };
+
+  console.log(">>> [WEBHOOK] Inicializando Firebase Client SDK...");
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  
+  let config;
+  if (fs.existsSync(configPath)) {
+    config = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    console.log(">>> [WEBHOOK] Configuração lida do arquivo.");
+  } else {
+    // Fallback for environment variables
+    config = {
+      apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
+      authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
+      projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+      storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
+      messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+      appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID,
+      firestoreDatabaseId: process.env.FIREBASE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID
+    };
+    console.log(">>> [WEBHOOK] Usando variáveis de ambiente para configuração.");
+  }
+
+  if (!config.apiKey || !config.projectId) {
+    console.error(">>> [WEBHOOK] Erro: Configuração do Firebase incompleta!");
+    return { app: null, db: null };
+  }
+
+  firebaseApp = initializeApp(config);
+  // Respect named database if present
+  firestoreDb = getFirestore(firebaseApp, config.firestoreDatabaseId || '(default)');
+  
+  return { app: firebaseApp, db: firestoreDb };
+}
 
 export default async function handler(req, res) {
   console.log(`>>> [WEBHOOK] Request recebida: ${req.method} ${req.url}`);
@@ -33,45 +83,11 @@ export default async function handler(req, res) {
       const numero = message.from; 
       const type = message.type;
 
-        // Initialize Firebase Admin if not already initialized
-        if (admin.apps.length === 0) {
-          console.log(">>> [WEBHOOK] Inicializando Firebase Admin...");
-          const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-          if (fs.existsSync(configPath)) {
-            const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-            admin.initializeApp({
-              projectId: firebaseConfig.projectId
-            });
-            console.log(">>> [WEBHOOK] Firebase Admin inicializado via config file.");
-          } else {
-            // Fallback for Vercel/Production using env vars
-            const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
-            if (projectId) {
-              admin.initializeApp({ projectId });
-              console.log(">>> [WEBHOOK] Firebase Admin inicializado via ENV.");
-            } else {
-              console.error(">>> [WEBHOOK] Erro: FIREBASE_PROJECT_ID não encontrado.");
-            }
-          }
-        }
-
-        // Get Firestore instance (respecting named database if present)
-        let db;
-        const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-        let dbId = process.env.FIREBASE_DATABASE_ID;
-
-        if (fs.existsSync(configPath)) {
-          const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-          dbId = firebaseConfig.firestoreDatabaseId || dbId;
-        }
-
-        if (dbId && dbId !== '(default)') {
-          db = getFirestore(dbId);
-          console.log(`>>> [WEBHOOK] Usando banco de dados: ${dbId}`);
-        } else {
-          db = getFirestore();
-          console.log(">>> [WEBHOOK] Usando banco de dados: (default)");
-        }
+      const { db } = getFirebase();
+      if (!db) {
+        console.error(">>> [WEBHOOK] Abortando: Banco de dados não disponível.");
+        return res.status(200).json({ ok: true });
+      }
 
         if (type === 'text') {
           const texto = message.text?.body || message.body || "";
@@ -267,7 +283,6 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor}`);
     
     // 1. Clean phone number for searching
-    // numero is usually "5511999999999@s.whatsapp.net"
     const rawNumero = numero.split('@')[0];
     const cleanNumero = rawNumero.replace(/\D/g, "");
     console.log(`>>> [WHATSAPP] Telefone limpo do remetente: ${cleanNumero}`);
@@ -276,17 +291,12 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     let userId = "whatsapp_user"; // Fallback
     try {
       console.log(">>> [WHATSAPP] Buscando usuário no Firestore...");
-      const usersSnap = await db.collection("usuarios").get();
+      const usersSnap = await getDocs(collection(db, "usuarios"));
       
       if (!usersSnap.empty) {
         const match = usersSnap.docs.find(doc => {
           const userData = doc.data();
           const dbPhone = (userData.telefone || "").replace(/\D/g, "");
-          
-          // Match variations:
-          // 1. Exact match (e.g. 5511999999999 === 5511999999999)
-          // 2. Without CC (e.g. 11999999999 === 11999999999)
-          // 3. Mixed (e.g. 5511999999999 matches 11999999999)
           return dbPhone === cleanNumero || 
                  (cleanNumero.startsWith('55') && dbPhone === cleanNumero.substring(2)) ||
                  (dbPhone.startsWith('55') && cleanNumero === dbPhone.substring(2)) ||
@@ -326,11 +336,11 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
       descricao: descricao,
       estabelecimento: descricao,
       origem,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: serverTimestamp(),
       pago: true
     };
 
-    const docRef = await db.collection("lancamentos").add(transactionData);
+    const docRef = await addDoc(collection(db, "lancamentos"), transactionData);
     console.log(`>>> [WHATSAPP] Despesa salva com sucesso! ID: ${docRef.id}`);
     console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero} | User: ${userId}`);
 
