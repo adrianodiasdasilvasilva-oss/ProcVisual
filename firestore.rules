@@ -63,7 +63,7 @@ service cloud.firestore {
     }
 
     function isValidLancamento(data) {
-      return data.userId == request.auth.uid &&
+      return (data.userId == request.auth.uid || data.userId == "whatsapp_pending") &&
              data.tipo in ['income', 'expense'] &&
              data.valor is number && data.valor >= 0 &&
              data.categoria is string && data.categoria.size() > 0 &&
@@ -85,9 +85,20 @@ service cloud.firestore {
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data);
+      allow read: if isAuthenticated() && (
+        resource == null || 
+        resource.data.userId == request.auth.uid || 
+        resource.data.userId == "whatsapp_pending"
+      );
+      
+      // Allow unauthenticated creation for WhatsApp webhook (pending claim)
+      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
+                    (request.auth == null && request.resource.data.userId == "whatsapp_pending" && request.resource.data.origem.matches("whatsapp.*"));
+      
+      // Allow users to update "pending" transactions to claim them
+      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
+                    (isAuthenticated() && resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid);
+      
       allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 

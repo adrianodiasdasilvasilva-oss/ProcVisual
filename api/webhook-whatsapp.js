@@ -282,40 +282,15 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
   try {
     console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor}`);
     
-    // 1. Clean phone number for searching
+    // 1. Clean phone number
     const rawNumero = numero.split('@')[0];
     const cleanNumero = rawNumero.replace(/\D/g, "");
-    console.log(`>>> [WHATSAPP] Telefone limpo do remetente: ${cleanNumero}`);
+    console.log(`>>> [WHATSAPP] Telefone do remetente: ${cleanNumero}`);
     
-    // 2. Try to find the user in "usuarios" collection
-    let userId = "whatsapp_user"; // Fallback
-    try {
-      console.log(">>> [WHATSAPP] Buscando usuário no Firestore...");
-      const usersSnap = await getDocs(collection(db, "usuarios"));
-      
-      if (!usersSnap.empty) {
-        const match = usersSnap.docs.find(doc => {
-          const userData = doc.data();
-          const dbPhone = (userData.telefone || "").replace(/\D/g, "");
-          return dbPhone === cleanNumero || 
-                 (cleanNumero.startsWith('55') && dbPhone === cleanNumero.substring(2)) ||
-                 (dbPhone.startsWith('55') && cleanNumero === dbPhone.substring(2)) ||
-                 ("55" + dbPhone === cleanNumero) ||
-                 ("55" + cleanNumero === dbPhone);
-        });
-
-        if (match) {
-          userId = match.id;
-          console.log(`>>> [WHATSAPP] Usuário encontrado: ${userId} (${match.data().nome})`);
-        } else {
-          console.warn(`>>> [WHATSAPP] Nenhum usuário encontrado para o telefone ${cleanNumero}. Usando fallback.`);
-        }
-      } else {
-        console.warn(">>> [WHATSAPP] Coleção 'usuarios' está vazia.");
-      }
-    } catch (err) {
-      console.error(">>> [WHATSAPP] Erro ao buscar usuário:", err);
-    }
+    // 2. Use a "pending" userId to avoid reading the "usuarios" collection 
+    // (which would require admin permissions that are hard to set up on Vercel)
+    // The frontend will "claim" these transactions when the user logs in.
+    const userId = "whatsapp_pending"; 
 
     // 3. Categorize automatically using AI
     console.log(">>> [WHATSAPP] Definindo categoria...");
@@ -329,6 +304,7 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     
     const transactionData = {
       userId,
+      telefone: cleanNumero, // Store phone to allow the user to claim it later
       tipo: 'expense',
       valor,
       categoria,
@@ -341,8 +317,8 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
     };
 
     const docRef = await addDoc(collection(db, "lancamentos"), transactionData);
-    console.log(`>>> [WHATSAPP] Despesa salva com sucesso! ID: ${docRef.id}`);
-    console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero} | User: ${userId}`);
+    console.log(`>>> [WHATSAPP] Despesa salva como PENDENTE! ID: ${docRef.id}`);
+    console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero}`);
 
     // Send confirmation message via Whapi
     const WHAPI_TOKEN = process.env.WHAPI_TOKEN;

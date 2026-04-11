@@ -15,7 +15,7 @@ import InteractiveBalloon from './components/InteractiveBalloon';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
 
 import LandingPage from './components/landing/LandingPage';
@@ -310,6 +310,45 @@ export default function App() {
 
     return () => unsubscribe();
   }, [user]);
+
+  // Claim Pending WhatsApp Transactions
+  useEffect(() => {
+    if (!user || !profile?.telefone) return;
+
+    const claimPending = async () => {
+      const cleanProfilePhone = profile.telefone.replace(/\D/g, "");
+      if (!cleanProfilePhone) return;
+
+      console.log('>>> [CLAIM] Buscando lançamentos pendentes para:', cleanProfilePhone);
+      
+      try {
+        const q = query(
+          collection(db, 'lancamentos'),
+          where('userId', '==', 'whatsapp_pending'),
+          where('telefone', '==', cleanProfilePhone)
+        );
+        
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+          console.log(`>>> [CLAIM] Encontrados ${snapshot.size} lançamentos para vincular.`);
+          
+          const promises = snapshot.docs.map(d => 
+            updateDoc(doc(db, 'lancamentos', d.id), {
+              userId: user.uid,
+              // We keep the phone for reference but it's now linked to the real user
+            })
+          );
+          
+          await Promise.all(promises);
+          console.log('>>> [CLAIM] Lançamentos vinculados com sucesso!');
+        }
+      } catch (error) {
+        console.error('>>> [CLAIM] Erro ao vincular lançamentos:', error);
+      }
+    };
+
+    claimPending();
+  }, [user, profile]);
 
   const handleEmailLogin = async (email: string, pass: string) => {
     await signInWithEmailAndPassword(auth, email, pass);
