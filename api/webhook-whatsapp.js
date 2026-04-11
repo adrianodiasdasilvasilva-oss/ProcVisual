@@ -14,11 +14,24 @@ export default async function handler(req, res) {
 
       const message = data?.messages?.[0];
 
+      if (!message) {
+        if (data?.statuses) {
+          console.log(">>> [WEBHOOK] Recebida atualização de status (lido/entregue). Ignorando para evitar duplicidade.");
+        } else {
+          console.log(">>> [WEBHOOK] Payload recebido sem mensagens reconhecidas.");
+        }
+        return res.status(200).json({ ok: true });
+      }
+
       // Only process incoming messages (not sent by the bot itself)
-      if (message && !message.from_me) {
-        console.log(">>> [WEBHOOK] Mensagem recebida de:", message.from);
-        const numero = message.from; // e.g. "5511999999999@s.whatsapp.net"
-        const type = message.type;
+      if (message.from_me) {
+        console.log(">>> [WEBHOOK] Ignorando mensagem enviada pelo próprio bot.");
+        return res.status(200).json({ ok: true });
+      }
+
+      console.log(">>> [WEBHOOK] Processando nova mensagem de:", message.from);
+      const numero = message.from; 
+      const type = message.type;
 
         // Initialize Firebase Admin if not already initialized
         if (admin.apps.length === 0) {
@@ -198,7 +211,6 @@ export default async function handler(req, res) {
             }
           }
         }
-      }
     } catch (error) {
       console.error("Erro ao processar:", error);
     }
