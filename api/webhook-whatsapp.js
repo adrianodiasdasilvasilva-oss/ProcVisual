@@ -235,23 +235,70 @@ Retorne apenas o nome da categoria.`;
 
 async function saveAndConfirm(db, numero, descricao, valor, origem) {
   try {
-    // Categorize automatically using AI
+    // 1. Clean phone number for searching
+    // numero is usually "5511999999999@s.whatsapp.net"
+    const cleanNumero = numero.split('@')[0].replace(/\D/g, "");
+    
+    // 2. Try to find the user in "usuarios" collection
+    let userId = "whatsapp_user"; // Fallback
+    try {
+      // Search for user with this phone number
+      // We try both with and without the country code if possible, 
+      // but usually it's stored as provided in registration
+      const usersSnap = await db.collection("usuarios")
+        .where("telefone", "==", cleanNumero)
+        .limit(1)
+        .get();
+      
+      if (!usersSnap.empty) {
+        userId = usersSnap.docs[0].id;
+        console.log(`>>> [WHATSAPP] Usuário encontrado: ${userId}`);
+      } else {
+        // Try with a partial match or different format if needed
+        // For now, let's try removing the '55' if it exists
+        if (cleanNumero.startsWith('55')) {
+          const withoutCC = cleanNumero.substring(2);
+          const usersSnap2 = await db.collection("usuarios")
+            .where("telefone", "==", withoutCC)
+            .limit(1)
+            .get();
+          if (!usersSnap2.empty) {
+            userId = usersSnap2.docs[0].id;
+            console.log(`>>> [WHATSAPP] Usuário encontrado (sem 55): ${userId}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error(">>> [WHATSAPP] Erro ao buscar usuário:", err);
+    }
+
+    // 3. Categorize automatically using AI
     const categoria = await categorize(descricao);
     console.log("Categoria definida");
 
     console.log("Salvando no Firebase");
-    // Create record in "despesas" collection
-    await db.collection("despesas").add({
-      descricao,
+    
+    // 4. Prepare data for "lancamentos" collection (matches App.tsx Transaction interface)
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    const transactionData = {
+      userId,
+      tipo: 'expense',
       valor,
       categoria,
-      telefone: numero,
+      data: today,
+      descricao: descricao,
+      estabelecimento: descricao, // Using same as description for now
       origem,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      pago: true // WhatsApp entries are usually already paid
+    };
+
+    // Create record in "lancamentos" collection
+    await db.collection("lancamentos").add(transactionData);
 
     console.log("Despesa salva com sucesso");
-    console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero}`);
+    console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero} | User: ${userId}`);
 
     // Send confirmation message via Whapi
     const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
