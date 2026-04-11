@@ -99,18 +99,29 @@ export default async function handler(req, res) {
             if (apiKey) {
               const ai = new GoogleGenAI({ apiKey });
               const model = "gemini-3-flash-preview";
+              
+              // Get current date in Brazil for relative date resolution
+              const now = new Date();
+              const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+              const todayStr = brazilTime.toISOString().split('T')[0];
+
               const prompt = `
-                Analise a mensagem de texto abaixo e extraia as informações de despesa em formato JSON:
+                Analise a mensagem de texto abaixo e extraia as informações de despesa em formato JSON.
+                Considere que HOJE é dia ${todayStr}.
+                
+                Campos do JSON:
                 - descricao: O que foi pago (ex: Internet, Uber, Almoço).
                 - valor: O valor unitário de cada parcela (apenas números, use ponto para decimais).
                 - parcela: O número da parcela atual (se houver, ex: 1). Padrão: 1.
                 - totalParcelas: O número total de parcelas (se houver, ex: 1). Padrão: 1.
-                - data: A data de vencimento ou do gasto no formato YYYY-MM-DD. Se não houver data explícita, use null.
+                - data: A data de vencimento ou do gasto no formato YYYY-MM-DD. 
+                  Se o usuário disser "amanhã", "hoje", "ontem" ou um dia da semana, calcule a data correta baseada em ${todayStr}.
+                  Se não houver data explícita ou relativa, use null.
                 
                 Exemplos:
                 "Lançar 2 parcelas de 200 Internet para o dia 12/04/26" -> {"descricao": "Internet", "valor": 200, "parcela": 1, "totalParcelas": 2, "data": "2026-04-12"}
+                "Água 50 vence amanhã" -> {"descricao": "Água", "valor": 50, "parcela": 1, "totalParcelas": 1, "data": "2026-04-12"} (considerando hoje 11/04)
                 "Almoço 45" -> {"descricao": "Almoço", "valor": 45, "parcela": 1, "totalParcelas": 1, "data": null}
-                "Lojas cem 280 (1/10)" -> {"descricao": "Lojas cem", "valor": 280, "parcela": 1, "totalParcelas": 10, "data": null}
                 
                 Mensagem: "${texto}"
                 
@@ -416,11 +427,13 @@ async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = 
       if (origem === "whatsapp_imagem") prefix = totalParcelas > 1 ? "Comprovante parcelado registrado" : "Comprovante recebido e registrado";
       if (origem === "whatsapp_audio") prefix = totalParcelas > 1 ? "Parcelamento registrado por áudio" : "Despesa registrada por áudio";
       
-      let confirmacao = `${prefix}: ${descricao} - R$ ${valorFormatado}`;
+      const dataFormatada = baseDate.toLocaleDateString('pt-BR');
+      let confirmacao = `${prefix}:\n✅ *${descricao}*\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* ${dataFormatada}`;
+      
       if (totalParcelas > 1) {
-        confirmacao += ` (${parcela}/${totalParcelas})`;
+        confirmacao += `\n🔢 *Parcela:* ${parcela}/${totalParcelas}`;
         if (parcela < totalParcelas) {
-          confirmacao += `\nLançadas ${totalParcelas - parcela + 1} parcelas futuras.`;
+          confirmacao += `\n🚀 Lançadas ${totalParcelas - parcela + 1} parcelas futuras.`;
         }
       }
       
