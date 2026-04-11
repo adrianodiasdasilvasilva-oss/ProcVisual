@@ -92,32 +92,78 @@ export default async function handler(req, res) {
         if (type === 'text') {
           const texto = message.text?.body || message.body || "";
           console.log(`>>> [WEBHOOK] Texto extraído: "${texto}"`);
-          console.log("Processando texto de:", numero, "Texto:", texto);
-          console.log("Extraindo valor e parcelas");
+          console.log("Processando texto com IA para extração de dados...");
 
-          // Detect installments pattern like (1/10) or 1/10
-          let parcela = 1;
-          let totalParcelas = 1;
-          const parcelaMatch = texto.match(/(\d+)\s*\/\s*(\d+)/);
-          if (parcelaMatch) {
-            parcela = parseInt(parcelaMatch[1]);
-            totalParcelas = parseInt(parcelaMatch[2]);
-            console.log(`>>> [WEBHOOK] Parcelas detectadas: ${parcela}/${totalParcelas}`);
-          }
+          try {
+            const apiKey = process.env.GEMINI_API_KEY_ || process.env.GEMINI_API_KEY;
+            if (apiKey) {
+              const ai = new GoogleGenAI({ apiKey });
+              const model = "gemini-3-flash-preview";
+              const prompt = `
+                Analise a mensagem de texto abaixo e extraia as informações de despesa em formato JSON:
+                - descricao: O que foi pago (ex: Internet, Uber, Almoço).
+                - valor: O valor unitário de cada parcela (apenas números, use ponto para decimais).
+                - parcela: O número da parcela atual (se houver, ex: 1). Padrão: 1.
+                - totalParcelas: O número total de parcelas (se houver, ex: 1). Padrão: 1.
+                - data: A data de vencimento ou do gasto no formato YYYY-MM-DD. Se não houver data explícita, use null.
+                
+                Exemplos:
+                "Lançar 2 parcelas de 200 Internet para o dia 12/04/26" -> {"descricao": "Internet", "valor": 200, "parcela": 1, "totalParcelas": 2, "data": "2026-04-12"}
+                "Almoço 45" -> {"descricao": "Almoço", "valor": 45, "parcela": 1, "totalParcelas": 1, "data": null}
+                "Lojas cem 280 (1/10)" -> {"descricao": "Lojas cem", "valor": 280, "parcela": 1, "totalParcelas": 10, "data": null}
+                
+                Mensagem: "${texto}"
+                
+                Responda APENAS o JSON puro, sem blocos de código markdown.
+              `;
 
-          // Basic parsing: "Description Value"
-          // Remove the installment part from text before parsing description/value
-          const textoLimpo = texto.replace(/[\(\[]?\d+\s*\/\s*\d+[\)\]]?/g, '').trim();
-          const parts = textoLimpo.split(/\s+/);
-          
-          if (parts.length >= 2) {
-            const valorStr = parts.pop();
-            const valor = parseFloat(valorStr.replace(',', '.'));
-            const descricao = parts.join(' ');
+              const genResponse = await ai.models.generateContent({
+                model,
+                contents: { parts: [{ text: prompt }] }
+              });
 
-            if (!isNaN(valor)) {
-              await saveAndConfirm(db, numero, descricao, valor, "whatsapp", message.timestamp, parcela, totalParcelas);
+              const resText = genResponse.text;
+              console.log(">>> Gemini Resposta (Texto):", resText);
+              
+              const cleanJson = resText.replace(/```json|```/g, '').trim();
+              const result = JSON.parse(cleanJson);
+
+              if (result.valor && !isNaN(parseFloat(result.valor))) {
+                const valor = parseFloat(result.valor);
+                const descricao = result.descricao || "Despesa via WhatsApp";
+                const p = parseInt(result.parcela) || 1;
+                const tp = parseInt(result.totalParcelas) || 1;
+                
+                // If AI found a date, convert it to timestamp for saveAndConfirm
+                let customTimestamp = message.timestamp;
+                if (result.data) {
+                  const [y, m, d] = result.data.split('-');
+                  // Create date in UTC and adjust to compensate for the -3h in saveAndConfirm
+                  const dateObj = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0));
+                  // We want saveAndConfirm to result in result.data after its -3h adjustment
+                  // So we pass a timestamp that represents 12:00 UTC
+                  customTimestamp = Math.floor(dateObj.getTime() / 1000) + (3 * 3600);
+                }
+
+                await saveAndConfirm(db, numero, descricao, valor, "whatsapp", customTimestamp, p, tp);
+              } else {
+                console.log(">>> [WHATSAPP] IA não encontrou valor numérico no texto.");
+              }
+            } else {
+              // Fallback to basic parsing if API key is missing
+              console.warn(">>> [WHATSAPP] GEMINI_API_KEY não configurada. Usando parsing básico.");
+              const parts = texto.trim().split(/\s+/);
+              if (parts.length >= 2) {
+                const valorStr = parts.pop();
+                const valor = parseFloat(valorStr.replace(',', '.'));
+                const descricao = parts.join(' ');
+                if (!isNaN(valor)) {
+                  await saveAndConfirm(db, numero, descricao, valor, "whatsapp", message.timestamp);
+                }
+              }
             }
+          } catch (err) {
+            console.error(">>> [WHATSAPP] Erro no processamento de texto com IA:", err);
           }
         } else if (type === 'image') {
           const imageUrl = message.image?.link;
