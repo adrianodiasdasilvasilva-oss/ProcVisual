@@ -5,43 +5,59 @@ import path from "path";
 import { GoogleGenAI } from "@google/genai";
 
 export default async function handler(req, res) {
+  console.log(`>>> [WEBHOOK] Request recebida: ${req.method} ${req.url}`);
+  
   if (req.method === 'POST') {
     try {
       const data = req.body;
-      console.log("Webhook recebido:", JSON.stringify(data));
+      console.log(">>> [WEBHOOK] Payload:", JSON.stringify(data));
 
       const message = data?.messages?.[0];
 
       // Only process incoming messages (not sent by the bot itself)
       if (message && !message.from_me) {
-        console.log("Mensagem recebida");
+        console.log(">>> [WEBHOOK] Mensagem recebida de:", message.from);
         const numero = message.from; // e.g. "5511999999999@s.whatsapp.net"
         const type = message.type;
 
         // Initialize Firebase Admin if not already initialized
         if (admin.apps.length === 0) {
+          console.log(">>> [WEBHOOK] Inicializando Firebase Admin...");
           const configPath = path.join(process.cwd(), "firebase-applet-config.json");
           if (fs.existsSync(configPath)) {
             const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
             admin.initializeApp({
               projectId: firebaseConfig.projectId
             });
+            console.log(">>> [WEBHOOK] Firebase Admin inicializado via config file.");
+          } else {
+            // Fallback for Vercel/Production using env vars
+            const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+            if (projectId) {
+              admin.initializeApp({ projectId });
+              console.log(">>> [WEBHOOK] Firebase Admin inicializado via ENV.");
+            } else {
+              console.error(">>> [WEBHOOK] Erro: FIREBASE_PROJECT_ID não encontrado.");
+            }
           }
         }
 
         // Get Firestore instance (respecting named database if present)
         let db;
         const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+        let dbId = process.env.FIREBASE_DATABASE_ID;
+
         if (fs.existsSync(configPath)) {
           const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-          const dbId = firebaseConfig.firestoreDatabaseId;
-          if (dbId && dbId !== '(default)') {
-            db = getFirestore(dbId);
-          } else {
-            db = getFirestore();
-          }
+          dbId = firebaseConfig.firestoreDatabaseId || dbId;
+        }
+
+        if (dbId && dbId !== '(default)') {
+          db = getFirestore(dbId);
+          console.log(`>>> [WEBHOOK] Usando banco de dados: ${dbId}`);
         } else {
           db = getFirestore();
+          console.log(">>> [WEBHOOK] Usando banco de dados: (default)");
         }
 
         if (type === 'text') {
@@ -235,50 +251,57 @@ Retorne apenas o nome da categoria.`;
 
 async function saveAndConfirm(db, numero, descricao, valor, origem) {
   try {
+    console.log(`>>> [WHATSAPP] Iniciando salvamento: ${descricao} | R$ ${valor}`);
+    
     // 1. Clean phone number for searching
     // numero is usually "5511999999999@s.whatsapp.net"
-    const cleanNumero = numero.split('@')[0].replace(/\D/g, "");
+    const rawNumero = numero.split('@')[0];
+    const cleanNumero = rawNumero.replace(/\D/g, "");
+    console.log(`>>> [WHATSAPP] Telefone limpo do remetente: ${cleanNumero}`);
     
     // 2. Try to find the user in "usuarios" collection
     let userId = "whatsapp_user"; // Fallback
     try {
-      // Search for user with this phone number
-      // We try both with and without the country code if possible, 
-      // but usually it's stored as provided in registration
-      const usersSnap = await db.collection("usuarios")
-        .where("telefone", "==", cleanNumero)
-        .limit(1)
-        .get();
+      console.log(">>> [WHATSAPP] Buscando usuário no Firestore...");
+      const usersSnap = await db.collection("usuarios").get();
       
       if (!usersSnap.empty) {
-        userId = usersSnap.docs[0].id;
-        console.log(`>>> [WHATSAPP] Usuário encontrado: ${userId}`);
-      } else {
-        // Try with a partial match or different format if needed
-        // For now, let's try removing the '55' if it exists
-        if (cleanNumero.startsWith('55')) {
-          const withoutCC = cleanNumero.substring(2);
-          const usersSnap2 = await db.collection("usuarios")
-            .where("telefone", "==", withoutCC)
-            .limit(1)
-            .get();
-          if (!usersSnap2.empty) {
-            userId = usersSnap2.docs[0].id;
-            console.log(`>>> [WHATSAPP] Usuário encontrado (sem 55): ${userId}`);
-          }
+        const match = usersSnap.docs.find(doc => {
+          const userData = doc.data();
+          const dbPhone = (userData.telefone || "").replace(/\D/g, "");
+          
+          // Match variations:
+          // 1. Exact match (e.g. 5511999999999 === 5511999999999)
+          // 2. Without CC (e.g. 11999999999 === 11999999999)
+          // 3. Mixed (e.g. 5511999999999 matches 11999999999)
+          return dbPhone === cleanNumero || 
+                 (cleanNumero.startsWith('55') && dbPhone === cleanNumero.substring(2)) ||
+                 (dbPhone.startsWith('55') && cleanNumero === dbPhone.substring(2)) ||
+                 ("55" + dbPhone === cleanNumero) ||
+                 ("55" + cleanNumero === dbPhone);
+        });
+
+        if (match) {
+          userId = match.id;
+          console.log(`>>> [WHATSAPP] Usuário encontrado: ${userId} (${match.data().nome})`);
+        } else {
+          console.warn(`>>> [WHATSAPP] Nenhum usuário encontrado para o telefone ${cleanNumero}. Usando fallback.`);
         }
+      } else {
+        console.warn(">>> [WHATSAPP] Coleção 'usuarios' está vazia.");
       }
     } catch (err) {
       console.error(">>> [WHATSAPP] Erro ao buscar usuário:", err);
     }
 
     // 3. Categorize automatically using AI
+    console.log(">>> [WHATSAPP] Definindo categoria...");
     const categoria = await categorize(descricao);
-    console.log("Categoria definida");
+    console.log(`>>> [WHATSAPP] Categoria definida: ${categoria}`);
 
-    console.log("Salvando no Firebase");
+    console.log(">>> [WHATSAPP] Salvando no Firebase (lancamentos)...");
     
-    // 4. Prepare data for "lancamentos" collection (matches App.tsx Transaction interface)
+    // 4. Prepare data for "lancamentos" collection
     const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     
     const transactionData = {
@@ -288,16 +311,14 @@ async function saveAndConfirm(db, numero, descricao, valor, origem) {
       categoria,
       data: today,
       descricao: descricao,
-      estabelecimento: descricao, // Using same as description for now
+      estabelecimento: descricao,
       origem,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      pago: true // WhatsApp entries are usually already paid
+      pago: true
     };
 
-    // Create record in "lancamentos" collection
-    await db.collection("lancamentos").add(transactionData);
-
-    console.log("Despesa salva com sucesso");
+    const docRef = await db.collection("lancamentos").add(transactionData);
+    console.log(`>>> [WHATSAPP] Despesa salva com sucesso! ID: ${docRef.id}`);
     console.log(`>>> [WHATSAPP] Despesa registrada (${origem}): ${descricao} | R$ ${valor} | Categoria: ${categoria} | De: ${numero} | User: ${userId}`);
 
     // Send confirmation message via Whapi
