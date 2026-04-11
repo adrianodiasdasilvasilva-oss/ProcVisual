@@ -470,18 +470,24 @@ async function startServer() {
   // --- WhatsApp Notification System ---
   // (Function sendWhatsApp moved up to be accessible by routes)
 
-  // Cron Job: Every day at 08:00
+  // Cron Job: Every day at 08:00 UTC (05:00 AM Brazil)
   cron.schedule("0 8 * * *", async () => {
-    console.log(">>> Iniciando Job de Notificações WhatsApp (08:00)...");
+    console.log(">>> [JOB] Iniciando Job de Notificações WhatsApp (08:00 UTC)...");
+    console.log(`>>> [JOB] Token Whapi presente: ${!!WHAPI_TOKEN}`);
     
     if (!dbAdmin) {
-      console.error(">>> Erro: Banco de dados não inicializado.");
+      console.error(">>> [JOB] Erro: Banco de dados não inicializado.");
       return;
     }
 
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // 1. Define "today" in Brazil Time (UTC-3)
+      const now = new Date();
+      const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+      const todayStr = brazilTime.toISOString().split('T')[0];
+      const today = new Date(todayStr + "T12:00:00"); // Use noon to avoid DST issues
+      
+      console.log(`>>> [JOB] Data de referência (Brasil): ${todayStr}`);
 
       // Fetch all unpaid expenses
       const snapshot = await dbAdmin.collection("lancamentos")
@@ -490,24 +496,32 @@ async function startServer() {
         .get();
 
       if (snapshot.empty) {
-        console.log(">>> Nenhuma despesa pendente encontrada.");
+        console.log(">>> [JOB] Nenhuma despesa pendente encontrada.");
         return;
       }
 
+      console.log(`>>> [JOB] Analisando ${snapshot.size} despesas pendentes...`);
+
       for (const document of snapshot.docs) {
         const data = document.data();
-        const vencimento = new Date(data.data);
-        vencimento.setHours(0, 0, 0, 0);
+        
+        // 2. Parse vencimento (data is YYYY-MM-DD)
+        const vencimento = new Date(data.data + "T12:00:00");
 
-        const createdAt = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.data);
-        createdAt.setHours(0, 0, 0, 0);
+        // 3. Parse createdAt and adjust to Brazil Time
+        const createdAtRaw = data.createdAt?.toDate ? data.createdAt.toDate() : new Date(data.data);
+        const createdAtBrazil = new Date(createdAtRaw.getTime() - (3 * 60 * 60 * 1000));
+        const createdAtStr = createdAtBrazil.toISOString().split('T')[0];
+        const createdAt = new Date(createdAtStr + "T12:00:00");
 
-        // Rule: Only start notifying from the day after registration
+        // Rule: Only start notifying from the day after registration (Brazil time)
+        // This prevents immediate notification if the job runs right after registration
         if (today.getTime() <= createdAt.getTime()) {
+          console.log(`>>> [JOB] Ignorando ${data.descricao}: Registrada hoje (${createdAtStr})`);
           continue;
         }
 
-        // Rule: If created on the same day as the due date, do not notify
+        // Rule: If created on the same day as the due date, do not notify (it was already "due" when created)
         if (createdAt.getTime() === vencimento.getTime()) {
           continue;
         }

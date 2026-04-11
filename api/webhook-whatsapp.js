@@ -395,7 +395,7 @@ async function saveAndConfirm(db, numero, descricao, valor, origem, timestamp = 
         estabelecimento: descricao,
         origem,
         createdAt: serverTimestamp(),
-        pago: i === parcela, // Only the first one is marked as paid by default
+        pago: false, // Set to false by default so the user gets notifications/reminders
         parcela: i,
         totalParcelas,
         groupId
