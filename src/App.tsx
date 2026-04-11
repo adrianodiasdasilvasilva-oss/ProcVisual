@@ -316,16 +316,25 @@ export default function App() {
     if (!user || !profile?.telefone) return;
 
     const claimPending = async () => {
-      const cleanProfilePhone = profile.telefone.replace(/\D/g, "");
-      if (!cleanProfilePhone) return;
+      const rawProfilePhone = profile.telefone.replace(/\D/g, "");
+      if (!rawProfilePhone) return;
 
-      console.log('>>> [CLAIM] Buscando lançamentos pendentes para:', cleanProfilePhone);
+      // Create a list of possible phone formats to check
+      // WhatsApp usually sends with 55. Profile might be with or without.
+      const possiblePhones = [rawProfilePhone];
+      if (rawProfilePhone.startsWith('55')) {
+        possiblePhones.push(rawProfilePhone.substring(2));
+      } else {
+        possiblePhones.push('55' + rawProfilePhone);
+      }
+
+      console.log('>>> [CLAIM] Buscando lançamentos pendentes para variações de:', possiblePhones);
       
       try {
         const q = query(
           collection(db, 'lancamentos'),
           where('userId', '==', 'whatsapp_pending'),
-          where('telefone', '==', cleanProfilePhone)
+          where('telefone', 'in', possiblePhones)
         );
         
         const snapshot = await getDocs(q);
@@ -335,7 +344,6 @@ export default function App() {
           const promises = snapshot.docs.map(d => 
             updateDoc(doc(db, 'lancamentos', d.id), {
               userId: user.uid,
-              // We keep the phone for reference but it's now linked to the real user
             })
           );
           
