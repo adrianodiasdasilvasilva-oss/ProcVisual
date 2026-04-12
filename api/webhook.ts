@@ -7,8 +7,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
-
 // Initialize Firebase Admin
 let dbAdmin: admin.firestore.Firestore | null = null;
 
@@ -16,7 +14,10 @@ async function initializeFirebaseAdmin() {
   if (dbAdmin) return dbAdmin;
   
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) return null;
+  if (!fs.existsSync(configPath)) {
+    console.error(">>> [WEBHOOK] Erro: firebase-applet-config.json não encontrado.");
+    return null;
+  }
   
   const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
   
@@ -24,6 +25,7 @@ async function initializeFirebaseAdmin() {
     admin.initializeApp({
       projectId: firebaseConfig.projectId
     });
+    console.log(">>> [WEBHOOK] Firebase Admin inicializado.");
   }
   
   dbAdmin = admin.firestore();
@@ -45,14 +47,25 @@ async function getRawBody(readable: any): Promise<Buffer> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log(`>>> [WEBHOOK] Chamada recebida: ${req.method} ${req.url}`);
+  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const stripeKey = process.env.STRIPE_SECRET_KEY;
+
+  if (!stripeKey) {
+    console.error(">>> [WEBHOOK] Erro: STRIPE_SECRET_KEY não configurada.");
+    return res.status(500).send("Webhook Error: STRIPE_SECRET_KEY não configurada.");
+  }
+
+  const stripe = new Stripe(stripeKey);
 
   if (!sig || !endpointSecret) {
+    console.error(">>> [WEBHOOK] Erro: Assinatura ou Secret ausente.");
     return res.status(400).send("Webhook Error: Assinatura ou Secret ausente.");
   }
 
@@ -62,11 +75,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawBody = await getRawBody(req);
     event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
   } catch (err: any) {
-    console.error(`>>> [STRIPE] Erro no Webhook: ${err.message}`);
+    console.error(`>>> [WEBHOOK] Erro na verificação da assinatura: ${err.message}`);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  console.log(`>>> [STRIPE] Evento recebido: ${event.type}`);
+  console.log(`>>> [WEBHOOK] Evento verificado: ${event.type}`);
 
   try {
     const db = await initializeFirebaseAdmin();
@@ -79,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const subscriptionId = session.subscription as string;
 
         if (userId) {
-          console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
+          console.log(`>>> [WEBHOOK] Ativando assinatura para o usuário: ${userId}`);
           await db.collection("usuarios").doc(userId).set({
             isActive: true,
             plan: "premium",
@@ -102,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (!userQuery.empty) {
             const userDoc = userQuery.docs[0];
-            console.log(`>>> [STRIPE] Renovação confirmada para o usuário: ${userDoc.id}`);
+            console.log(`>>> [WEBHOOK] Renovação confirmada para o usuário: ${userDoc.id}`);
             await userDoc.ref.update({
               isActive: true,
               lastPayment: admin.firestore.FieldValue.serverTimestamp()
@@ -124,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (!userQuery.empty) {
             const userDoc = userQuery.docs[0];
-            console.log(`>>> [STRIPE] Assinatura cancelada/removida para o usuário: ${userDoc.id}`);
+            console.log(`>>> [WEBHOOK] Assinatura cancelada/removida para o usuário: ${userDoc.id}`);
             await userDoc.ref.update({
               isActive: false,
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -137,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ received: true });
   } catch (error: any) {
-    console.error(">>> [STRIPE] Erro ao processar evento:", error.message);
+    console.error(">>> [WEBHOOK] Erro ao processar evento:", error.message);
     return res.status(500).json({ error: error.message });
   }
 }

@@ -4,9 +4,9 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
-
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log(`>>> [STRIPE] Chamada recebida: ${req.method} ${req.url}`);
+  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
@@ -14,17 +14,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { userId, email, priceId } = req.body;
 
   if (!userId || !email) {
+    console.error(">>> [STRIPE] Erro: UserId ou Email ausentes no body.");
     return res.status(400).json({ error: "UserId e Email são obrigatórios." });
   }
 
   try {
     const key = process.env.STRIPE_SECRET_KEY;
     if (!key || !key.startsWith('sk_')) {
+      console.error(">>> [STRIPE] Erro: STRIPE_SECRET_KEY inválida ou ausente.");
       return res.status(400).json({ 
         error: "Chave Secreta do Stripe inválida. A chave deve começar com 'sk_test_' ou 'sk_live_'. Por favor, verifique nos Segredos (Settings > Secrets)." 
       });
     }
 
+    const stripe = new Stripe(key);
     console.log(`>>> [STRIPE] Criando sessão de checkout para: ${email} (${userId})`);
     
     const session = await stripe.checkout.sessions.create({
@@ -44,9 +47,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cancel_url: `${req.headers.origin}/?payment=cancel`,
     });
 
+    console.log(`>>> [STRIPE] Sessão criada com sucesso: ${session.id}`);
     return res.status(200).json({ url: session.url });
   } catch (error: any) {
-    console.error(">>> [STRIPE] Erro ao criar sessão:", error.message);
+    console.error(">>> [STRIPE] Erro crítico ao criar sessão:", error.message);
     
     if (error.message.includes('Invalid API Key')) {
       return res.status(401).json({ 

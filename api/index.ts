@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { GoogleGenAI } from "@google/genai";
@@ -12,6 +11,14 @@ import Stripe from "stripe";
 import whatsappWebhook from "./webhook-whatsapp.js";
 
 dotenv.config();
+
+// Vite should only be imported in development
+let createViteServer: any;
+if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  import("vite").then(m => {
+    createViteServer = m.createServer;
+  });
+}
 
 const serverStartTime = new Date();
 console.log(`>>> [SISTEMA] Servidor iniciado em: ${serverStartTime.toISOString()}`);
@@ -595,28 +602,45 @@ initializeFirebaseAdmin();
 async function startServer() {
   const PORT = 3000;
 
-  // Start listening IMMEDIATELY so the port is bound and fetch doesn't fail
-  const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`>>> [SISTEMA] Servidor ouvindo em http://0.0.0.0:${PORT}`);
-  });
-
+  console.log(`>>> [SISTEMA] Iniciando startServer...`);
+  console.log(`>>> [SISTEMA] NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`>>> [SISTEMA] VERCEL: ${process.env.VERCEL || "NÃO"}`);
   console.log(`>>> [SISTEMA] WHAPI_TOKEN configurado: ${WHAPI_TOKEN ? "SIM" : "NÃO"}`);
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     console.log(">>> [SISTEMA] Iniciando Vite middleware...");
+    if (!createViteServer) {
+      const viteModule = await import("vite");
+      createViteServer = viteModule.createServer;
+    }
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
     console.log(">>> [SISTEMA] Vite middleware pronto.");
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+
+    // Only listen in local development
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`>>> [SISTEMA] Servidor ouvindo em http://0.0.0.0:${PORT}`);
     });
+  } else {
+    // Production (Vercel or Cloud Run)
+    const distPath = path.join(process.cwd(), 'dist');
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
+    // In Cloud Run or AI Studio (non-Vercel), we MUST listen on port 3000
+    if (!process.env.VERCEL) {
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`>>> [SISTEMA] Servidor de Produção ouvindo em http://0.0.0.0:${PORT}`);
+      });
+    }
   }
 
   // --- WhatsApp Notification System ---
