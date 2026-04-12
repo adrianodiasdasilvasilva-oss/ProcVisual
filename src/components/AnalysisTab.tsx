@@ -392,6 +392,7 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
                         key={eIdx} 
                         className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${
                           event.tipo === 'income' ? 'bg-proc-green' : 
+                          event.tipo === 'birthday' ? 'bg-pink-500' :
                           event.pago ? 'bg-proc-cyan' : 'bg-red-500'
                         }`}
                         title={event.descricao}
@@ -415,6 +416,10 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-proc-cyan" />
               <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Despesa Paga</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-pink-500" />
+              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Aniversário</span>
             </div>
           </div>
         </motion.section>
@@ -478,9 +483,10 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
                       <div className="flex items-center gap-3">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                           event.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                          event.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500' :
                           event.pago ? 'bg-proc-cyan/10 text-proc-cyan' : 'bg-red-500/10 text-red-500'
                         }`}>
-                          {event.tipo === 'income' ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+                          {event.tipo === 'income' ? <ArrowUpRight size={16} /> : event.tipo === 'birthday' ? '🎂' : <ArrowDownRight size={16} />}
                         </div>
                         <div>
                           <p className="text-sm font-bold text-proc-text-main leading-none">{event.descricao || event.estabelecimento}</p>
@@ -488,8 +494,12 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className={`text-sm font-bold ${event.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
-                          {event.tipo === 'income' ? '+' : '-'} {formatCurrency(event.valor)}
+                        <p className={`text-sm font-bold ${
+                          event.tipo === 'income' ? 'text-proc-green' : 
+                          event.tipo === 'birthday' ? 'text-pink-500' :
+                          'text-red-500'
+                        }`}>
+                          {event.tipo === 'income' ? '+' : event.tipo === 'birthday' ? '🎉' : '-'} {event.tipo === 'birthday' ? 'Aniversário' : formatCurrency(event.valor)}
                         </p>
                         {event.tipo === 'expense' && (
                           <span className={`text-[8px] font-bold uppercase tracking-widest ${event.pago ? 'text-proc-cyan' : 'text-amber-500'}`}>

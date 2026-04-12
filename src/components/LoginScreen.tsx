@@ -9,10 +9,11 @@ interface LoginScreenProps {
   onEmailLogin: (email: string, pass: string) => Promise<void>;
   onEmailSignUp: (email: string, pass: string, name: string, phone: string) => Promise<void>;
   onBack?: () => void;
+  initialIsSignUp?: boolean;
 }
 
-export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack }: LoginScreenProps) {
-  const [isSignUp, setIsSignUp] = useState(false);
+export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack, initialIsSignUp = false }: LoginScreenProps) {
+  const [isSignUp, setIsSignUp] = useState(initialIsSignUp);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');

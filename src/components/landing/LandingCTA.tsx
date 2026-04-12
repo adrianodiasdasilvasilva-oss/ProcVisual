@@ -27,7 +27,7 @@ export default function LandingCTA({ onStart }: LandingCTAProps) {
             </div>
             
             <h2 className="text-4xl md:text-6xl font-bold text-white mb-8 leading-tight tracking-tight">
-              Comece agora <br /> <span className="text-proc-green">gratuitamente</span>
+              Registre-se agora <br /> <span className="text-proc-green">gratuitamente</span>
             </h2>
             
             <p className="text-lg md:text-xl text-proc-text-sec mb-12 leading-relaxed">
@@ -38,7 +38,7 @@ export default function LandingCTA({ onStart }: LandingCTAProps) {
               onClick={onStart}
               className="px-12 py-5 rounded-2xl bg-white text-proc-bg font-bold text-lg flex items-center justify-center gap-3 mx-auto shadow-2xl hover:bg-proc-green hover:scale-105 transition-all group"
             >
-              Criar minha conta
+              Registrar
               <ArrowRight size={22} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </div>

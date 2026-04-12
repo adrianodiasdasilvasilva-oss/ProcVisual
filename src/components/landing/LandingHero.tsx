@@ -32,7 +32,7 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
               onClick={onStart}
               className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-proc-green text-proc-bg font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_40px_rgba(0,230,118,0.5)] hover:scale-105 transition-all"
             >
-              Começar grátis
+              Registrar
               <ArrowRight size={20} />
             </button>
             <button 

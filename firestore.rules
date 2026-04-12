@@ -18,14 +18,22 @@ service cloud.firestore {
     // Document ID: auto-generated
     // Fields:
     //   - userId: string (required, matches owner)
-    //   - tipo: string (required, 'income' | 'expense')
+    //   - tipo: string (required, 'income' | 'expense' | 'birthday')
     //   - valor: number (required, positive)
     //   - categoria: string (required)
     //   - data: string (required, ISO 8601 date)
     //   - descricao: string (optional)
     //   - estabelecimento: string (optional)
+    //   - telefone: string (optional)
     //   - createdAt: timestamp (required)
-    //   - comprovanteUrl: string (optional)
+    //   - updatedAt: timestamp (optional)
+    //   - pago: bool (optional)
+    //   - notificado5dias: bool (optional)
+    //   - notificadoNoDia: bool (optional)
+    //   - notificadoAmanha: bool (optional)
+    //   - parcela: int (optional)
+    //   - totalParcelas: int (optional)
+    //   - groupId: string (optional)
     //
     // ===============================================================
 
@@ -64,11 +72,11 @@ service cloud.firestore {
 
     function isValidLancamento(data) {
       return (data.userId == request.auth.uid || data.userId == "whatsapp_pending") &&
-             data.tipo in ['income', 'expense'] &&
+             data.tipo in ['income', 'expense', 'birthday'] &&
              data.valor is number && data.valor >= 0 &&
              data.categoria is string && data.categoria.size() > 0 &&
              data.data is string &&
-             data.createdAt is timestamp;
+             (data.createdAt is timestamp || data.createdAt == null); // Allow null if it's an update and we don't want to re-validate it strictly if it was already there
     }
 
     // ===============================================================

@@ -5,9 +5,10 @@ import Logo from '../Logo';
 
 interface LandingHeaderProps {
   onLogin: () => void;
+  onSignUp: () => void;
 }
 
-export default function LandingHeader({ onLogin }: LandingHeaderProps) {
+export default function LandingHeader({ onLogin, onSignUp }: LandingHeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
   const navLinks = [
@@ -47,10 +48,10 @@ export default function LandingHeader({ onLogin }: LandingHeaderProps) {
             Login
           </button>
           <button 
-            onClick={onLogin}
+            onClick={onSignUp}
             className="px-6 py-2.5 rounded-xl bg-proc-green text-proc-bg font-bold shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_30px_rgba(0,230,118,0.5)] transition-all"
           >
-            Começar Grátis
+            Registrar
           </button>
         </div>
 
@@ -88,10 +89,10 @@ export default function LandingHeader({ onLogin }: LandingHeaderProps) {
               Login
             </button>
             <button 
-              onClick={() => { onLogin(); setIsMenuOpen(false); }}
+              onClick={() => { onSignUp(); setIsMenuOpen(false); }}
               className="w-full py-4 rounded-xl bg-proc-green text-proc-bg font-bold"
             >
-              Começar Grátis
+              Registrar
             </button>
           </div>
         </motion.div>

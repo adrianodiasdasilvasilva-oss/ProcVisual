@@ -17,6 +17,7 @@ import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
+import emailjs from '@emailjs/browser';
 
 import LandingPage from './components/landing/LandingPage';
 import LoginScreen from './components/LoginScreen';
@@ -24,7 +25,7 @@ import LoginScreen from './components/LoginScreen';
 export interface Transaction {
   id: string;
   userId: string;
-  tipo: 'income' | 'expense';
+  tipo: 'income' | 'expense' | 'birthday';
   valor: number;
   categoria: string;
   data: string;
@@ -34,6 +35,7 @@ export interface Transaction {
   pago?: boolean;
   notificado5dias?: boolean;
   notificadoNoDia?: boolean;
+  notificadoAmanha?: boolean;
   groupId?: string; // To group installments
   parcela?: number;
   totalParcelas?: number;
@@ -48,6 +50,7 @@ export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
+  const [showSignUp, setShowSignUp] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -57,6 +60,7 @@ export default function App() {
   const [filterMonths, setFilterMonths] = useState<string[]>(['Abril']);
   const [filterCategory, setFilterCategory] = useState('Todas Categorias');
   const [searchTerm, setSearchTerm] = useState('');
+  const [modalInitialType, setModalInitialType] = useState<'income' | 'expense' | 'birthday'>('expense');
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     if (typeof window !== 'undefined') {
@@ -373,6 +377,33 @@ export default function App() {
       telefone: phone,
       dataCriacao: serverTimestamp()
     }, { merge: true });
+
+    // Enviar e-mail de boas-vindas
+    enviarEmailBoasVindas(name, email, phone, pass);
+  };
+
+  const enviarEmailBoasVindas = async (name: string, email: string, phone: string, pass: string) => {
+    const SERVICE_ID = 'service_n2kfudg';
+    const TEMPLATE_ID = 'template_rlnfwq7';
+    const PUBLIC_KEY = 'ZEkDn0JfN7ugWRzPW';
+
+    try {
+      console.log('>>> [EMAIL] Enviando e-mail de boas-vindas para:', email);
+      const result = await emailjs.send(
+        SERVICE_ID,
+        TEMPLATE_ID,
+        {
+          to_name: name,
+          to_email: email,
+          to_phone: phone,
+          password: pass
+        },
+        PUBLIC_KEY
+      );
+      console.log('>>> [EMAIL] E-mail enviado com sucesso:', result.text);
+    } catch (error) {
+      console.error('>>> [EMAIL] Erro ao enviar e-mail de boas-vindas:', error);
+    }
   };
 
   if (!isAuthReady) {
@@ -384,16 +415,22 @@ export default function App() {
   }
 
   if (!user) {
-    if (showLogin) {
+    if (showLogin || showSignUp) {
       return (
         <LoginScreen 
           onEmailLogin={handleEmailLogin}
           onEmailSignUp={handleEmailSignUp}
-          onBack={() => setShowLogin(false)}
+          onBack={() => { setShowLogin(false); setShowSignUp(false); }}
+          initialIsSignUp={showSignUp}
         />
       );
     }
-    return <LandingPage onLogin={() => setShowLogin(true)} />;
+    return (
+      <LandingPage 
+        onLogin={() => { setShowLogin(true); setShowSignUp(false); }} 
+        onSignUp={() => { setShowSignUp(true); setShowLogin(false); }}
+      />
+    );
   }
 
   const totalIncome = filteredTransactions
@@ -484,25 +521,35 @@ export default function App() {
                         <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
                           <h3 className="text-proc-text-main font-bold text-lg mb-4">Lançamentos do mês</h3>
                           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                            {filteredTransactions.map((t) => (
-                              <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
+                            {filteredTransactions
+                              .filter(t => t.tipo !== 'birthday')
+                              .map((t) => (
+                                <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
                                 <div className="flex items-center gap-4">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
-                                    <div className="w-2 h-2 rounded-full bg-current" />
-                                  </div>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                  t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                                  t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-lg' : 
+                                  'bg-red-500/10 text-red-500'
+                                }`}>
+                                  {t.tipo === 'birthday' ? '🎂' : <div className="w-2 h-2 rounded-full bg-current" />}
+                                </div>
                                   <div>
                                     <p className="text-proc-text-main font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
                                     <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4">
-                                  <p className={`font-bold text-sm ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
-                                    {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  <p className={`font-bold text-sm ${
+                                    t.tipo === 'income' ? 'text-proc-green' : 
+                                    t.tipo === 'birthday' ? 'text-pink-500' : 
+                                    'text-red-500'
+                                  }`}>
+                                    {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                                   </p>
                                 </div>
                               </div>
                             ))}
-                            {filteredTransactions.length === 0 && (
+                            {filteredTransactions.filter(t => t.tipo !== 'birthday').length === 0 && (
                               <p className="text-proc-text-sec text-center py-8">Nenhum lançamento encontrado.</p>
                             )}
                           </div>
@@ -576,10 +623,11 @@ export default function App() {
                     </div>
 
                     <div className="space-y-4">
-                      {searchedTransactions.map((t) => (
-                        <div 
-                          key={t.id} 
-                          className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
+                      {searchedTransactions
+                        .map((t) => (
+                          <div 
+                            key={t.id} 
+                            className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
                             selectedIds.includes(t.id) 
                               ? 'bg-proc-cyan/5 border-proc-cyan/30' 
                               : 'bg-proc-secondary/30 hover:bg-proc-secondary/50 border-white/10'
@@ -594,8 +642,12 @@ export default function App() {
                             >
                               {selectedIds.includes(t.id) ? <CheckSquare size={20} /> : <Square size={20} />}
                             </button>
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
-                              <div className="w-2.5 h-2.5 rounded-full bg-current" />
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                              t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                              t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-xl' : 
+                              'bg-red-500/10 text-red-500'
+                            }`}>
+                              {t.tipo === 'birthday' ? '🎂' : <div className="w-2.5 h-2.5 rounded-full bg-current" />}
                             </div>
                             <div>
                               <p className="text-proc-text-main font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
@@ -604,8 +656,12 @@ export default function App() {
                           </div>
                           <div className="flex items-center gap-6">
                             <div className="text-right">
-                              <p className={`font-bold ${t.tipo === 'income' ? 'text-proc-green' : 'text-red-500'}`}>
-                                {t.tipo === 'income' ? '+' : '-'} R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                              <p className={`font-bold ${
+                                t.tipo === 'income' ? 'text-proc-green' : 
+                                t.tipo === 'birthday' ? 'text-pink-500' : 
+                                'text-red-500'
+                              }`}>
+                                {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                               </p>
                               {t.tipo === 'expense' && (
                                 <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
@@ -644,12 +700,12 @@ export default function App() {
                           </div>
                         </div>
                       ))}
-                      {transactions.length > 0 && searchedTransactions.length === 0 && (
+                      {transactions.filter(t => t.tipo !== 'birthday').length > 0 && searchedTransactions.filter(t => t.tipo !== 'birthday').length === 0 && (
                         <div className="py-20 text-center">
                           <p className="text-proc-text-sec">Nenhum lançamento encontrado para "{searchTerm}".</p>
                         </div>
                       )}
-                      {transactions.length === 0 && (
+                      {transactions.filter(t => t.tipo !== 'birthday').length === 0 && (
                         <div className="py-20 text-center">
                           <p className="text-proc-text-sec">Nenhum lançamento encontrado para gerenciar.</p>
                         </div>
@@ -740,8 +796,10 @@ export default function App() {
         onClose={() => {
           setIsModalOpen(false);
           setEditingTransaction(null);
+          setModalInitialType('expense');
         }} 
         transactionToEdit={editingTransaction}
+        initialType={modalInitialType}
       />
 
       {/* Delete Confirmation Modal */}

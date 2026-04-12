@@ -25,11 +25,12 @@ interface NewTransactionModalProps {
   isOpen: boolean;
   onClose: () => void;
   transactionToEdit?: Transaction | null;
+  initialType?: 'income' | 'expense' | 'birthday';
 }
 
 type ModalView = 'selection' | 'manual' | 'receipt' | 'processing' | 'success';
 
-export default function NewTransactionModal({ isOpen, onClose, transactionToEdit }: NewTransactionModalProps) {
+export default function NewTransactionModal({ isOpen, onClose, transactionToEdit, initialType = 'expense' }: NewTransactionModalProps) {
   const [view, setView] = useState<ModalView>('selection');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -52,7 +53,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     'Transporte',
     'Lazer',
     'Saúde',
-    'Educação'
+    'Educação',
+    'Aniversário'
   ];
 
   // Form states
@@ -112,7 +114,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     } else if (isOpen && !transactionToEdit) {
       resetModal();
     }
-  }, [isOpen, transactionToEdit]);
+  }, [isOpen, transactionToEdit, initialType]);
 
   const resetModal = () => {
     setView('selection');
@@ -125,9 +127,9 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setIsCustomCategory(false);
     setCustomCategory('');
     setFormData({
-      type: 'expense',
-      value: '',
-      category: 'Outros',
+      type: initialType,
+      value: initialType === 'birthday' ? '0' : '',
+      category: initialType === 'birthday' ? 'Aniversário' : 'Outros',
       date: new Date().toISOString().split('T')[0],
       description: '',
       establishment: '',
@@ -665,47 +667,57 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                   <div className="flex bg-proc-bg/50 p-1 rounded-xl border border-white/5">
                     <button
                       type="button"
-                      onClick={() => setFormData({...formData, type: 'income'})}
+                      onClick={() => setFormData({...formData, type: 'income', category: formData.category === 'Aniversário' ? 'Outros' : formData.category})}
                       className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === 'income' ? 'bg-proc-green text-proc-bg' : 'text-proc-text-sec'}`}
                     >
                       Receita
                     </button>
                     <button
                       type="button"
-                      onClick={() => setFormData({...formData, type: 'expense'})}
+                      onClick={() => setFormData({...formData, type: 'expense', category: formData.category === 'Aniversário' ? 'Outros' : formData.category})}
                       className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === 'expense' ? 'bg-red-500 text-white' : 'text-proc-text-sec'}`}
                     >
                       Despesa
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({...formData, type: 'birthday', category: 'Aniversário', value: '0'})}
+                      className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${formData.type === 'birthday' ? 'bg-pink-500 text-white' : 'text-proc-text-sec'}`}
+                    >
+                      Aniversário
+                    </button>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
-                      <DollarSign size={10} /> Valor
-                    </label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-cyan font-bold">R$</span>
-                      <input 
-                        type="number" 
-                        step="0.01"
-                        required
-                        value={formData.value}
-                        onChange={(e) => setFormData({...formData, value: e.target.value})}
-                        placeholder="0,00"
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-proc-text-main font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors text-lg"
-                      />
+                  {formData.type !== 'birthday' && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
+                        <DollarSign size={10} /> Valor
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-cyan font-bold">R$</span>
+                        <input 
+                          type="number" 
+                          step="0.01"
+                          required
+                          value={formData.value}
+                          onChange={(e) => setFormData({...formData, value: e.target.value})}
+                          placeholder="0,00"
+                          className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-proc-text-main font-bold focus:outline-none focus:border-proc-cyan/50 transition-colors text-lg"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
-                      <Store size={10} /> Estabelecimento
+                      {formData.type === 'birthday' ? <Edit3 size={10} /> : <Store size={10} />} 
+                      {formData.type === 'birthday' ? 'Nome do Aniversariante' : 'Estabelecimento'}
                     </label>
                     <input 
                       type="text" 
                       value={formData.establishment}
                       onChange={(e) => setFormData({...formData, establishment: e.target.value})}
-                      placeholder="Nome da loja ou local"
+                      placeholder={formData.type === 'birthday' ? "Ex: Maria" : "Nome da loja ou local"}
                       className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                     />
                   </div>
@@ -717,6 +729,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       </label>
                       <select 
                         value={isCustomCategory ? 'Personalizada' : formData.category}
+                        disabled={formData.type === 'birthday'}
                         onChange={(e) => {
                           if (e.target.value === 'Personalizada') {
                             setIsCustomCategory(true);
@@ -725,7 +738,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                             setFormData({...formData, category: e.target.value});
                           }
                         }}
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none"
+                        className={`w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors appearance-none ${formData.type === 'birthday' ? 'opacity-70 cursor-not-allowed' : ''}`}
                       >
                         {predefinedCategories.map(cat => (
                           <option key={cat} value={cat} className="bg-proc-bg text-proc-text-main">{cat}</option>
@@ -753,7 +766,7 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1 flex items-center gap-1">
                         <ArrowLeft size={10} className="rotate-180" /> 
-                        {formData.type === 'expense' ? 'Repetir em quantas parcelas?' : 'Repetir em quantos meses?'}
+                        {formData.type === 'expense' ? 'Repetir em quantas parcelas?' : formData.type === 'birthday' ? 'Repetir em quantos anos?' : 'Repetir em quantos meses?'}
                       </label>
                       <div className="relative">
                         <input 
@@ -765,11 +778,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                           className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                         />
                         <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-proc-text-sec uppercase">
-                          Meses
+                          {formData.type === 'birthday' ? 'Anos' : 'Meses'}
                         </div>
                       </div>
                       <p className="text-[10px] text-proc-text-sec ml-1 italic">
-                        O lançamento será repetido mensalmente a partir da data selecionada.
+                        {formData.type === 'birthday' 
+                          ? 'O lançamento será repetido anualmente a partir da data selecionada.' 
+                          : 'O lançamento será repetido mensalmente a partir da data selecionada.'}
                       </p>
                     </div>
                   )}
@@ -792,6 +807,20 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                         required
                       />
                     </motion.div>
+                  )}
+
+                  {(formData.type === 'expense' || formData.type === 'birthday') && (
+                    <div className="pt-2">
+                      {formData.type === 'expense' ? (
+                        <p className="text-[10px] text-proc-cyan font-bold italic leading-relaxed">
+                          *O usuário será notificado via whatsapp no dia do vencimento e 5 dias antes.
+                        </p>
+                      ) : (
+                        <p className="text-[10px] text-pink-500 font-bold italic leading-relaxed">
+                          *O usuário será notificado no dia do aniversário e um dia antes
+                        </p>
+                      )}
+                    </div>
                   )}
 
                   <div className="flex gap-3 pt-4">

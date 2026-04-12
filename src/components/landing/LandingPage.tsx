@@ -10,9 +10,10 @@ import LegalModal from './LegalModal';
 
 interface LandingPageProps {
   onLogin: () => void;
+  onSignUp: () => void;
 }
 
-export default function LandingPage({ onLogin }: LandingPageProps) {
+export default function LandingPage({ onLogin, onSignUp }: LandingPageProps) {
   const [legalModal, setLegalModal] = React.useState<{ isOpen: boolean; type: 'terms' | 'privacy' }>({
     isOpen: false,
     type: 'terms'
@@ -24,14 +25,14 @@ export default function LandingPage({ onLogin }: LandingPageProps) {
 
   return (
     <div className="min-h-screen bg-proc-bg text-white font-sans selection:bg-proc-green/30 overflow-x-hidden">
-      <LandingHeader onLogin={onLogin} />
+      <LandingHeader onLogin={onLogin} onSignUp={onSignUp} />
       
       <main>
-        <LandingHero onStart={onLogin} />
+        <LandingHero onStart={onSignUp} />
         <LandingFeatures />
         <LandingHowItWorks />
         <LandingPreview />
-        <LandingCTA onStart={onLogin} />
+        <LandingCTA onStart={onSignUp} />
       </main>
 
       <LandingFooter onOpenLegal={openLegal} />

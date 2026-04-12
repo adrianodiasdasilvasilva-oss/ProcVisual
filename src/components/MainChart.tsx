@@ -47,7 +47,7 @@ export default function MainChart({ transactions, month, year }: MainChartProps)
           <BarChart 
             data={data} 
             layout="vertical"
-            margin={{ top: 5, right: 45, left: 40, bottom: 5 }}
+            margin={{ top: 5, right: 45, left: 10, bottom: 5 }}
           >
             <defs>
               <linearGradient id="barGradient" x1="0" y1="0" x2="1" y2="0">
@@ -65,8 +65,9 @@ export default function MainChart({ transactions, month, year }: MainChartProps)
               type="category" 
               axisLine={false} 
               tickLine={false} 
-              tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 600 }} 
-              width={80}
+              tick={{ fill: 'var(--proc-text-main)', fontSize: 12, fontWeight: 700 }} 
+              width={110}
+              interval={0}
             />
             <Tooltip 
               cursor={{ fill: 'var(--proc-text-sec)', opacity: 0.05 }}
@@ -84,7 +85,7 @@ export default function MainChart({ transactions, month, year }: MainChartProps)
               dataKey="value" 
               radius={[0, 6, 6, 0]}
               filter="url(#glow)"
-              barSize={12}
+              barSize={16}
             >
               <LabelList 
                 dataKey="percent" 

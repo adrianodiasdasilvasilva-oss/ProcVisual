@@ -73,6 +73,7 @@ export default function ReportsTab({ transactions, userName, selectedYears, sele
   // Filter transactions based on report type (income/expense/complete)
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
+      if (t.tipo === 'birthday') return false;
       const inType = reportType === 'complete' || t.tipo === reportType;
       return inType;
     });

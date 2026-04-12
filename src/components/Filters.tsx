@@ -1,4 +1,4 @@
-import { ChevronDown, Filter, Calendar, Tag, Layers, Sun, Moon, CheckSquare, Square } from 'lucide-react';
+import { ChevronDown, Filter, Calendar, Tag, Layers, Sun, Moon, CheckSquare, Square, X } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
 interface FiltersProps {
@@ -69,86 +69,130 @@ export default function Filters({ theme, onToggleTheme, years: selectedYears, mo
   return (
     <div className="px-0 md:px-0 py-2 flex flex-wrap gap-3 items-center">
       {/* Year Filter (Multi-select) */}
-      <div className="relative" ref={yearDropdownRef}>
-        <button
-          onClick={() => setIsYearDropdownOpen(!isYearDropdownOpen)}
-          className="flex items-center gap-2 bg-proc-secondary/30 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-semibold text-proc-text-main focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all cursor-pointer min-w-[120px] relative group"
-        >
-          <Calendar size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-proc-text-sec group-hover:text-proc-cyan transition-colors" />
-          <span className="truncate max-w-[80px]">{getYearLabel()}</span>
-          <ChevronDown size={14} className={`ml-auto text-proc-text-sec transition-transform ${isYearDropdownOpen ? 'rotate-180' : ''}`} />
-        </button>
+      <div className="flex items-center gap-2">
+        <div className="relative" ref={yearDropdownRef}>
+          <button
+            onClick={() => setIsYearDropdownOpen(!isYearDropdownOpen)}
+            className="flex items-center gap-2 bg-proc-secondary/30 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-semibold text-proc-text-main focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all cursor-pointer min-w-[120px] relative group"
+          >
+            <Calendar size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-proc-text-sec group-hover:text-proc-cyan transition-colors" />
+            <span className="truncate max-w-[80px]">{getYearLabel()}</span>
+            <ChevronDown size={14} className={`ml-auto text-proc-text-sec transition-transform ${isYearDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
 
-        {isYearDropdownOpen && (
-          <div className="absolute top-full left-0 mt-2 w-40 bg-proc-secondary border border-white/10 rounded-2xl shadow-2xl z-50 py-2 max-h-64 overflow-y-auto custom-scrollbar">
-            <div className="px-3 py-1 border-b border-white/5 mb-1 flex justify-between items-center">
-              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Anos</span>
-              <button 
-                onClick={() => onFilterChange({ years: selectedYears.length === years.length ? [] : years })}
-                className="text-[10px] text-proc-cyan hover:underline"
-              >
-                {selectedYears.length === years.length ? 'Limpar' : 'Todos'}
-              </button>
+          {isYearDropdownOpen && (
+            <div className="absolute top-full left-0 mt-2 w-40 bg-proc-secondary border border-white/10 rounded-2xl shadow-2xl z-50 py-2 max-h-64 overflow-y-auto custom-scrollbar">
+              <div className="px-3 py-1 border-b border-white/5 mb-1 flex justify-between items-center">
+                <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Anos</span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => onFilterChange({ years: [] })}
+                    className={`text-[10px] text-proc-cyan hover:underline ${selectedYears.length === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    disabled={selectedYears.length === 0}
+                  >
+                    Limpar
+                  </button>
+                  <button 
+                    onClick={() => onFilterChange({ years: years })}
+                    className={`text-[10px] text-proc-cyan hover:underline ${selectedYears.length === years.length ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    disabled={selectedYears.length === years.length}
+                  >
+                    Todos
+                  </button>
+                </div>
+              </div>
+              {years.map(y => (
+                <button
+                  key={y}
+                  onClick={() => toggleYear(y)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-proc-text-main hover:bg-white/5 transition-colors text-left"
+                >
+                  {selectedYears.includes(y) ? (
+                    <CheckSquare size={14} className="text-proc-cyan" />
+                  ) : (
+                    <Square size={14} className="text-proc-text-sec" />
+                  )}
+                  <span className={selectedYears.includes(y) ? 'text-proc-text-main font-bold' : 'text-proc-text-sec'}>
+                    {y}
+                  </span>
+                </button>
+              ))}
             </div>
-            {years.map(y => (
-              <button
-                key={y}
-                onClick={() => toggleYear(y)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-proc-text-main hover:bg-white/5 transition-colors text-left"
-              >
-                {selectedYears.includes(y) ? (
-                  <CheckSquare size={14} className="text-proc-cyan" />
-                ) : (
-                  <Square size={14} className="text-proc-text-sec" />
-                )}
-                <span className={selectedYears.includes(y) ? 'text-proc-text-main font-bold' : 'text-proc-text-sec'}>
-                  {y}
-                </span>
-              </button>
-            ))}
-          </div>
+          )}
+        </div>
+        {selectedYears.length > 1 && (
+          <button 
+            onClick={() => onFilterChange({ years: [] })}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+            title="Limpar anos"
+          >
+            <X size={10} />
+            Limpar
+          </button>
         )}
       </div>
 
       {/* Month Filter (Multi-select) */}
-      <div className="relative" ref={monthDropdownRef}>
-        <button
-          onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)}
-          className="flex items-center gap-2 bg-proc-secondary/30 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-semibold text-proc-text-main focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all cursor-pointer min-w-[140px] relative group"
-        >
-          <Layers size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-proc-text-sec group-hover:text-proc-cyan transition-colors" />
-          <span className="truncate max-w-[100px]">{getMonthLabel()}</span>
-          <ChevronDown size={14} className={`ml-auto text-proc-text-sec transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
-        </button>
+      <div className="flex items-center gap-2">
+        <div className="relative" ref={monthDropdownRef}>
+          <button
+            onClick={() => setIsMonthDropdownOpen(!isMonthDropdownOpen)}
+            className="flex items-center gap-2 bg-proc-secondary/30 border border-white/10 rounded-2xl pl-9 pr-4 py-2.5 text-xs font-semibold text-proc-text-main focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all cursor-pointer min-w-[140px] relative group"
+          >
+            <Layers size={12} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-proc-text-sec group-hover:text-proc-cyan transition-colors" />
+            <span className="truncate max-w-[100px]">{getMonthLabel()}</span>
+            <ChevronDown size={14} className={`ml-auto text-proc-text-sec transition-transform ${isMonthDropdownOpen ? 'rotate-180' : ''}`} />
+          </button>
 
-        {isMonthDropdownOpen && (
-          <div className="absolute top-full left-0 mt-2 w-48 bg-proc-secondary border border-white/10 rounded-2xl shadow-2xl z-50 py-2 max-h-64 overflow-y-auto custom-scrollbar">
-            <div className="px-3 py-1 border-b border-white/5 mb-1 flex justify-between items-center">
-              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Meses</span>
-              <button 
-                onClick={() => onFilterChange({ months: selectedMonths.length === 12 ? [] : months })}
-                className="text-[10px] text-proc-cyan hover:underline"
-              >
-                {selectedMonths.length === 12 ? 'Limpar' : 'Todos'}
-              </button>
+          {isMonthDropdownOpen && (
+            <div className="absolute top-full left-0 mt-2 w-48 bg-proc-secondary border border-white/10 rounded-2xl shadow-2xl z-50 py-2 max-h-64 overflow-y-auto custom-scrollbar">
+              <div className="px-3 py-1 border-b border-white/5 mb-1 flex justify-between items-center">
+                <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Meses</span>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => onFilterChange({ months: [] })}
+                    className={`text-[10px] text-proc-cyan hover:underline ${selectedMonths.length === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    disabled={selectedMonths.length === 0}
+                  >
+                    Limpar
+                  </button>
+                  <button 
+                    onClick={() => onFilterChange({ months: months })}
+                    className={`text-[10px] text-proc-cyan hover:underline ${selectedMonths.length === 12 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                    disabled={selectedMonths.length === 12}
+                  >
+                    Todos
+                  </button>
+                </div>
+              </div>
+              {months.map(m => (
+                <button
+                  key={m}
+                  onClick={() => toggleMonth(m)}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-proc-text-main hover:bg-white/5 transition-colors text-left"
+                >
+                  {selectedMonths.includes(m) ? (
+                    <CheckSquare size={14} className="text-proc-cyan" />
+                  ) : (
+                    <Square size={14} className="text-proc-text-sec" />
+                  )}
+                  <span className={selectedMonths.includes(m) ? 'text-proc-text-main font-bold' : 'text-proc-text-sec'}>
+                    {m}
+                  </span>
+                </button>
+              ))}
             </div>
-            {months.map(m => (
-              <button
-                key={m}
-                onClick={() => toggleMonth(m)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-xs text-proc-text-main hover:bg-white/5 transition-colors text-left"
-              >
-                {selectedMonths.includes(m) ? (
-                  <CheckSquare size={14} className="text-proc-cyan" />
-                ) : (
-                  <Square size={14} className="text-proc-text-sec" />
-                )}
-                <span className={selectedMonths.includes(m) ? 'text-proc-text-main font-bold' : 'text-proc-text-sec'}>
-                  {m}
-                </span>
-              </button>
-            ))}
-          </div>
+          )}
+        </div>
+        {selectedMonths.length > 1 && (
+          <button 
+            onClick={() => onFilterChange({ months: [] })}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-bold uppercase tracking-widest"
+            title="Limpar meses"
+          >
+            <X size={10} />
+            Limpar
+          </button>
         )}
       </div>
 

@@ -489,21 +489,23 @@ async function startServer() {
       
       console.log(`>>> [JOB] Data de referência (Brasil): ${todayStr}`);
 
-      // Fetch all unpaid expenses
+      // Fetch all unpaid expenses and birthdays
       const snapshot = await dbAdmin.collection("lancamentos")
-        .where("tipo", "==", "expense")
-        .where("pago", "==", false)
+        .where("tipo", "in", ["expense", "birthday"])
         .get();
 
       if (snapshot.empty) {
-        console.log(">>> [JOB] Nenhuma despesa pendente encontrada.");
+        console.log(">>> [JOB] Nenhum lançamento pendente ou aniversário encontrado.");
         return;
       }
 
-      console.log(`>>> [JOB] Analisando ${snapshot.size} despesas pendentes...`);
+      console.log(`>>> [JOB] Analisando ${snapshot.size} lançamentos...`);
 
       for (const document of snapshot.docs) {
         const data = document.data();
+        
+        // Skip paid expenses
+        if (data.tipo === 'expense' && data.pago === true) continue;
         
         // 2. Parse vencimento (data is YYYY-MM-DD)
         const vencimento = new Date(data.data + "T12:00:00");
@@ -529,7 +531,7 @@ async function startServer() {
         const diffTime = vencimento.getTime() - today.getTime();
         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-        console.log(`>>> [JOB] Analisando: ${data.descricao || data.estabelecimento} | Vencimento: ${data.data} | Dias Restantes: ${diffDays}`);
+        console.log(`>>> [JOB] Analisando: ${data.descricao || data.estabelecimento} | Tipo: ${data.tipo} | Vencimento: ${data.data} | Dias Restantes: ${diffDays}`);
 
         // Fetch user phone number (Prioritize phone stored in transaction)
         let telefone = data.telefone;
@@ -552,6 +554,31 @@ async function startServer() {
         const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
         const dataVencimentoFormatada = vencimento.toLocaleDateString("pt-BR");
 
+        // Birthday Notifications
+        if (data.tipo === 'birthday') {
+          // Rule: 1 day before (Tomorrow)
+          if (diffDays === 1 && !data.notificadoAmanha) {
+            const message = `👀 *LEMBRETE DE ANIVERSÁRIO*\n\nAmanhã é aniversário da *${data.estabelecimento || data.descricao}*! 🎉\n\nJá comprou o presente? 🎁`;
+            const result = await sendWhatsApp(telefone, message);
+            if (result.success) {
+              await document.ref.update({ notificadoAmanha: true });
+              console.log(`>>> [JOB] Notificação de aniversário (amanhã) enviada para ${telefone}`);
+            }
+          }
+
+          // Rule: On the day
+          if (diffDays === 0 && !data.notificadoNoDia) {
+            const message = `🥳 *HOJE É O DIA!*\n\nHoje é aniversário da *${data.estabelecimento || data.descricao}*! 🎉✨\n\nNão esqueça de dar os parabéns! 🎂🎈`;
+            const result = await sendWhatsApp(telefone, message);
+            if (result.success) {
+              await document.ref.update({ notificadoNoDia: true });
+              console.log(`>>> [JOB] Notificação de aniversário (hoje) enviada para ${telefone}`);
+            }
+          }
+          continue; // Move to next item
+        }
+
+        // Expense Notifications
         // Rule: 5 days before
         if (diffDays === 5 && !data.notificado5dias) {
           const message = `⚠️ *AVISO DE VENCIMENTO*\n\nOlá! 👋 Você tem uma despesa próxima do vencimento:\n\n📄 *Descrição:* ${data.descricao || data.estabelecimento}\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* ${dataVencimentoFormatada}\n\nNão esqueça de se programar para evitar atrasos.`;

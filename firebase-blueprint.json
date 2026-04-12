@@ -46,8 +46,8 @@
         },
         "tipo": {
           "type": "string",
-          "enum": ["income", "expense"],
-          "description": "Tipo do lançamento (Receita ou Despesa)"
+          "enum": ["income", "expense", "birthday"],
+          "description": "Tipo do lançamento (Receita, Despesa ou Aniversário)"
         },
         "valor": {
           "type": "number",
@@ -60,20 +60,57 @@
         "data": {
           "type": "string",
           "format": "date",
-          "description": "Data da transação"
+          "description": "Data da transação ou aniversário"
         },
         "descricao": {
           "type": "string",
-          "description": "Descrição detalhada ou nome do estabelecimento"
-        },
-        "comprovanteUrl": {
-          "type": "string",
-          "format": "uri",
-          "description": "URL da imagem do comprovante no storage"
+          "description": "Descrição detalhada ou nome do aniversariante"
         },
         "estabelecimento": {
           "type": "string",
-          "description": "Nome do estabelecimento onde ocorreu a transação"
+          "description": "Nome do estabelecimento ou aniversariante"
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Telefone para notificações"
+        },
+        "pago": {
+          "type": "boolean",
+          "description": "Status de pagamento (apenas para despesas)"
+        },
+        "notificado5dias": {
+          "type": "boolean",
+          "description": "Se já foi notificado 5 dias antes"
+        },
+        "notificadoNoDia": {
+          "type": "boolean",
+          "description": "Se já foi notificado no dia"
+        },
+        "notificadoAmanha": {
+          "type": "boolean",
+          "description": "Se já foi notificado 1 dia antes (aniversários)"
+        },
+        "parcela": {
+          "type": "integer",
+          "description": "Número da parcela atual"
+        },
+        "totalParcelas": {
+          "type": "integer",
+          "description": "Total de parcelas ou anos de repetição"
+        },
+        "groupId": {
+          "type": "string",
+          "description": "ID do grupo para lançamentos parcelados ou repetidos"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data de criação do registro"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Data da última atualização"
         }
       },
       "required": ["userId", "tipo", "valor", "categoria", "data"]

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, MessageCircle, Info } from 'lucide-react';
+import { X, Sparkles, MessageCircle, Info, Cake, Mic } from 'lucide-react';
 
 interface Message {
   id: string;
@@ -33,6 +33,16 @@ export default function InteractiveBalloon({ userData, transactionsCount }: Inte
       id: 'tip',
       text: 'Dica: Use categorias personalizadas para melhor organização.',
       icon: <Info className="text-proc-cyan" size={18} />,
+    },
+    {
+      id: 'birthday_info',
+      text: 'Nunca mais esqueça um aniversário, cadastre as datas e seja notificado',
+      icon: <Cake className="text-pink-500" size={18} />,
+    },
+    {
+      id: 'whatsapp_features',
+      text: 'Lance suas despesas utilizando o whatsapp, através de texto, áudio ou imagem',
+      icon: <Mic className="text-proc-green" size={18} />,
     }
   ];
 
