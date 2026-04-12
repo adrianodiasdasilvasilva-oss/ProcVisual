@@ -8,6 +8,7 @@ import cron from "node-cron";
 import admin from "firebase-admin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import fs from "fs";
+import Stripe from "stripe";
 import whatsappWebhook from "./api/webhook-whatsapp.js";
 
 dotenv.config();
@@ -91,7 +92,10 @@ async function startServer() {
   const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
   const WHAPI_BASE_URL = "https://gate.whapi.cloud";
 
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
+
   console.log(`>>> [SISTEMA] WHAPI_TOKEN configurado (dentro do startServer): ${WHAPI_TOKEN ? "SIM (Inicia com " + WHAPI_TOKEN.substring(0, 5) + ")" : "NÃO"}`);
+  console.log(`>>> [STRIPE] Stripe inicializado: ${!!process.env.STRIPE_SECRET_KEY}`);
 
   // --- WhatsApp Notification System ---
 
@@ -441,6 +445,139 @@ async function startServer() {
 
   app.post("/api/webhook-whatsapp", (req, res) => {
     whatsappWebhook(req, res);
+  });
+
+  // --- Stripe Endpoints ---
+
+  app.post("/api/checkout", async (req, res) => {
+    const { userId, email, priceId } = req.body;
+
+    if (!userId || !email) {
+      return res.status(400).json({ error: "UserId e Email são obrigatórios." });
+    }
+
+    try {
+      console.log(`>>> [STRIPE] Criando sessão de checkout para: ${email} (${userId})`);
+      
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price: priceId || "SEU_PRICE_ID", // Placeholder as requested
+            quantity: 1,
+          },
+        ],
+        mode: "subscription",
+        customer_email: email,
+        metadata: {
+          userId: userId,
+        },
+        success_url: `${req.headers.origin}/?payment=success`,
+        cancel_url: `${req.headers.origin}/?payment=cancel`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error(">>> [STRIPE] Erro ao criar sessão:", error.message);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Stripe Webhook requires raw body for signature verification
+  app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    let event;
+
+    try {
+      if (!sig || !endpointSecret) {
+        throw new Error("Assinatura ou Secret ausente.");
+      }
+      event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+    } catch (err: any) {
+      console.error(`>>> [STRIPE] Erro no Webhook: ${err.message}`);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
+
+    console.log(`>>> [STRIPE] Evento recebido: ${event.type}`);
+
+    try {
+      if (!dbAdmin) await initializeFirebaseAdmin();
+      if (!dbAdmin) throw new Error("Firebase Admin não inicializado.");
+
+      switch (event.type) {
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          const userId = session.metadata?.userId;
+          const subscriptionId = session.subscription as string;
+
+          if (userId) {
+            console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
+            await dbAdmin.collection("usuarios").doc(userId).set({
+              isActive: true,
+              plan: "premium",
+              subscriptionId: subscriptionId,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+          }
+          break;
+        }
+
+        case "invoice.payment_succeeded": {
+          const invoice = event.data.object as any;
+          const subscriptionId = invoice.subscription as string;
+          
+          if (subscriptionId) {
+            // Find user by subscriptionId
+            const userQuery = await dbAdmin.collection("usuarios")
+              .where("subscriptionId", "==", subscriptionId)
+              .limit(1)
+              .get();
+
+            if (!userQuery.empty) {
+              const userDoc = userQuery.docs[0];
+              console.log(`>>> [STRIPE] Renovação confirmada para o usuário: ${userDoc.id}`);
+              await userDoc.ref.update({
+                isActive: true,
+                lastPayment: admin.firestore.FieldValue.serverTimestamp()
+              });
+            }
+          }
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const subscription = event.data.object as Stripe.Subscription;
+          const subscriptionId = subscription.id;
+
+          if (subscriptionId) {
+            const userQuery = await dbAdmin.collection("usuarios")
+              .where("subscriptionId", "==", subscriptionId)
+              .limit(1)
+              .get();
+
+            if (!userQuery.empty) {
+              const userDoc = userQuery.docs[0];
+              console.log(`>>> [STRIPE] Assinatura cancelada/removida para o usuário: ${userDoc.id}`);
+              await userDoc.ref.update({
+                isActive: false,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              });
+            }
+          }
+          break;
+        }
+
+        default:
+          console.log(`>>> [STRIPE] Evento não tratado: ${event.type}`);
+      }
+
+      res.json({ received: true });
+    } catch (error: any) {
+      console.error(">>> [STRIPE] Erro ao processar evento:", error.message);
+      res.status(500).json({ error: error.message });
+    }
   });
 
   // Catch-all for other /api routes to prevent HTML fallback

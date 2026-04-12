@@ -12,9 +12,10 @@ import Settings from './components/Settings';
 import AnalysisTab from './components/AnalysisTab';
 import ReportsTab from './components/ReportsTab';
 import InteractiveBalloon from './components/InteractiveBalloon';
+import SubscriptionPaywall from './components/SubscriptionPaywall';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
 import emailjs from '@emailjs/browser';
@@ -237,35 +238,42 @@ export default function App() {
       setUser(currentUser);
       setIsAuthReady(true);
       
-      if (currentUser) {
-        // Ensure user exists in Firestore without overwriting existing data
-        const userRef = doc(db, 'usuarios', currentUser.uid);
-        try {
-          const userSnap = await getDoc(userRef);
-          if (!userSnap.exists()) {
-            const userData = {
-              nome: currentUser.displayName || 'Usuário',
-              email: currentUser.email,
-              dataCriacao: serverTimestamp(),
-              fotoURL: currentUser.photoURL || ''
-            };
-            await setDoc(userRef, userData);
-            setProfile(userData);
-            console.log('Novo usuário criado no Firestore');
-          } else {
-            setProfile(userSnap.data());
-            console.log('Usuário já existe no Firestore');
-          }
-        } catch (error) {
-          console.error('Error ensuring user in Firestore:', error);
-        }
-      } else {
+      if (!currentUser) {
         setProfile(null);
         setIsLoading(false);
       }
     });
     return () => unsubscribe();
   }, []);
+
+  // Real-time Profile Listener
+  useEffect(() => {
+    if (!user) return;
+
+    const userRef = doc(db, 'usuarios', user.uid);
+    const unsubscribeProfile = onSnapshot(userRef, async (snapshot) => {
+      if (snapshot.exists()) {
+        setProfile(snapshot.data());
+      } else {
+        // Create user if not exists
+        const userData = {
+          nome: user.displayName || 'Usuário',
+          email: user.email,
+          dataCriacao: serverTimestamp(),
+          fotoURL: user.photoURL || '',
+          isActive: false // Default to false for new users
+        };
+        try {
+          await setDoc(userRef, userData);
+          setProfile(userData);
+        } catch (error) {
+          console.error('Error creating user profile:', error);
+        }
+      }
+    });
+
+    return () => unsubscribeProfile();
+  }, [user]);
 
   // Real-time Transactions Listener
   useEffect(() => {
@@ -431,6 +439,19 @@ export default function App() {
         onSignUp={() => { setShowSignUp(true); setShowLogin(false); }}
       />
     );
+  }
+
+  // Paywall Check
+  if (!profile) {
+    return (
+      <div className="min-h-screen bg-proc-bg flex items-center justify-center">
+        <Loader2 className="text-proc-cyan animate-spin" size={40} />
+      </div>
+    );
+  }
+
+  if (profile.isActive !== true) {
+    return <SubscriptionPaywall user={user} onSignOut={() => signOut(auth)} />;
   }
 
   const totalIncome = filteredTransactions
