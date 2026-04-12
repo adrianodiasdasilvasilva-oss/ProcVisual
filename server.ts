@@ -655,13 +655,15 @@ async function startServer() {
 
         // Rule: Only start notifying from the day after registration (Brazil time)
         // This prevents immediate notification if the job runs right after registration
-        if (today.getTime() <= createdAt.getTime()) {
-          console.log(`>>> [JOB] Ignorando ${data.descricao}: Registrada hoje (${createdAtStr})`);
+        if (today.getTime() < createdAt.getTime()) {
+          console.log(`>>> [JOB] Ignorando ${data.descricao}: Registrada no futuro? (${createdAtStr})`);
           continue;
         }
 
         // Rule: If created on the same day as the due date, do not notify (it was already "due" when created)
-        if (createdAt.getTime() === vencimento.getTime()) {
+        // BUT allow if it was created YESTERDAY and is due TODAY
+        if (createdAt.getTime() === vencimento.getTime() && createdAt.getTime() === today.getTime()) {
+          console.log(`>>> [JOB] Ignorando ${data.descricao}: Criada hoje no mesmo dia do vencimento.`);
           continue;
         }
 
