@@ -20,24 +20,20 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-export default app;
 
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 const WHAPI_BASE_URL = "https://gate.whapi.cloud";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
-// Increase payload size for images
-app.use("/api/checkout", express.json({ limit: '10mb' }));
-app.use("/api/notify-transaction", express.json({ limit: '10mb' }));
-app.use("/api/test-whatsapp", express.json({ limit: '10mb' }));
-app.use("/api/process-receipt", express.json({ limit: '10mb' }));
-app.use("/api/whapi-status", express.json({ limit: '10mb' }));
-app.use("/api/test", express.json({ limit: '10mb' }));
+// Global middleware for API routes
+app.use("/api", express.json({ limit: '10mb' }));
 
 // Log all requests for debugging
 app.use((req, res, next) => {
   console.log(`>>> [REQUEST] ${new Date().toISOString()} ${req.method} ${req.url}`);
-  console.log(`>>> [HEADERS] ${JSON.stringify(req.headers)}`);
+  if (req.method === 'POST') {
+    console.log(`>>> [BODY] ${JSON.stringify(req.body).substring(0, 100)}...`);
+  }
   next();
 });
 
@@ -384,7 +380,156 @@ app.post("/api/webhook-whatsapp", (req, res) => {
 });
 
 // --- Stripe Endpoints ---
-// Handled by separate files in api/ directory for better Vercel compatibility
+
+app.post("/api/checkout", async (req, res) => {
+  const { userId, email, priceId } = req.body;
+  console.log(`>>> [STRIPE] POST /api/checkout - User: ${userId}, Email: ${email}`);
+
+  if (!userId || !email) {
+    return res.status(400).json({ error: "UserId e Email são obrigatórios." });
+  }
+
+  try {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key || !key.startsWith('sk_')) {
+      return res.status(400).json({ 
+        error: "Chave Secreta do Stripe inválida. A chave deve começar com 'sk_test_' ou 'sk_live_'. Por favor, verifique nos Segredos (Settings > Secrets)." 
+      });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price: priceId || process.env.VITE_STRIPE_PRICE_ID || "SEU_PRICE_ID",
+          quantity: 1,
+        },
+      ],
+      mode: "subscription",
+      customer_email: email,
+      metadata: {
+        userId: userId,
+      },
+      success_url: `${req.headers.origin}/?payment=success`,
+      cancel_url: `${req.headers.origin}/?payment=cancel`,
+    });
+
+    res.json({ url: session.url });
+  } catch (error: any) {
+    console.error(">>> [STRIPE] Erro ao criar sessão:", error.message);
+    
+    if (error.message.includes('Invalid API Key')) {
+      return res.status(401).json({ 
+        error: "Chave Secreta do Stripe inválida. Verifique se você copiou a 'Secret Key' corretamente (sk_...) no menu Settings > Secrets." 
+      });
+    }
+
+    if (error.message.includes('a similar object exists in live mode')) {
+      return res.status(400).json({ 
+        error: "Conflito de ambiente: Você está usando um Preço de PRODUÇÃO com uma Chave de TESTE. Verifique seu VITE_STRIPE_PRICE_ID." 
+      });
+    }
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stripe Webhook
+app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    if (!sig || !endpointSecret) {
+      throw new Error("Assinatura ou Secret ausente.");
+    }
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err: any) {
+    console.error(`>>> [STRIPE] Erro no Webhook: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  console.log(`>>> [STRIPE] Evento recebido: ${event.type}`);
+
+  try {
+    if (!dbAdmin) await initializeFirebaseAdmin();
+    if (!dbAdmin) throw new Error("Firebase Admin não inicializado.");
+
+    switch (event.type) {
+      case "checkout.session.completed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.userId;
+        const subscriptionId = session.subscription as string;
+
+        if (userId) {
+          console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
+          await dbAdmin.collection("usuarios").doc(userId).set({
+            isActive: true,
+            plan: "premium",
+            subscriptionId: subscriptionId,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          }, { merge: true });
+        }
+        break;
+      }
+
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription as string;
+        
+        if (subscriptionId) {
+          const userQuery = await dbAdmin.collection("usuarios")
+            .where("subscriptionId", "==", subscriptionId)
+            .limit(1)
+            .get();
+
+          if (!userQuery.empty) {
+            const userDoc = userQuery.docs[0];
+            console.log(`>>> [STRIPE] Renovação confirmada para o usuário: ${userDoc.id}`);
+            await userDoc.ref.update({
+              isActive: true,
+              lastPayment: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        }
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const subscriptionId = subscription.id;
+
+        if (subscriptionId) {
+          const userQuery = await dbAdmin.collection("usuarios")
+            .where("subscriptionId", "==", subscriptionId)
+            .limit(1)
+            .get();
+
+          if (!userQuery.empty) {
+            const userDoc = userQuery.docs[0];
+            console.log(`>>> [STRIPE] Assinatura cancelada/removida para o usuário: ${userDoc.id}`);
+            await userDoc.ref.update({
+              isActive: false,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+          }
+        }
+        break;
+      }
+    }
+
+    res.json({ received: true });
+  } catch (error: any) {
+    console.error(">>> [STRIPE] Erro ao processar evento:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Catch-all for other /api routes
+app.all("/api/*", (req, res) => {
+  res.status(404).json({ error: `Rota de API não encontrada: ${req.method} ${req.url}` });
+});
 
 async function initializeFirebaseAdmin() {
   try {
@@ -624,3 +769,5 @@ async function startServer() {
 }
 
 startServer();
+
+export default app;

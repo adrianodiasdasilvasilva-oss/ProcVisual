@@ -18,6 +18,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key || !key.startsWith('sk_')) {
+      return res.status(400).json({ 
+        error: "Chave Secreta do Stripe inválida. A chave deve começar com 'sk_test_' ou 'sk_live_'. Por favor, verifique nos Segredos (Settings > Secrets)." 
+      });
+    }
+
     console.log(`>>> [STRIPE] Criando sessão de checkout para: ${email} (${userId})`);
     
     const session = await stripe.checkout.sessions.create({
@@ -40,6 +47,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ url: session.url });
   } catch (error: any) {
     console.error(">>> [STRIPE] Erro ao criar sessão:", error.message);
+    
+    if (error.message.includes('Invalid API Key')) {
+      return res.status(401).json({ 
+        error: "Chave Secreta do Stripe inválida. Verifique se você copiou a 'Secret Key' corretamente (sk_...) no menu Settings > Secrets." 
+      });
+    }
+
     return res.status(500).json({ error: error.message });
   }
 }
