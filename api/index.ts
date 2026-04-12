@@ -386,11 +386,6 @@ app.post("/api/webhook-whatsapp", (req, res) => {
 // --- Stripe Endpoints ---
 // Handled by separate files in api/ directory for better Vercel compatibility
 
-// Catch-all for other /api routes to prevent HTML fallback
-app.all("/api/*", (req, res) => {
-  res.status(404).json({ error: `Rota de API não encontrada: ${req.method} ${req.url}` });
-});
-
 async function initializeFirebaseAdmin() {
   try {
     if (dbAdmin) return dbAdmin;
