@@ -567,9 +567,7 @@ async function initializeFirebaseAdmin() {
         console.log(">>> [SISTEMA] Conectando ao banco: (default)");
       }
       
-      // Verification
-      const collections = await dbAdmin.listCollections();
-      console.log(`>>> [SISTEMA] Conexão OK. Coleções encontradas: ${collections.length}`);
+      console.log(`>>> [SISTEMA] Conexão com Firestore configurada.`);
     } catch (err: any) {
       console.error(`>>> [SISTEMA] Erro na conexão inicial: ${err.message}`);
       if (err.message.includes('PERMISSION_DENIED')) {
@@ -597,15 +595,22 @@ initializeFirebaseAdmin();
 async function startServer() {
   const PORT = 3000;
 
-  console.log(`>>> [SISTEMA] WHAPI_TOKEN configurado (dentro do startServer): ${WHAPI_TOKEN ? "SIM (Inicia com " + WHAPI_TOKEN.substring(0, 5) + ")" : "NÃO"}`);
+  // Start listening IMMEDIATELY so the port is bound and fetch doesn't fail
+  const server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`>>> [SISTEMA] Servidor ouvindo em http://0.0.0.0:${PORT}`);
+  });
+
+  console.log(`>>> [SISTEMA] WHAPI_TOKEN configurado: ${WHAPI_TOKEN ? "SIM" : "NÃO"}`);
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
+    console.log(">>> [SISTEMA] Iniciando Vite middleware...");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
+    console.log(">>> [SISTEMA] Vite middleware pronto.");
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
@@ -613,10 +618,6 @@ async function startServer() {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Servidor rodando em http://localhost:${PORT}`);
-  });
 
   // --- WhatsApp Notification System ---
   // (Function sendWhatsApp moved up to be accessible by routes)
