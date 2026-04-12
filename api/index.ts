@@ -386,6 +386,18 @@ app.post("/api/webhook-whatsapp", (req, res) => {
   whatsappWebhook(req, res);
 });
 
+app.get("/api/debug-vars", (req, res) => {
+  const key = process.env.STRIPE_SECRET_KEY || "";
+  res.json({
+    STRIPE_KEY_EXISTS: !!key,
+    STRIPE_KEY_PREFIX: key.substring(0, 3),
+    STRIPE_KEY_LENGTH: key.length,
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL: !!process.env.VERCEL,
+    PRICE_ID_EXISTS: !!process.env.VITE_STRIPE_PRICE_ID
+  });
+});
+
 // --- Stripe Endpoints ---
 
 app.post("/api/checkout", async (req, res) => {
@@ -397,10 +409,13 @@ app.post("/api/checkout", async (req, res) => {
   }
 
   try {
-    const key = process.env.STRIPE_SECRET_KEY;
+    const rawKey = process.env.STRIPE_SECRET_KEY || "";
+    const key = rawKey.trim(); // Remove accidental spaces
+
     if (!key || !key.startsWith('sk_')) {
+      console.error(`>>> [STRIPE] Chave inválida detectada. Prefixo: ${key.substring(0, 3)}, Tamanho: ${key.length}`);
       return res.status(400).json({ 
-        error: "Chave Secreta do Stripe inválida. A chave deve começar com 'sk_test_' ou 'sk_live_'. Por favor, verifique nos Segredos (Settings > Secrets)." 
+        error: `Chave Secreta do Stripe inválida ou não configurada no Vercel. A chave deve começar com 'sk_'. O servidor detectou: "${key.substring(0, 3)}..." com ${key.length} caracteres. Verifique as 'Environment Variables' no painel da Vercel.` 
       });
     }
 

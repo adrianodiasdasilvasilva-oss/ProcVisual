@@ -19,11 +19,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const key = process.env.STRIPE_SECRET_KEY;
+    const rawKey = process.env.STRIPE_SECRET_KEY || "";
+    const key = rawKey.trim();
+    
     if (!key || !key.startsWith('sk_')) {
-      console.error(">>> [STRIPE] Erro: STRIPE_SECRET_KEY inválida ou ausente.");
+      console.error(`>>> [STRIPE] Chave inválida ou ausente no Vercel. Prefixo: ${key.substring(0, 3)}`);
       return res.status(400).json({ 
-        error: "Chave Secreta do Stripe inválida. A chave deve começar com 'sk_test_' ou 'sk_live_'. Por favor, verifique nos Segredos (Settings > Secrets)." 
+        error: "Chave Secreta do Stripe inválida ou não configurada no Vercel. A chave deve começar com 'sk_'. Verifique as 'Environment Variables' no painel da Vercel." 
       });
     }
 
