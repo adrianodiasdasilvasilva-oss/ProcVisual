@@ -8,9 +8,18 @@ import admin from "firebase-admin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import fs from "fs";
 import Stripe from "stripe";
-import whatsappWebhook from "./webhook-whatsapp.js";
+import whatsappWebhook from "./webhook-whatsapp";
 
 dotenv.config();
+
+// Global error handlers to prevent silent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('>>> [CRÍTICO] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('>>> [CRÍTICO] Uncaught Exception:', error);
+});
 
 // Vite should only be imported in development
 let createViteServer: any;
@@ -46,6 +55,61 @@ app.use((req, res, next) => {
 
 // Initialize Firebase Admin SDK (Global Scope)
 let dbAdmin: admin.firestore.Firestore | null = null;
+let isInitializing = false;
+
+async function initializeFirebaseAdmin() {
+  if (dbAdmin) return dbAdmin;
+  if (isInitializing) {
+    while (isInitializing) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return dbAdmin;
+  }
+
+  isInitializing = true;
+  try {
+    console.log(">>> [SISTEMA] Inicializando Firebase Admin...");
+    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+    
+    if (!fs.existsSync(configPath)) {
+      console.error(">>> [SISTEMA] Erro: Arquivo firebase-applet-config.json não encontrado!");
+      isInitializing = false;
+      return null;
+    }
+
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const projectId = firebaseConfig.projectId;
+    const dbId = firebaseConfig.firestoreDatabaseId;
+
+    if (admin.apps.length === 0) {
+      admin.initializeApp({ projectId });
+      console.log(">>> [SISTEMA] Firebase Admin inicializado.");
+    }
+
+    try {
+      dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
+      console.log(`>>> [SISTEMA] Firestore conectado (DB: ${dbId || 'default'}).`);
+    } catch (e: any) {
+      console.warn(`>>> [SISTEMA] Erro ao conectar no DB ${dbId}: ${e.message}`);
+      dbAdmin = getFirestore();
+    }
+
+    isInitializing = false;
+    return dbAdmin;
+  } catch (error: any) {
+    console.error(">>> [SISTEMA] Erro crítico na inicialização:", error.message);
+    isInitializing = false;
+    return null;
+  }
+}
+
+// Middleware to ensure Firebase is initialized
+app.use("/api", async (req, res, next) => {
+  if (!dbAdmin && req.path !== "/health") {
+    await initializeFirebaseAdmin();
+  }
+  next();
+});
 
 async function checkWhapiStatus() {
   if (!WHAPI_TOKEN) {
@@ -553,67 +617,6 @@ app.all("/api/*", (req, res) => {
   res.status(404).json({ error: `Rota de API não encontrada: ${req.method} ${req.url}` });
 });
 
-async function initializeFirebaseAdmin() {
-  try {
-    if (dbAdmin) return dbAdmin;
-
-    console.log(">>> [SISTEMA] Lendo configuração do Firebase...");
-    const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-    
-    if (!fs.existsSync(configPath)) {
-      console.error(">>> [SISTEMA] Erro: Arquivo firebase-applet-config.json não encontrado!");
-      return null;
-    }
-    
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
-
-    console.log(">>> [SISTEMA] Configurando Admin para Projeto:", projectId);
-    
-    if (admin.apps.length === 0) {
-      // In Cloud Run, initializeApp() without arguments uses the default service account
-      admin.initializeApp({
-        projectId: projectId
-      });
-      console.log(">>> [SISTEMA] Firebase Admin inicializado.");
-    }
-    
-    // Strategy: Get Firestore instance for the specific database
-    try {
-      if (dbId && dbId !== '(default)') {
-        dbAdmin = getFirestore(dbId);
-        console.log(`>>> [SISTEMA] Conectando ao banco nomeado: ${dbId}`);
-      } else {
-        dbAdmin = getFirestore();
-        console.log(">>> [SISTEMA] Conectando ao banco: (default)");
-      }
-      
-      console.log(`>>> [SISTEMA] Conexão com Firestore configurada.`);
-    } catch (err: any) {
-      console.error(`>>> [SISTEMA] Erro na conexão inicial: ${err.message}`);
-      if (err.message.includes('PERMISSION_DENIED')) {
-        console.error(">>> [SISTEMA] DICA: Verifique se a conta de serviço tem a função 'Cloud Datastore User' ou 'Firebase Firestore Admin'.");
-      }
-      
-      // Fallback to default if named failed
-      if (dbId && dbId !== '(default)') {
-        console.log(">>> [SISTEMA] Tentando fallback para (default)...");
-        dbAdmin = getFirestore();
-      }
-    }
-
-    return dbAdmin;
-
-  } catch (error: any) {
-    console.error(">>> [SISTEMA] Erro crítico na inicialização:", error.message);
-    return null;
-  }
-}
-
-// Call initialization immediately
-initializeFirebaseAdmin();
-
 async function startServer() {
   const PORT = 3000;
 
@@ -708,88 +711,54 @@ async function startServer() {
         const createdAt = new Date(createdAtStr + "T12:00:00");
 
         // Rule: Only start notifying from the day after registration (Brazil time)
-        // This prevents immediate notification if the job runs right after registration
-        if (today.getTime() < createdAt.getTime()) {
-          console.log(`>>> [JOB] Ignorando ${data.descricao}: Registrada no futuro? (${createdAtStr})`);
-          continue;
-        }
+        if (today.getTime() < createdAt.getTime()) continue;
 
-        // Rule: If created on the same day as the due date, do not notify (it was already "due" when created)
-        // BUT allow if it was created YESTERDAY and is due TODAY
-        if (createdAt.getTime() === vencimento.getTime() && createdAt.getTime() === today.getTime()) {
-          console.log(`>>> [JOB] Ignorando ${data.descricao}: Criada hoje no mesmo dia do vencimento.`);
-          continue;
-        }
+        // Rule: If created on the same day as the due date, do not notify today
+        if (createdAt.getTime() === vencimento.getTime() && createdAt.getTime() === today.getTime()) continue;
 
         const diffTime = vencimento.getTime() - today.getTime();
         const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
-        console.log(`>>> [JOB] Analisando: ${data.descricao || data.estabelecimento} | Tipo: ${data.tipo} | Vencimento: ${data.data} | Dias Restantes: ${diffDays}`);
-
-        // Fetch user phone number (Prioritize phone stored in transaction)
+        // Fetch user phone number
         let telefone = data.telefone;
-        
         if (!telefone) {
           try {
             const userSnap = await dbAdmin.collection("usuarios").doc(data.userId).get();
             const userData = userSnap.data();
             telefone = userData?.telefone;
-          } catch (err: any) {
-            console.warn(`>>> [JOB] Erro ao buscar telefone do usuário ${data.userId}: ${err.message}`);
-          }
+          } catch (err) {}
         }
 
-        if (!telefone) {
-          console.warn(`>>> [JOB] Usuário ${data.userId} não possui telefone cadastrado.`);
-          continue;
-        }
+        if (!telefone) continue;
 
         const valorFormatado = data.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
         const dataVencimentoFormatada = vencimento.toLocaleDateString("pt-BR");
 
         // Birthday Notifications
         if (data.tipo === 'birthday') {
-          // Rule: 1 day before (Tomorrow)
           if (diffDays === 1 && !data.notificadoAmanha) {
             const message = `👀 *LEMBRETE DE ANIVERSÁRIO*\n\nAmanhã é aniversário da *${data.estabelecimento || data.descricao}*! 🎉\n\nJá comprou o presente? 🎁`;
             const result = await sendWhatsApp(telefone, message);
-            if (result.success) {
-              await document.ref.update({ notificadoAmanha: true });
-              console.log(`>>> [JOB] Notificação de aniversário (amanhã) enviada para ${telefone}`);
-            }
+            if (result.success) await document.ref.update({ notificadoAmanha: true });
           }
-
-          // Rule: On the day
           if (diffDays === 0 && !data.notificadoNoDia) {
             const message = `🥳 *HOJE É O DIA!*\n\nHoje é aniversário da *${data.estabelecimento || data.descricao}*! 🎉✨\n\nNão esqueça de dar os parabéns! 🎂🎈`;
             const result = await sendWhatsApp(telefone, message);
-            if (result.success) {
-              await document.ref.update({ notificadoNoDia: true });
-              console.log(`>>> [JOB] Notificação de aniversário (hoje) enviada para ${telefone}`);
-            }
+            if (result.success) await document.ref.update({ notificadoNoDia: true });
           }
-          continue; // Move to next item
+          continue;
         }
 
         // Expense Notifications
-        // Rule: 5 days before
         if (diffDays === 5 && !data.notificado5dias) {
           const message = `⚠️ *AVISO DE VENCIMENTO*\n\nOlá! 👋 Você tem uma despesa próxima do vencimento:\n\n📄 *Descrição:* ${data.descricao || data.estabelecimento}\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* ${dataVencimentoFormatada}\n\nNão esqueça de se programar para evitar atrasos.`;
           const result = await sendWhatsApp(telefone, message);
-          if (result.success) {
-            await document.ref.update({ notificado5dias: true });
-            console.log(`>>> [JOB] Notificação de 5 dias enviada para ${telefone}`);
-          }
+          if (result.success) await document.ref.update({ notificado5dias: true });
         }
-
-        // Rule: On the due date
         if (diffDays === 0 && !data.notificadoNoDia) {
           const message = `🚨 *VENCIMENTO HOJE*\n\nAtenção! ⚠️ Sua despesa vence hoje:\n\n📄 *Descrição:* ${data.descricao || data.estabelecimento}\n💰 *Valor:* R$ ${valorFormatado}\n📅 *Vencimento:* HOJE (${dataVencimentoFormatada})\n\nRealize o pagamento para evitar juros.`;
           const result = await sendWhatsApp(telefone, message);
-          if (result.success) {
-            await document.ref.update({ notificadoNoDia: true });
-            console.log(`>>> [JOB] Notificação de vencimento hoje enviada para ${telefone}`);
-          }
+          if (result.success) await document.ref.update({ notificadoNoDia: true });
         }
       }
     } catch (error) {
@@ -797,17 +766,22 @@ async function startServer() {
     }
   });
 
-  // --- WhatsApp Notification System (IMMEDIATE TEST MODE) ---
-  // REMOVED: Unreliable Firestore listener. Replaced by direct API call /api/notify-transaction.
-  
   if (dbAdmin) {
-    // Heartbeat to keep the server logs active
     setInterval(() => {
       console.log(`>>> [HEARTBEAT] Servidor ativo: ${new Date().toLocaleTimeString()}`);
     }, 60000);
   }
 }
 
-startServer();
+// Call initialization conditionally
+if (!process.env.VERCEL) {
+  initializeFirebaseAdmin().then(() => {
+    startServer().catch(err => {
+      console.error(">>> [SISTEMA] Erro ao iniciar servidor:", err);
+    });
+  }).catch(err => {
+    console.error(">>> [SISTEMA] Erro ao inicializar Firebase Admin:", err);
+  });
+}
 
 export default app;
