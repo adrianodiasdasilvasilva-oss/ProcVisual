@@ -27,10 +27,15 @@ async function initializeFirebaseAdmin() {
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (!fs.existsSync(configPath)) return null;
   const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  const projectId = firebaseConfig.projectId;
+  const dbId = firebaseConfig.firestoreDatabaseId;
+
   if (admin.apps.length === 0) {
-    admin.initializeApp({ projectId: firebaseConfig.projectId });
+    admin.initializeApp({ projectId });
   }
-  dbAdmin = admin.firestore();
+  
+  // Use named database if provided
+  dbAdmin = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
   return dbAdmin;
 }
 
@@ -59,13 +64,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
+        const subscriptionId = session.subscription as string;
         if (userId) {
+          console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
           await db.collection("usuarios").doc(userId).set({
             isActive: true,
             plan: "premium",
-            subscriptionId: session.subscription as string,
+            subscriptionId: subscriptionId,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
+        }
+        break;
+      }
+      case "invoice.payment_succeeded": {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription as string;
+        if (subscriptionId) {
+          const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscriptionId).limit(1).get();
+          if (!userQuery.empty) {
+            console.log(`>>> [WEBHOOK] Pagamento confirmado para sub: ${subscriptionId}`);
+            await userQuery.docs[0].ref.update({ 
+              isActive: true, 
+              lastPayment: admin.firestore.FieldValue.serverTimestamp() 
+            });
+          }
         }
         break;
       }

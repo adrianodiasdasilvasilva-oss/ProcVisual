@@ -122,6 +122,18 @@ export default function SubscriptionPaywall({ user, onSignOut }: SubscriptionPay
               )}
             </button>
 
+            <div className="mt-4 flex flex-col gap-2">
+              <p className="text-[10px] text-proc-text-sec">
+                Já realizou o pagamento? O acesso é liberado automaticamente em instantes.
+              </p>
+              <button 
+                onClick={() => window.location.reload()}
+                className="text-[10px] font-bold text-proc-cyan hover:underline uppercase tracking-widest"
+              >
+                Já paguei, atualizar agora
+              </button>
+            </div>
+
             <div className="mt-6 flex items-center gap-4 text-[10px] text-proc-text-sec">
               <div className="flex items-center gap-1">
                 <ShieldCheck size={12} />
