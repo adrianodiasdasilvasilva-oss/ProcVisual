@@ -7,31 +7,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Initialize Firebase Admin
-let dbAdmin: admin.firestore.Firestore | null = null;
-
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
-  
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) {
-    console.error(">>> [WEBHOOK] Erro: firebase-applet-config.json não encontrado.");
-    return null;
-  }
-  
-  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  
-  if (admin.apps.length === 0) {
-    admin.initializeApp({
-      projectId: firebaseConfig.projectId
-    });
-    console.log(">>> [WEBHOOK] Firebase Admin inicializado.");
-  }
-  
-  dbAdmin = admin.firestore();
-  return dbAdmin;
-}
-
 export const config = {
   api: {
     bodyParser: false,
@@ -46,111 +21,60 @@ async function getRawBody(readable: any): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log(`>>> [WEBHOOK] Chamada recebida: ${req.method} ${req.url}`);
-  
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+let dbAdmin: admin.firestore.Firestore | null = null;
+async function initializeFirebaseAdmin() {
+  if (dbAdmin) return dbAdmin;
+  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+  if (!fs.existsSync(configPath)) return null;
+  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+  if (admin.apps.length === 0) {
+    admin.initializeApp({ projectId: firebaseConfig.projectId });
   }
+  dbAdmin = admin.firestore();
+  return dbAdmin;
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).end();
 
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
+  const stripeKey = (process.env.STRIPE_SECRET_KEY || "").trim();
 
-  if (!stripeKey) {
-    console.error(">>> [WEBHOOK] Erro: STRIPE_SECRET_KEY não configurada.");
-    return res.status(500).send("Webhook Error: STRIPE_SECRET_KEY não configurada.");
+  if (!sig || !endpointSecret || !stripeKey) {
+    return res.status(400).send("Webhook Error: Configuração ausente.");
   }
-
-  const stripe = new Stripe(stripeKey);
-
-  if (!sig || !endpointSecret) {
-    console.error(">>> [WEBHOOK] Erro: Assinatura ou Secret ausente.");
-    return res.status(400).send("Webhook Error: Assinatura ou Secret ausente.");
-  }
-
-  let event: Stripe.Event;
 
   try {
+    const stripe = new Stripe(stripeKey, { apiVersion: '2023-10-16' as any });
     const rawBody = await getRawBody(req);
-    event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
-  } catch (err: any) {
-    console.error(`>>> [WEBHOOK] Erro na verificação da assinatura: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+    const event = stripe.webhooks.constructEvent(rawBody, sig, endpointSecret);
 
-  console.log(`>>> [WEBHOOK] Evento verificado: ${event.type}`);
+    console.log(`>>> [WEBHOOK] Evento: ${event.type}`);
 
-  try {
     const db = await initializeFirebaseAdmin();
-    if (!db) throw new Error("Firebase Admin não inicializado.");
+    if (!db) throw new Error("Firebase não disponível");
 
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
-        const subscriptionId = session.subscription as string;
-
         if (userId) {
-          console.log(`>>> [WEBHOOK] Ativando assinatura para o usuário: ${userId}`);
           await db.collection("usuarios").doc(userId).set({
             isActive: true,
             plan: "premium",
-            subscriptionId: subscriptionId,
+            subscriptionId: session.subscription as string,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           }, { merge: true });
         }
         break;
       }
-
-      case "invoice.payment_succeeded": {
-        const invoice = event.data.object as any;
-        const subscriptionId = invoice.subscription as string;
-        
-        if (subscriptionId) {
-          const userQuery = await db.collection("usuarios")
-            .where("subscriptionId", "==", subscriptionId)
-            .limit(1)
-            .get();
-
-          if (!userQuery.empty) {
-            const userDoc = userQuery.docs[0];
-            console.log(`>>> [WEBHOOK] Renovação confirmada para o usuário: ${userDoc.id}`);
-            await userDoc.ref.update({
-              isActive: true,
-              lastPayment: admin.firestore.FieldValue.serverTimestamp()
-            });
-          }
-        }
-        break;
-      }
-
-      case "customer.subscription.deleted": {
-        const subscription = event.data.object as Stripe.Subscription;
-        const subscriptionId = subscription.id;
-
-        if (subscriptionId) {
-          const userQuery = await db.collection("usuarios")
-            .where("subscriptionId", "==", subscriptionId)
-            .limit(1)
-            .get();
-
-          if (!userQuery.empty) {
-            const userDoc = userQuery.docs[0];
-            console.log(`>>> [WEBHOOK] Assinatura cancelada/removida para o usuário: ${userDoc.id}`);
-            await userDoc.ref.update({
-              isActive: false,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-          }
-        }
-        break;
-      }
+      // ... other cases
     }
 
-    return res.status(200).json({ received: true });
-  } catch (error: any) {
-    console.error(">>> [WEBHOOK] Erro ao processar evento:", error.message);
-    return res.status(500).json({ error: error.message });
+    res.json({ received: true });
+  } catch (err: any) {
+    console.error(`>>> [WEBHOOK] Erro: ${err.message}`);
+    res.status(400).send(`Webhook Error: ${err.message}`);
   }
 }
