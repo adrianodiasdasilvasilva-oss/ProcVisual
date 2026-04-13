@@ -89,7 +89,35 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: true });
       }
 
-        if (type === 'text') {
+      // Check if user is active
+      const rawNumero = numero.split('@')[0];
+      const cleanNumero = rawNumero.replace(/\D/g, "");
+      
+      const userQuery = await getDocs(query(collection(db, "usuarios"), where("telefone", "==", cleanNumero)));
+      const userDoc = !userQuery.empty ? userQuery.docs[0] : null;
+      const userData = userDoc ? userDoc.data() : null;
+
+      // Block if user not found or explicitly inactive
+      if (!userData || userData.isActive === false) {
+        console.log(`>>> [WEBHOOK] Bloqueio (Inativo/Não encontrado): ${cleanNumero}`);
+        const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+        if (WHAPI_TOKEN) {
+          await fetch('https://gate.whapi.cloud/messages/text', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${WHAPI_TOKEN}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              to: numero,
+              body: 'Usuário inativo, favor regularizar o pagamento para voltar a usufruir dos recursos da ProcVisual'
+            })
+          });
+        }
+        return res.status(200).json({ ok: true });
+      }
+
+      if (type === 'text') {
           const texto = message.text?.body || message.body || "";
           console.log(`>>> [WEBHOOK] Texto extraído: "${texto}"`);
           console.log("Processando texto com IA para extração de dados...");

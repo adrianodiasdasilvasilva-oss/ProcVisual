@@ -246,11 +246,16 @@ app.post("/api/notify-transaction", async (req, res) => {
   if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
 
   try {
-    let telefone = phone;
-    if (!telefone) {
-      const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
-      telefone = userSnap.data()?.telefone;
+    // Check if user is active
+    const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
+    const userData = userSnap.data();
+    
+    if (!userData || userData.isActive === false) {
+      console.log(`>>> [NOTIFICAÇÃO] Bloqueada: Usuário ${userId} inativo.`);
+      return res.status(403).json({ error: "Usuário inativo. Regularize seu pagamento." });
     }
+
+    let telefone = phone || userData.telefone;
     if (!telefone) return res.status(400).json({ error: "Telefone não encontrado" });
 
     const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
@@ -273,7 +278,70 @@ if (!process.env.VERCEL) {
     // Cron Job (Local only)
     cron.schedule("0 8 * * *", async () => {
       console.log(">>> [JOB] Rodando notificações diárias...");
-      // ... (rest of cron logic can be restored if needed)
+      if (!dbAdmin) return;
+
+      try {
+        const now = new Date();
+        const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+        const todayStr = brazilTime.toISOString().split('T')[0];
+        const today = new Date(todayStr + "T12:00:00");
+
+        const snapshot = await dbAdmin.collection("lancamentos")
+          .where("tipo", "in", ["expense", "birthday"])
+          .get();
+
+        if (snapshot.empty) return;
+
+        for (const doc of snapshot.docs) {
+          const data = doc.data();
+          const userId = data.userId;
+
+          // Check if user is active
+          const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
+          const userData = userSnap.data();
+
+          if (!userData || userData.isActive === false) {
+            continue; // Skip inactive users
+          }
+
+          const telefone = userData.telefone;
+          if (!telefone) continue;
+
+          // Notification logic (simplified version of what was there)
+          const vencimento = new Date(data.data + "T12:00:00");
+          const diffTime = vencimento.getTime() - today.getTime();
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
+          const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+          if (data.tipo === 'birthday') {
+            if (diffDays === 1 && !data.notificadoAmanha) {
+              const msg = `👀 *LEMBRETE:* Amanhã é aniversário de *${data.descricao}*!`;
+              const res = await sendWhatsApp(telefone, msg);
+              if (res.success) await doc.ref.update({ notificadoAmanha: true });
+            }
+            if (diffDays === 0 && !data.notificadoNoDia) {
+              const msg = `🥳 *HOJE:* É aniversário de *${data.descricao}*!`;
+              const res = await sendWhatsApp(telefone, msg);
+              if (res.success) await doc.ref.update({ notificadoNoDia: true });
+            }
+          } else {
+            if (diffDays === 5 && !data.notificado5dias) {
+              const msg = `⚠️ *AVISO:* Sua despesa "${data.descricao}" vence em 5 dias (R$ ${valorFormatado}).`;
+              const res = await sendWhatsApp(telefone, msg);
+              if (res.success) await doc.ref.update({ notificado5dias: true });
+            }
+            if (diffDays === 0 && !data.notificadoNoDia) {
+              const msg = `🚨 *VENCIMENTO:* Sua despesa "${data.descricao}" vence HOJE (R$ ${valorFormatado}).`;
+              const res = await sendWhatsApp(telefone, msg);
+              if (res.success) await doc.ref.update({ notificadoNoDia: true });
+            }
+          }
+        }
+      } catch (err) {
+        console.error(">>> [JOB] Erro:", err);
+      }
     });
   });
 }
