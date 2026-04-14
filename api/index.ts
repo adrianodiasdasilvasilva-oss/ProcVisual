@@ -10,6 +10,7 @@ import admin from "firebase-admin";
 import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import Stripe from "stripe";
+import { createServer as createViteServer } from "vite";
 
 dotenv.config();
 
@@ -270,7 +271,23 @@ app.post("/api/notify-transaction", async (req, res) => {
 // Server initialization for non-Vercel environments
 if (!process.env.VERCEL) {
   const PORT = 3000;
-  initializeFirebaseAdmin().then(() => {
+  initializeFirebaseAdmin().then(async () => {
+    // Vite middleware for development
+    if (process.env.NODE_ENV !== "production") {
+      console.log(">>> [SISTEMA] Configurando middleware do Vite...");
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distPath = path.join(process.cwd(), 'dist');
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`>>> [SISTEMA] Servidor rodando em http://0.0.0.0:${PORT}`);
     });

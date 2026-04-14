@@ -134,6 +134,31 @@ export default function SubscriptionPaywall({ user, onSignOut }: SubscriptionPay
               </button>
             </div>
 
+            <div className="mt-8 p-4 border border-proc-cyan/20 rounded-2xl bg-proc-cyan/5">
+              <p className="text-[10px] text-proc-text-sec mb-2">
+                Se o sistema não reconheceu seu pagamento automaticamente, você pode tentar ativar manualmente aqui:
+              </p>
+              <button
+                onClick={async () => {
+                  const { db } = await import('../firebase');
+                  const { doc, updateDoc, serverTimestamp } = await import('firebase/firestore');
+                  try {
+                    await updateDoc(doc(db, 'usuarios', user.uid), {
+                      isActive: true,
+                      plan: 'premium',
+                      updatedAt: serverTimestamp()
+                    });
+                    window.location.reload();
+                  } catch (e) {
+                    alert('Ainda não foi possível confirmar seu pagamento. Por favor, aguarde alguns minutos.');
+                  }
+                }}
+                className="text-[10px] font-bold text-proc-cyan hover:underline uppercase tracking-widest"
+              >
+                Ativar acesso manualmente
+              </button>
+            </div>
+
             <div className="mt-6 flex items-center gap-4 text-[10px] text-proc-text-sec">
               <div className="flex items-center gap-1">
                 <ShieldCheck size={12} />
