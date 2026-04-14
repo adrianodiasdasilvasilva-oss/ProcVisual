@@ -76,9 +76,12 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
     };
   }, []);
 
+  const [isCheckingSub, setIsCheckingSub] = useState(false);
+
   useEffect(() => {
-    if (!userData?.nextPaymentDate && auth.currentUser) {
+    if (!userData?.nextPaymentDate && auth.currentUser && !isCheckingSub) {
       const fetchSubDetails = async () => {
+        setIsCheckingSub(true);
         try {
           const res = await fetch(`/api/subscription-details?userId=${auth.currentUser?.uid}`);
           const data = await res.json();
@@ -87,11 +90,13 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
           }
         } catch (e) {
           console.error("Error fetching sub details:", e);
+        } finally {
+          setIsCheckingSub(false);
         }
       };
       fetchSubDetails();
     }
-  }, [userData?.nextPaymentDate]);
+  }, [userData?.nextPaymentDate, auth.currentUser]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -400,8 +405,10 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                         month: 'long',
                         year: 'numeric'
                       })
-                    ) : (
+                    ) : isCheckingSub ? (
                       "Consultando data..."
+                    ) : (
+                      "Data não localizada"
                     )}
                   </p>
                 </div>

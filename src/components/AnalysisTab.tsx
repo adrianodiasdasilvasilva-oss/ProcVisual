@@ -241,99 +241,10 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Component 1: Daily Cash Flow Chart */}
+        {/* Component 1: Financial Calendar */}
         <motion.section 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="lg:col-span-12 bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6 md:p-8 shadow-2xl"
-        >
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-                <BarChart3 size={24} />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-proc-text-main">Receita vs Despesa</h3>
-                <p className="text-xs text-proc-text-sec">Comparativo mensal de entradas e saídas</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="h-[350px] w-full relative">
-            {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis 
-                    dataKey="displayDate" 
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                    minTickGap={30}
-                  />
-                  <YAxis 
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                    tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
-                  <Legend 
-                    verticalAlign="top" 
-                    align="right" 
-                    iconType="circle"
-                    content={(props) => {
-                      const { payload } = props;
-                      return (
-                        <div className="flex justify-end gap-6 mb-4">
-                          {payload?.map((entry: any, index: number) => (
-                            <div key={`item-${index}`} className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar 
-                    dataKey="income" 
-                    name="Receitas" 
-                    fill="#00E676" 
-                    radius={[4, 4, 0, 0]} 
-                    barSize={20}
-                  />
-                  <Bar 
-                    dataKey="expense" 
-                    name="Despesas" 
-                    fill="#F87171" 
-                    radius={[4, 4, 0, 0]} 
-                    barSize={20}
-                  />
-                  <Bar
-                    dataKey="balance"
-                    name="Saldo Líquido"
-                    fill="#00D1FF"
-                    radius={[4, 4, 0, 0]}
-                    barSize={20}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full w-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
-                <Info className="text-proc-text-sec mb-2" size={32} />
-                <p className="text-proc-text-sec text-sm font-medium">Sem dados para o período selecionado</p>
-                <p className="text-proc-text-sec/50 text-xs mt-1">Tente ajustar os filtros de data no topo da página</p>
-              </div>
-            )}
-          </div>
-        </motion.section>
-
-        {/* Component 2: Financial Calendar */}
-        <motion.section 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
           className="lg:col-span-12 bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6 md:p-8 shadow-2xl"
         >
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
@@ -421,6 +332,88 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
               <div className="w-2 h-2 rounded-full bg-pink-500" />
               <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Aniversário</span>
             </div>
+          </div>
+        </motion.section>
+
+        {/* Component 2: Daily Cash Flow Chart */}
+        <motion.section 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="lg:col-span-12 bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6 md:p-8 shadow-2xl"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+                <BarChart3 size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-proc-text-main">Receita vs Despesa</h3>
+                <p className="text-xs text-proc-text-sec">Comparativo mensal de entradas e saídas</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-[350px] w-full relative">
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                  <XAxis 
+                    dataKey="displayDate" 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                    minTickGap={30}
+                  />
+                  <YAxis 
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                    tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
+                  <Legend 
+                    verticalAlign="top" 
+                    align="right" 
+                    iconType="circle"
+                    content={(props) => {
+                      const { payload } = props;
+                      return (
+                        <div className="flex justify-end gap-6 mb-4">
+                          {payload?.map((entry: any, index: number) => (
+                            <div key={`item-${index}`} className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar 
+                    dataKey="income" 
+                    name="Receitas" 
+                    fill="#00E676" 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={20}
+                  />
+                  <Bar 
+                    dataKey="expense" 
+                    name="Despesas" 
+                    fill="#F87171" 
+                    radius={[4, 4, 0, 0]} 
+                    barSize={20}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
+                <Info className="text-proc-text-sec mb-2" size={32} />
+                <p className="text-proc-text-sec text-sm font-medium">Sem dados para o período selecionado</p>
+                <p className="text-proc-text-sec/50 text-xs mt-1">Tente ajustar os filtros de data no topo da página</p>
+              </div>
+            )}
           </div>
         </motion.section>
       </div>

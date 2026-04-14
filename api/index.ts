@@ -223,52 +223,74 @@ app.get("/api/subscription-details", async (req, res) => {
     const userDoc = await dbAdmin!.collection("usuarios").doc(userId).get();
     const userData = userDoc.data();
 
-    if (!userData?.subscriptionId) {
-      // Try searching Stripe by email as fallback
-      const emailsToTry = [
+    if (userData?.subscriptionId) {
+      try {
+        console.log(`>>> [API] Buscando assinatura via ID: ${userData.subscriptionId}`);
+        const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
+        const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+        const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+
+        // Sync Firestore with latest Stripe data
+        await userDoc.ref.update({ 
+          nextPaymentDate,
+          isActive,
+          plan: 'premium',
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return res.json({ nextPaymentDate });
+      } catch (e: any) {
+        console.warn(`>>> [API] Erro ao buscar via ID ${userData.subscriptionId}, tentando via email...`);
+        // Fallback to email search if ID fails
+      }
+    }
+
+    // Try searching Stripe by email as fallback
+    const emailsToTry = [
         userData?.email, 
         'adrianodiasilva@yahoo.com.br',
-        'adrianodiasdasilva@yahoo.com.br'
+        'adrianodiasdasilva@yahoo.com.br',
+        'adrianodiasdasilva.silva@gmail.com'
       ].filter(Boolean);
+      
+      console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails:`, emailsToTry);
       
       for (const email of emailsToTry) {
         const customers = await getStripe().customers.list({
-          email: email,
-          limit: 1,
-          expand: ['data.subscriptions']
+          email: email as string,
+          limit: 1
         });
 
         if (customers.data.length > 0) {
           const customer = customers.data[0];
-          const subscription = customer.subscriptions?.data[0];
+          // Fetch subscriptions separately to be sure
+          const subscriptions = await getStripe().subscriptions.list({
+            customer: customer.id,
+            status: 'all',
+            limit: 1
+          });
+
+          const subscription = subscriptions.data[0];
           if (subscription) {
+            console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id}`);
             const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
             const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+            
             await userDoc.ref.update({ 
               subscriptionId: subscription.id,
               nextPaymentDate,
               isActive,
-              plan: 'premium'
+              plan: 'premium',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
-            return res.json({ nextPaymentDate });
+            return res.json({ nextPaymentDate, source: 'email_search', email });
           }
         }
       }
-      return res.json({ nextPaymentDate: null });
-    }
+      console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId}`);
+      return res.json({ nextPaymentDate: null, message: "Nenhuma assinatura encontrada nos e-mails vinculados." });
 
-    const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
-    const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-    const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-
-    // Sync Firestore with latest Stripe data
-    await userDoc.ref.update({ 
-      nextPaymentDate,
-      isActive,
-      plan: 'premium'
-    });
-
-    res.json({ nextPaymentDate });
+    res.status(404).json({ error: "User not found" });
   } catch (error: any) {
     console.error(">>> [API] Erro ao buscar detalhes da assinatura:", error.message);
     res.status(500).json({ error: error.message });
