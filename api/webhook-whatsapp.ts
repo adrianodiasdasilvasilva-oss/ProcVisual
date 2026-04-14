@@ -44,6 +44,8 @@ export default async function handler(req: any, res: any) {
 
     const numero = message.from; 
     const type = message.type;
+    console.log(`>>> [WH-WA] Mensagem de ${numero} tipo ${type}`);
+
     const db = await initializeFirebaseClient();
 
     if (!db) {
@@ -63,35 +65,38 @@ export default async function handler(req: any, res: any) {
     let userDoc = null;
     let userData = null;
 
-    console.log(">>> [WH-WA] Executando query 1...");
-    // Try exact match first
     const usersRef = collection(db, "usuarios");
+    
+    // 1. Try exact match with clean incoming
     const q1 = query(usersRef, where("telefone", "==", cleanIncoming));
     const snap1 = await getDocs(q1);
-    console.log(">>> [WH-WA] Query 1 concluída.");
     
     if (!snap1.empty) {
-      userDoc = snap1.docs[0];
+      // Prefer active user if multiple found
+      const activeUser = snap1.docs.find(d => d.data().isActive === true);
+      userDoc = activeUser || snap1.docs[0];
     } else {
-      console.log(">>> [WH-WA] Executando query 2...");
-      // Try short match
+      // 2. Try short match
       const q2 = query(usersRef, where("telefone", "==", shortIncoming));
       const snap2 = await getDocs(q2);
-      console.log(">>> [WH-WA] Query 2 concluída.");
-      if (!snap2.empty) userDoc = snap2.docs[0];
+      if (!snap2.empty) {
+        const activeUser = snap2.docs.find(d => d.data().isActive === true);
+        userDoc = activeUser || snap2.docs[0];
+      }
     }
 
-    // Fallback: search for users and manually check normalized phone (handling the "9" digit issue)
+    // 3. Fallback: scan active users for normalized match
     if (!userDoc) {
-       console.log(">>> [WH-WA] Executando fallback scan...");
+       console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
        const snapAll = await getDocs(usersRef);
-       console.log(">>> [WH-WA] Fallback scan concluído.");
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
-         if (!d.isActive) return false;
          const tel = (d.telefone || "").replace(/\D/g, "");
+         if (!tel) return false;
+         
          const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
          
+         // Match clean full, short, or 9-digit variations
          return tel === cleanIncoming || 
                 shortTel === shortIncoming || 
                 (shortTel.length === 11 && shortIncoming.length === 10 && shortTel.substring(0, 2) === shortIncoming.substring(0, 2) && shortTel.substring(3) === shortIncoming.substring(2)) ||
@@ -102,9 +107,15 @@ export default async function handler(req: any, res: any) {
     userData = userDoc ? userDoc.data() : null;
 
     // Block if user not found or explicitly inactive
-    if (!userData || userData.isActive === false) {
-      console.log(`>>> [WH-WA] Bloqueio: ${cleanIncoming} | Ativo: ${userData?.isActive}`);
-      await sendWhatsAppMessage(numero, '⚠️ *Acesso Restrito*\n\nSeu número não está vinculado a uma conta ativa na ProcVisual. Por favor, verifique seu número nas configurações do site ou regularize seu pagamento.\n\nSe você acabou de pagar, aguarde alguns instantes para a ativação automática.');
+    if (!userData) {
+      console.log(`>>> [WH-WA] Usuário NÃO cadastrado: ${cleanIncoming}`);
+      await sendWhatsAppMessage(numero, '👋 *Olá! Bem-vindo à ProcVisual.*\n\nIdentificamos que seu número ainda não está vinculado a uma conta.\n\nPara usar o registro via WhatsApp, você precisa:\n1. Criar uma conta em nosso site.\n2. Cadastrar seu número de WhatsApp no seu perfil.\n3. Ter uma assinatura ativa.\n\nAcesse: ' + (req.headers.origin || 'nosso site') + ' para começar!');
+      return res.status(200).json({ ok: true });
+    }
+
+    if (userData.isActive === false) {
+      console.log(`>>> [WH-WA] Usuário INATIVO: ${userData.email}`);
+      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nSua conta na ProcVisual está inativa. Para continuar registrando despesas via WhatsApp, por favor regularize sua assinatura no dashboard do site.');
       return res.status(200).json({ ok: true });
     }
 
@@ -137,11 +148,17 @@ async function sendWhatsAppMessage(to: string, body: string) {
   const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
   if (!WHAPI_TOKEN) return;
   try {
-    await fetch('https://gate.whapi.cloud/messages/text', {
+    const response = await fetch('https://gate.whapi.cloud/messages/text', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ to, body })
     });
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`>>> [WH-WA] Erro Whapi (${response.status}):`, errText);
+    } else {
+      console.log(`>>> [WH-WA] Mensagem enviada com sucesso para ${to}`);
+    }
   } catch (e) {
     console.error(">>> [WH-WA] Erro ao enviar mensagem:", e);
   }
@@ -195,6 +212,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
   if (!apiKey) return;
 
   try {
+    await sendWhatsAppMessage(numero, '📸 *Processando imagem...* Aguarde um instante enquanto nossa IA analisa seu comprovante.');
     const imgResponse = await fetch(imageUrl);
     const buffer = await imgResponse.arrayBuffer();
     const base64Image = Buffer.from(buffer).toString('base64');
@@ -229,6 +247,7 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
   if (!apiKey) return;
 
   try {
+    await sendWhatsAppMessage(numero, '🎙️ *Processando áudio...* Aguarde um instante enquanto transcrevemos sua despesa.');
     const audioResponse = await fetch(audioUrl);
     const buffer = await audioResponse.arrayBuffer();
     const base64Audio = Buffer.from(buffer).toString('base64');

@@ -11,6 +11,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 import Stripe from "stripe";
 import { createServer as createViteServer } from "vite";
+import whatsappHandler from "./webhook-whatsapp.js";
 
 dotenv.config();
 
@@ -26,6 +27,9 @@ process.on('uncaughtException', (error) => {
 const app = express();
 const WHAPI_BASE_URL = "https://gate.whapi.cloud";
 const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+if (!WHAPI_TOKEN) {
+  console.warn(">>> [WHATSAPP] WHAPI_TOKEN não configurado no ambiente!");
+}
 
 // --- STRIPE CONFIG ---
 let stripeInstance: Stripe | null = null;
@@ -210,7 +214,9 @@ app.get("/api/debug-vars", (req, res) => {
     STRIPE_KEY_LENGTH: key.length,
     NODE_ENV: process.env.NODE_ENV || "unknown",
     VERCEL: !!process.env.VERCEL,
-    PRICE_ID_EXISTS: !!process.env.VITE_STRIPE_PRICE_ID
+    PRICE_ID_EXISTS: !!process.env.VITE_STRIPE_PRICE_ID,
+    WHAPI_TOKEN_EXISTS: !!process.env.WHAPI_TOKEN,
+    GEMINI_KEY_EXISTS: !!process.env.GEMINI_API_KEY
   });
 });
 
@@ -277,10 +283,11 @@ app.post("/api/test-whatsapp", async (req, res) => {
 
 app.post("/api/webhook-whatsapp", async (req, res) => {
   try {
-    const { default: handler } = await import("./webhook-whatsapp.js");
-    await handler(req, res);
+    console.log(">>> [WHATSAPP] Webhook atingido!");
+    console.log(">>> [WHATSAPP] Body:", JSON.stringify(req.body, null, 2));
+    await whatsappHandler(req, res);
   } catch (err: any) {
-    console.error(">>> [WHATSAPP] Erro:", err.message);
+    console.error(">>> [WHATSAPP] Erro no handler:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
