@@ -67,23 +67,38 @@ export default async function handler(req: any, res: any) {
     let userData = null;
 
     // Try exact match first
+    console.log(`>>> [WH-WA] Tentando busca exata por: ${cleanIncoming}`);
     const q1 = await db.collection("usuarios").where("telefone", "==", cleanIncoming).limit(1).get();
     if (!q1.empty) {
+      console.log(`>>> [WH-WA] Encontrado por busca exata.`);
       userDoc = q1.docs[0];
     } else {
       // Try short match
+      console.log(`>>> [WH-WA] Tentando busca curta por: ${shortIncoming}`);
       const q2 = await db.collection("usuarios").where("telefone", "==", shortIncoming).limit(1).get();
-      if (!q2.empty) userDoc = q2.docs[0];
+      if (!q2.empty) {
+        console.log(`>>> [WH-WA] Encontrado por busca curta.`);
+        userDoc = q2.docs[0];
+      }
     }
 
     // If still not found, we might need to fetch all and filter (expensive but safer for small user base)
-    // Or just check if the stored number contains the short number or vice versa
     if (!userDoc) {
-       // Fallback: search for users and manually check normalized phone
+       console.log(`>>> [WH-WA] Tentando busca por filtro manual em todos usuários ativos.`);
        const allUsers = await db.collection("usuarios").where("isActive", "==", true).get();
+       console.log(`>>> [WH-WA] Analisando ${allUsers.size} usuários ativos.`);
        userDoc = allUsers.docs.find(doc => {
          const tel = (doc.data().telefone || "").replace(/\D/g, "");
-         return tel === cleanIncoming || tel === shortIncoming || (tel.startsWith('55') && tel.substring(2) === shortIncoming);
+         const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
+         
+         // Match exact, short, or handle the Brazilian "9" digit issue
+         const match = tel === cleanIncoming || 
+                       shortTel === shortIncoming || 
+                       (shortTel.length === 11 && shortIncoming.length === 10 && shortTel.substring(0, 2) === shortIncoming.substring(0, 2) && shortTel.substring(3) === shortIncoming.substring(2)) ||
+                       (shortTel.length === 10 && shortIncoming.length === 11 && shortIncoming.substring(0, 2) === shortTel.substring(0, 2) && shortIncoming.substring(3) === shortTel.substring(2));
+         
+         if (match) console.log(`>>> [WH-WA] Match manual encontrado: ${doc.data().email} (${tel})`);
+         return match;
        });
     }
 
