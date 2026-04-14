@@ -4,7 +4,6 @@ import LandingHero from './LandingHero';
 import LandingFeatures from './LandingFeatures';
 import LandingHowItWorks from './LandingHowItWorks';
 import LandingPreview from './LandingPreview';
-import LandingCTA from './LandingCTA';
 import LandingFooter from './LandingFooter';
 import LegalModal from './LegalModal';
 
@@ -32,7 +31,6 @@ export default function LandingPage({ onLogin, onSignUp }: LandingPageProps) {
         <LandingFeatures />
         <LandingHowItWorks />
         <LandingPreview />
-        <LandingCTA onStart={onSignUp} />
       </main>
 
       <LandingFooter onOpenLegal={openLegal} />

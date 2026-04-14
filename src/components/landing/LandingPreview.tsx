@@ -9,10 +9,10 @@ export default function LandingPreview() {
         <div className="text-center mb-20">
           <h2 className="text-[10px] font-bold text-proc-cyan uppercase tracking-[0.3em] mb-4">Experiência</h2>
           <h3 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">
-            Veja sua <span className="text-proc-cyan">evolução financeira</span>
+            Gestão que se <span className="text-proc-cyan">adapta a você</span>
           </h3>
           <p className="text-proc-text-sec text-lg max-w-2xl mx-auto">
-            Uma interface pensada para clareza e rapidez. Tudo o que importa em uma única tela.
+            Esqueça planilhas complexas. Tenha o controle total das suas finanças e compromissos na palma da mão, com a simplicidade de uma conversa.
           </p>
         </div>
 
@@ -36,39 +36,68 @@ export default function LandingPreview() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                {[
-                  { label: 'Receitas', value: 'R$ 8.200', icon: TrendingUp, color: 'text-proc-green' },
-                  { label: 'Despesas', value: 'R$ 3.450', icon: TrendingDown, color: 'text-red-400' },
-                  { label: 'Economia', value: 'R$ 4.750', icon: PiggyBank, color: 'text-proc-cyan' },
-                ].map((stat) => (
-                  <div key={stat.label} className="bg-proc-secondary/40 p-6 rounded-3xl border border-white/5">
-                    <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center ${stat.color} mb-4`}>
-                      <stat.icon size={20} />
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-12">
+                {/* Health Gauge Mockup */}
+                <div className="md:col-span-4 bg-proc-secondary/40 p-8 rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center text-center">
+                  <div className="relative w-32 h-32 flex items-center justify-center mb-6">
+                    <svg className="w-full h-full -rotate-90">
+                      <circle cx="64" cy="64" r="58" fill="none" stroke="currentColor" strokeWidth="12" className="text-white/5" />
+                      <circle cx="64" cy="64" r="58" fill="none" stroke="currentColor" strokeWidth="12" strokeDasharray="364" strokeDashoffset="72" className="text-proc-cyan" />
+                    </svg>
+                    <div className="absolute flex flex-col items-center">
+                      <span className="text-3xl font-bold text-white">80%</span>
                     </div>
-                    <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">{stat.label}</p>
-                    <p className="text-xl font-bold text-white">{stat.value}</p>
                   </div>
-                ))}
-              </div>
+                  <h5 className="text-sm font-bold text-white uppercase tracking-widest mb-2">Saúde Financeira</h5>
+                  <p className="text-[10px] text-proc-text-sec leading-relaxed">Sua gestão está excelente este mês!</p>
+                </div>
 
-              <div className="h-64 bg-proc-secondary/20 rounded-3xl border border-white/5 flex items-center justify-center overflow-hidden relative">
-                <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-proc-cyan/10 to-transparent" />
-                <div className="flex items-end gap-2 md:gap-4 h-32">
-                  {[40, 60, 45, 80, 55, 90, 70, 85, 60, 75, 50, 95].map((h, i) => (
-                    <motion.div 
-                      key={i}
-                      initial={{ height: 0 }}
-                      whileInView={{ height: `${h}%` }}
-                      viewport={{ once: true }}
-                      transition={{ delay: i * 0.05, duration: 1 }}
-                      className="w-4 md:w-8 bg-proc-cyan/20 rounded-t-lg border-t border-proc-cyan/40"
-                    />
+                {/* Stats Cards Mockup */}
+                <div className="md:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  {[
+                    { label: 'Receitas', value: 'R$ 8.200', icon: TrendingUp, color: 'text-proc-green', bg: 'bg-proc-green/10' },
+                    { label: 'Despesas', value: 'R$ 3.450', icon: TrendingDown, color: 'text-red-400', bg: 'bg-red-400/10' },
+                    { label: 'Aniversários', value: '3 Próximos', icon: PiggyBank, color: 'text-proc-cyan', bg: 'bg-proc-cyan/10' },
+                    { label: 'Economia', value: 'R$ 4.750', icon: LayoutDashboard, color: 'text-proc-green', bg: 'bg-proc-green/10' },
+                  ].map((stat) => (
+                    <div key={stat.label} className="bg-proc-secondary/40 p-6 rounded-3xl border border-white/5 flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-2xl ${stat.bg} flex items-center justify-center ${stat.color}`}>
+                        <stat.icon size={24} />
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">{stat.label}</p>
+                        <p className="text-xl font-bold text-white">{stat.value}</p>
+                      </div>
+                    </div>
                   ))}
                 </div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
-                  <LayoutDashboard size={40} className="text-proc-cyan/20 mb-2 mx-auto" />
-                  <p className="text-xs font-bold text-proc-cyan/40 uppercase tracking-widest">Gráfico de Evolução</p>
+              </div>
+
+              {/* Transaction List Mockup */}
+              <div className="bg-proc-secondary/20 rounded-[2.5rem] border border-white/5 p-8">
+                <div className="flex items-center justify-between mb-6">
+                  <h5 className="text-lg font-bold text-white">Lançamentos Recentes</h5>
+                  <span className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Ver todos</span>
+                </div>
+                <div className="space-y-4">
+                  {[
+                    { desc: 'Supermercado Silva', cat: 'Alimentação', val: '- R$ 450,00', color: 'text-red-400', icon: '🛒' },
+                    { desc: 'Salário Mensal', cat: 'Renda', val: '+ R$ 8.200,00', color: 'text-proc-green', icon: '💰' },
+                    { desc: 'Aniversário da Maria', cat: 'Lembrete', val: '🎉 Hoje', color: 'text-proc-cyan', icon: '🎂' },
+                  ].map((t, i) => (
+                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 border border-white/5">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-lg">
+                          {t.icon}
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-white">{t.desc}</p>
+                          <p className="text-[10px] text-proc-text-sec uppercase tracking-widest">{t.cat}</p>
+                        </div>
+                      </div>
+                      <p className={`text-sm font-bold ${t.color}`}>{t.val}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

@@ -24,7 +24,7 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
           </h1>
           
           <p className="text-lg md:text-xl text-proc-text-sec leading-relaxed mb-10 max-w-xl">
-            Registre despesas, envie comprovantes e acompanhe sua saúde financeira automaticamente com a tecnologia OCR e IA da ProcVisual.
+            Registre despesas por áudio, texto ou imagem via WhatsApp e crie lembretes inteligentes para nunca mais esquecer um aniversário ou conta.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -65,21 +65,37 @@ export default function LandingHero({ onStart }: LandingHeroProps) {
                 </div>
               </div>
 
-              {/* Simulated Cards */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-proc-secondary/40 p-4 rounded-2xl border border-white/5">
-                  <div className="w-8 h-8 rounded-lg bg-proc-green/10 flex items-center justify-center text-proc-green mb-3">
-                    <TrendingUp size={16} />
+              {/* Simulated Health Gauge & Cards */}
+              <div className="grid grid-cols-12 gap-4">
+                <div className="col-span-5 bg-proc-secondary/40 p-4 rounded-2xl border border-white/5 flex flex-col items-center justify-center">
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    <svg className="w-full h-full -rotate-90">
+                      <circle cx="40" cy="40" r="35" fill="none" stroke="currentColor" strokeWidth="8" className="text-white/5" />
+                      <circle cx="40" cy="40" r="35" fill="none" stroke="currentColor" strokeWidth="8" strokeDasharray="220" strokeDashoffset="44" className="text-proc-cyan" />
+                    </svg>
+                    <span className="absolute text-xs font-bold text-white">80%</span>
                   </div>
-                  <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">Receitas</p>
-                  <p className="text-sm font-bold text-white">R$ 8.200</p>
+                  <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest mt-2">Saúde Financeira</p>
                 </div>
-                <div className="bg-proc-secondary/40 p-4 rounded-2xl border border-white/5">
-                  <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500 mb-3">
-                    <TrendingDown size={16} />
+                <div className="col-span-7 space-y-3">
+                  <div className="bg-proc-secondary/40 p-3 rounded-xl border border-white/5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-proc-green/10 flex items-center justify-center text-proc-green">
+                      <TrendingUp size={16} />
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest">Receitas</p>
+                      <p className="text-xs font-bold text-white">R$ 8.200</p>
+                    </div>
                   </div>
-                  <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest mb-1">Despesas</p>
-                  <p className="text-sm font-bold text-white">R$ 3.450</p>
+                  <div className="bg-proc-secondary/40 p-3 rounded-xl border border-white/5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
+                      <TrendingDown size={16} />
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold text-proc-text-sec uppercase tracking-widest">Despesas</p>
+                      <p className="text-xs font-bold text-white">R$ 3.450</p>
+                    </div>
+                  </div>
                 </div>
               </div>
 

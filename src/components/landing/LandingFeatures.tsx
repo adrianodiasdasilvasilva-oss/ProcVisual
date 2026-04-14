@@ -1,40 +1,40 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Camera, LayoutDashboard, Wallet, BarChart3, MessageCircle } from 'lucide-react';
+import { Camera, LayoutDashboard, Wallet, BarChart3, MessageCircle, Cake, Mic } from 'lucide-react';
 
 export default function LandingFeatures() {
   const features = [
     {
-      icon: Camera,
-      title: 'Leitura automática de comprovantes',
-      description: 'Envie uma foto e nossa IA extrai valor, data e estabelecimento instantaneamente.',
+      icon: Mic,
+      title: 'Registro via WhatsApp',
+      description: 'Envie áudios, textos ou fotos de comprovantes. Nossa IA processa tudo instantaneamente.',
       color: 'text-proc-cyan',
       bg: 'bg-proc-cyan/10',
       glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
     },
     {
+      icon: Cake,
+      title: 'Lembrete de Aniversários',
+      description: 'Crie lembretes personalizados e receba notificações para nunca mais esquecer uma data especial.',
+      color: 'text-proc-green',
+      bg: 'bg-proc-green/10',
+      glow: 'shadow-[0_0_30px_rgba(0,230,118,0.15)]',
+    },
+    {
       icon: MessageCircle,
-      title: 'Notificações via WhatsApp',
-      description: 'Receba lembretes inteligentes das suas despesas e evite juros por esquecimento.',
+      title: 'Notificações Inteligentes',
+      description: 'Receba alertas de despesas e vencimentos direto no seu celular e evite juros.',
       color: 'text-[#25D366]',
       bg: 'bg-[#25D366]/10',
       glow: 'shadow-[0_0_30px_rgba(37,211,102,0.15)]',
     },
     {
       icon: LayoutDashboard,
-      title: 'Dashboard inteligente',
-      description: 'Visualize sua saúde financeira em tempo real com gráficos e indicadores modernos.',
-      color: 'text-proc-green',
-      bg: 'bg-proc-green/10',
-      glow: 'shadow-[0_0_30px_rgba(0,230,118,0.15)]',
-    },
-    {
-      icon: BarChart3,
-      title: 'Análises financeiras visuais',
-      description: 'Entenda para onde seu dinheiro está indo com categorização automática inteligente.',
-      color: 'text-proc-green',
-      bg: 'bg-proc-green/10',
-      glow: 'shadow-[0_0_30px_rgba(0,230,118,0.15)]',
+      title: 'Dashboard Completo',
+      description: 'Visualize sua saúde financeira em tempo real com gráficos modernos e intuitivos.',
+      color: 'text-proc-cyan',
+      bg: 'bg-proc-cyan/10',
+      glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
     },
   ];
 

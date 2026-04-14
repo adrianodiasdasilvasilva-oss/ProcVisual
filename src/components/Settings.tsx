@@ -15,8 +15,6 @@ import {
   Plus,
   Moon,
   Sun,
-  Send,
-  MessageSquare,
   Mail
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
@@ -32,8 +30,6 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isCropping, setIsCropping] = useState(false);
-  const [isTestingWhatsApp, setIsTestingWhatsApp] = useState(false);
-  const [whapiStatus, setWhapiStatus] = useState<{ success: boolean, data?: any, error?: string } | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
   
   const [phone, setPhone] = useState('');
@@ -76,19 +72,6 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
     };
   }, []);
 
-  useEffect(() => {
-    const fetchWhapiStatus = async () => {
-      try {
-        const response = await fetch('/api/whapi-status');
-        const data = await response.json();
-        setWhapiStatus(data);
-      } catch (err) {
-        console.error('Erro ao buscar status Whapi:', err);
-      }
-    };
-    fetchWhapiStatus();
-  }, []);
-
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth.currentUser) return;
@@ -110,46 +93,6 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       setMessage({ type: 'error', text: 'Erro ao atualizar perfil.' });
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleTestWhatsApp = async () => {
-    if (!phone) {
-      setMessage({ type: 'error', text: 'Por favor, salve seu número de telefone primeiro.' });
-      return;
-    }
-
-    setIsTestingWhatsApp(true);
-    setMessage(null);
-
-    try {
-      const response = await fetch('/api/test-whatsapp', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          phone: phone,
-          message: `🚀 *TESTE DE CONEXÃO PROCVISUAL*\n\nOlá ${name || 'Usuário'}! Se você recebeu esta mensagem, seu WhatsApp está configurado corretamente.\n\nHorário do teste: ${new Date().toLocaleTimeString('pt-BR')}`
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        setMessage({ type: 'success', text: 'Mensagem de teste enviada! Verifique seu WhatsApp.' });
-      } else {
-        console.error('Erro no teste de WhatsApp:', data);
-        setMessage({ 
-          type: 'error', 
-          text: `Erro: ${data.error || 'Falha ao enviar mensagem.'} ${data.details?.message || ''}` 
-        });
-      }
-    } catch (error: any) {
-      console.error('Erro de rede no teste de WhatsApp:', error);
-      setMessage({ type: 'error', text: 'Erro de conexão com o servidor.' });
-    } finally {
-      setIsTestingWhatsApp(false);
     }
   };
 
@@ -386,72 +329,6 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                 <span className="font-bold text-xs uppercase tracking-widest">Modo Claro</span>
               </button>
             </div>
-          </div>
-        </section>
-
-        {/* WhatsApp Status & Test Section */}
-        <section className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-              <MessageSquare size={20} />
-            </div>
-            <h3 className="text-xl font-bold text-proc-text-main">Status do WhatsApp</h3>
-          </div>
-
-          <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-proc-bg/50 border border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full ${userData?.isActive ? 'bg-proc-green animate-pulse' : 'bg-red-500'}`} />
-                <div>
-                  <p className="text-xs font-bold text-white uppercase tracking-widest">
-                    {userData?.isActive ? 'Recursos Ativos' : 'Recursos Inativos'}
-                  </p>
-                  <p className="text-[10px] text-proc-text-sec">
-                    {userData?.isActive ? 'Seu WhatsApp está pronto para receber notificações.' : 'Regularize seu pagamento para ativar.'}
-                  </p>
-                </div>
-              </div>
-              {whapiStatus && (
-                <div className="text-right">
-                  <p className="text-[8px] text-proc-text-sec uppercase tracking-widest font-bold">Servidor</p>
-                  <p className={`text-[10px] font-bold ${whapiStatus.success ? 'text-proc-green' : 'text-red-500'}`}>
-                    {whapiStatus.success ? 'ONLINE' : 'OFFLINE'}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs text-proc-text-sec leading-relaxed">
-                Clique no botão abaixo para enviar uma mensagem de teste para o número salvo no seu perfil.
-              </p>
-              
-              <button
-                onClick={handleTestWhatsApp}
-                disabled={isTestingWhatsApp || !phone}
-                className="w-full py-4 rounded-2xl bg-proc-secondary border border-white/10 text-proc-text-main font-bold flex items-center justify-center gap-3 hover:bg-proc-secondary/80 transition-all disabled:opacity-50"
-              >
-                {isTestingWhatsApp ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : (
-                  <>
-                    <Send size={18} className="text-proc-cyan" />
-                    Enviar Mensagem de Teste
-                  </>
-                )}
-              </button>
-            </div>
-
-            {!userData?.isActive && (
-              <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10">
-                <p className="text-[10px] text-red-400 font-bold uppercase tracking-widest flex items-center gap-2">
-                  <AlertCircle size={10} /> Atenção
-                </p>
-                <p className="text-xs text-proc-text-sec mt-1">
-                  O envio de despesas e recebimento de notificações via WhatsApp só funcionam para usuários com plano Premium ativo.
-                </p>
-              </div>
-            )}
           </div>
         </section>
 
