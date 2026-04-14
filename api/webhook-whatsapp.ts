@@ -178,10 +178,25 @@ const EXPENSE_SCHEMA: any = {
 };
 
 async function generateWithFallback(genAI: any, prompt: any) {
-  const models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+  // List of models to try based on the ListModels output.
+  // 1.5, 2.0, 2.5 models support responseSchema.
+  const modelsWithSchema = [
+    "gemini-2.0-flash", 
+    "gemini-2.0-flash-lite", 
+    "gemini-1.5-flash-latest", 
+    "gemini-1.5-flash", 
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-1.5-pro-latest", 
+    "gemini-1.5-pro",
+    "gemini-pro-latest"
+  ];
+  const modelsLegacy = ["gemini-pro"];
+  
   let lastError = null;
 
-  for (const modelName of models) {
+  // Try models with Schema support
+  for (const modelName of modelsWithSchema) {
     try {
       console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
       const model = genAI.getGenerativeModel({ 
@@ -190,33 +205,38 @@ async function generateWithFallback(genAI: any, prompt: any) {
           responseMimeType: "application/json",
           responseSchema: EXPENSE_SCHEMA
         }
-      }, { apiVersion: 'v1' });
+      });
       const result = await model.generateContent(prompt);
       return result;
     } catch (e: any) {
-      console.error(`>>> [WH-WA] Erro no modelo ${modelName} (v1):`, e.message);
+      console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
       lastError = e;
-      
-      // Try v1beta as fallback for this model
-      try {
-        console.log(`>>> [WH-WA] Tentando modelo: ${modelName} (v1beta)`);
-        const modelBeta = genAI.getGenerativeModel({ 
-          model: modelName,
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: EXPENSE_SCHEMA
-          }
-        });
-        const resultBeta = await modelBeta.generateContent(prompt);
-        return resultBeta;
-      } catch (e2: any) {
-        console.error(`>>> [WH-WA] Erro no modelo ${modelName} (v1beta):`, e2.message);
-        lastError = e2;
-      }
-      
-      continue;
+      if (e.message.includes("404") || e.message.includes("not found")) continue;
     }
   }
+
+  // Fallback to legacy models
+  for (const modelName of modelsLegacy) {
+    try {
+      console.log(`>>> [WH-WA] Tentando modelo legado: ${modelName}`);
+      const model = genAI.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json"
+        }
+      });
+      
+      const textPrompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
+      const finalPrompt = `${textPrompt}\n\nResponda APENAS com um JSON seguindo este formato: { "descricao": string, "valor": number, "categoria": string, "parcela": number, "totalParcelas": number, "data": "YYYY-MM-DD" }`;
+      
+      const result = await model.generateContent(finalPrompt);
+      return result;
+    } catch (e: any) {
+      console.error(`>>> [WH-WA] Erro no modelo legado ${modelName}:`, e.message);
+      lastError = e;
+    }
+  }
+
   throw lastError;
 }
 
@@ -226,6 +246,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     console.error(">>> [WH-WA] GEMINI_API_KEY não configurada!");
     return;
   }
+  console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
