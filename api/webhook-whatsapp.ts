@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import fs from "fs";
 import path from "path";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Cache for Firebase Client
 let dbClient: any = null;
@@ -10,16 +10,23 @@ let dbClient: any = null;
 async function initializeFirebaseClient() {
   if (dbClient) return dbClient;
   
+  console.log(">>> [WH-WA] Inicializando Firebase Client...");
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (!fs.existsSync(configPath)) {
     console.error(">>> [WH-WA] Erro: firebase-applet-config.json não encontrado!");
     return null;
   }
 
-  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const app = initializeApp(firebaseConfig);
-  dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-  return dbClient;
+  try {
+    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    console.log(">>> [WH-WA] Config lida para o projeto:", firebaseConfig.projectId);
+    const app = initializeApp(firebaseConfig);
+    dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return dbClient;
+  } catch (e: any) {
+    console.error(">>> [WH-WA] Erro ao inicializar Firebase Client:", e.message);
+    return null;
+  }
 }
 
 export default async function handler(req: any, res: any) {
@@ -44,6 +51,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
+    console.log(">>> [WH-WA] Buscando usuário...");
     // Normalize incoming number
     const rawNumero = numero.split('@')[0];
     const cleanIncoming = rawNumero.replace(/\D/g, "");
@@ -55,23 +63,29 @@ export default async function handler(req: any, res: any) {
     let userDoc = null;
     let userData = null;
 
+    console.log(">>> [WH-WA] Executando query 1...");
     // Try exact match first
     const usersRef = collection(db, "usuarios");
     const q1 = query(usersRef, where("telefone", "==", cleanIncoming));
     const snap1 = await getDocs(q1);
+    console.log(">>> [WH-WA] Query 1 concluída.");
     
     if (!snap1.empty) {
       userDoc = snap1.docs[0];
     } else {
+      console.log(">>> [WH-WA] Executando query 2...");
       // Try short match
       const q2 = query(usersRef, where("telefone", "==", shortIncoming));
       const snap2 = await getDocs(q2);
+      console.log(">>> [WH-WA] Query 2 concluída.");
       if (!snap2.empty) userDoc = snap2.docs[0];
     }
 
     // Fallback: search for users and manually check normalized phone (handling the "9" digit issue)
     if (!userDoc) {
+       console.log(">>> [WH-WA] Executando fallback scan...");
        const snapAll = await getDocs(usersRef);
+       console.log(">>> [WH-WA] Fallback scan concluído.");
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
          if (!d.isActive) return false;
@@ -133,15 +147,15 @@ async function sendWhatsAppMessage(to: string, body: string) {
   }
 }
 
-const EXPENSE_SCHEMA = {
-  type: Type.OBJECT,
+const EXPENSE_SCHEMA: any = {
+  type: SchemaType.OBJECT,
   properties: {
-    descricao: { type: Type.STRING, description: "O que foi pago" },
-    valor: { type: Type.NUMBER, description: "Valor total ou da parcela" },
-    categoria: { type: Type.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
-    parcela: { type: Type.INTEGER, description: "Parcela atual" },
-    totalParcelas: { type: Type.INTEGER, description: "Total de parcelas" },
-    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" }
+    descricao: { type: SchemaType.STRING, description: "O que foi pago" },
+    valor: { type: SchemaType.NUMBER, description: "Valor total ou da parcela" },
+    categoria: { type: SchemaType.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
+    parcela: { type: SchemaType.INTEGER, description: "Parcela atual" },
+    totalParcelas: { type: SchemaType.INTEGER, description: "Total de parcelas" },
+    data: { type: SchemaType.STRING, description: "Data no formato YYYY-MM-DD" }
   },
   required: ["descricao", "valor", "categoria", "parcela", "totalParcelas"]
 };
@@ -151,21 +165,23 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   if (!apiKey) return;
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const now = new Date();
-    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-    const todayStr = brazilTime.toISOString().split('T')[0];
-
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`,
-      config: {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
+    const now = new Date();
+    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+    const todayStr = brazilTime.toISOString().split('T')[0];
+
+    const result_ai = await model.generateContent(`Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`);
+    const response = await result_ai.response;
+    const result = JSON.parse(response.text() || "{}");
+    
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
     }
@@ -184,20 +200,22 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const base64Image = Buffer.from(buffer).toString('base64');
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        { text: "Extraia os dados deste comprovante." },
-        { inlineData: { data: base64Image, mimeType } }
-      ],
-      config: {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
+    const result_ai = await model.generateContent([
+      { text: "Extraia os dados deste comprovante." },
+      { inlineData: { data: base64Image, mimeType } }
+    ]);
+    const response = await result_ai.response;
+    const result = JSON.parse(response.text() || "{}");
+
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
     }
@@ -216,20 +234,22 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const base64Audio = Buffer.from(buffer).toString('base64');
     const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
 
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [
-        { text: "Transcreva e extraia os dados da despesa." },
-        { inlineData: { data: base64Audio, mimeType } }
-      ],
-      config: {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ 
+      model: "gemini-1.5-flash",
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
       }
     });
 
-    const result = JSON.parse(response.text || "{}");
+    const result_ai = await model.generateContent([
+      { text: "Transcreva e extraia os dados da despesa." },
+      { inlineData: { data: base64Audio, mimeType } }
+    ]);
+    const response = await result_ai.response;
+    const result = JSON.parse(response.text() || "{}");
+
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
     }
