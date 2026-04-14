@@ -177,25 +177,46 @@ const EXPENSE_SCHEMA: any = {
   required: ["descricao", "valor", "categoria", "parcela", "totalParcelas"]
 };
 
+async function generateWithFallback(genAI: any, prompt: any) {
+  const models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro", "gemini-1.0-pro"];
+  let lastError = null;
+
+  for (const modelName of models) {
+    try {
+      console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
+      const model = genAI.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: EXPENSE_SCHEMA
+        }
+      });
+      const result = await model.generateContent(prompt);
+      return result;
+    } catch (e: any) {
+      lastError = e;
+      if (e.message.includes("404") || e.message.includes("not found")) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+}
+
 async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return;
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-latest",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: EXPENSE_SCHEMA
-      }
-    });
-
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     const todayStr = brazilTime.toISOString().split('T')[0];
 
-    const result_ai = await model.generateContent(`Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`);
+    const prompt = `Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`;
+    const result_ai = await generateWithFallback(genAI, prompt);
+
     const response = await result_ai.response;
     const result = JSON.parse(response.text() || "{}");
     
@@ -219,18 +240,12 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-latest",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: EXPENSE_SCHEMA
-      }
-    });
-
-    const result_ai = await model.generateContent([
+    const prompt = [
       { text: "Extraia os dados deste comprovante." },
       { inlineData: { data: base64Image, mimeType } }
-    ]);
+    ];
+
+    const result_ai = await generateWithFallback(genAI, prompt);
     const response = await result_ai.response;
     const result = JSON.parse(response.text() || "{}");
 
@@ -254,18 +269,12 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash-latest",
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: EXPENSE_SCHEMA
-      }
-    });
-
-    const result_ai = await model.generateContent([
+    const prompt = [
       { text: "Transcreva e extraia os dados da despesa." },
       { inlineData: { data: base64Audio, mimeType } }
-    ]);
+    ];
+
+    const result_ai = await generateWithFallback(genAI, prompt);
     const response = await result_ai.response;
     const result = JSON.parse(response.text() || "{}");
 
