@@ -1,9 +1,9 @@
 import React from 'react';
 import LandingHeader from './LandingHeader';
 import LandingHero from './LandingHero';
+import LandingPreview from './LandingPreview';
 import LandingFeatures from './LandingFeatures';
 import LandingHowItWorks from './LandingHowItWorks';
-import LandingPreview from './LandingPreview';
 import LandingFooter from './LandingFooter';
 import LegalModal from './LegalModal';
 
@@ -27,10 +27,10 @@ export default function LandingPage({ onLogin, onSignUp }: LandingPageProps) {
       <LandingHeader onLogin={onLogin} onSignUp={onSignUp} />
       
       <main>
-        <LandingHero onStart={onSignUp} />
+        <LandingHero onStart={onSignUp} onLogin={onLogin} />
+        <LandingPreview />
         <LandingFeatures />
         <LandingHowItWorks />
-        <LandingPreview />
       </main>
 
       <LandingFooter onOpenLegal={openLegal} />
