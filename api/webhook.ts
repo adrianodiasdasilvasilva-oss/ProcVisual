@@ -39,6 +39,25 @@ async function initializeFirebaseAdmin() {
   return dbAdmin;
 }
 
+async function sendWhatsApp(to: string, message: string) {
+  const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
+  if (!WHAPI_TOKEN) return { success: false, error: "Token ausente" };
+  let cleanNumber = to.replace(/\D/g, "");
+  if (cleanNumber.length === 10 || cleanNumber.length === 11) cleanNumber = "55" + cleanNumber;
+  const recipient = `${cleanNumber}@s.whatsapp.net`;
+
+  try {
+    const response = await fetch(`https://gate.whapi.cloud/messages/text`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${WHAPI_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ to: recipient, body: message }),
+    });
+    return response.ok ? { success: true } : { success: false, error: await response.text() };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).end();
 
@@ -67,25 +86,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const subscriptionId = session.subscription as string;
         const customerPhone = session.customer_details?.phone;
 
-        if (userId) {
-          console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
-          const updateData: any = {
-            isActive: true,
-            plan: "premium",
-            subscriptionId: subscriptionId,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          };
+          if (userId) {
+            console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
+            const updateData: any = {
+              isActive: true,
+              plan: "premium",
+              subscriptionId: subscriptionId,
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            };
 
-          if (customerPhone) {
-            // Normalize phone number to digits only
-            updateData.telefone = customerPhone.replace(/\D/g, "");
-            console.log(`>>> [WEBHOOK] Telefone capturado: ${updateData.telefone}`);
+            if (customerPhone) {
+              updateData.telefone = customerPhone.replace(/\D/g, "");
+              console.log(`>>> [WEBHOOK] Telefone capturado: ${updateData.telefone}`);
+            }
+
+            await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+
+            // Enviar mensagem de boas-vindas/ajuda se tiver telefone
+            const userDoc = await db.collection("usuarios").doc(userId).get();
+            const userData = userDoc.data();
+            const phoneToSend = updateData.telefone || userData?.telefone;
+
+            if (phoneToSend) {
+              console.log(`>>> [WEBHOOK] Enviando boas-vindas para: ${phoneToSend}`);
+              const welcomeMsg = `🚀 *Bem-vindo ao ProcVisual Premium!*\n\nSeu pagamento foi confirmado e sua conta já está ativa. Agora você pode registrar despesas direto por aqui!\n\n📖 *Guia de Uso*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".`;
+              await sendWhatsApp(phoneToSend, welcomeMsg);
+            }
           }
-
-          await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+          break;
         }
-        break;
-      }
       case "invoice.payment_succeeded": {
         const invoice = event.data.object as any;
         const subscriptionId = invoice.subscription as string;

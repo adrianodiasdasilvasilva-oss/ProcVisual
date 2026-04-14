@@ -118,15 +118,34 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
         const subscriptionId = session.subscription as string;
+        const customerPhone = session.customer_details?.phone;
 
         if (userId) {
           console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
-          await db.collection("usuarios").doc(userId).set({
+          
+          const updateData: any = {
             isActive: true,
             plan: "premium",
             subscriptionId: subscriptionId,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          };
+
+          if (customerPhone) {
+            updateData.telefone = customerPhone.replace(/\D/g, "");
+          }
+
+          await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+
+          // Enviar mensagem de boas-vindas/ajuda se tiver telefone
+          const userDoc = await db.collection("usuarios").doc(userId).get();
+          const userData = userDoc.data();
+          const phoneToSend = updateData.telefone || userData?.telefone;
+
+          if (phoneToSend) {
+            console.log(`>>> [STRIPE] Enviando boas-vindas para: ${phoneToSend}`);
+            const welcomeMsg = `🚀 *Bem-vindo ao ProcVisual Premium!*\n\nSeu pagamento foi confirmado e sua conta já está ativa. Agora você pode registrar despesas direto por aqui!\n\n📖 *Guia de Uso*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".`;
+            await sendWhatsApp(phoneToSend, welcomeMsg);
+          }
         }
         break;
       }
