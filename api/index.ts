@@ -133,10 +133,19 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         if (userId) {
           console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
           
+          let nextPaymentDate = null;
+          try {
+            const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+            nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+          } catch (e) {
+            console.error(">>> [STRIPE] Erro ao buscar detalhes da assinatura:", e);
+          }
+
           const updateData: any = {
             isActive: true,
             plan: "premium",
             subscriptionId: subscriptionId,
+            nextPaymentDate: nextPaymentDate,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
 
@@ -165,7 +174,19 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         if (subscriptionId) {
           const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscriptionId).limit(1).get();
           if (!userQuery.empty) {
-            await userQuery.docs[0].ref.update({ isActive: true, lastPayment: admin.firestore.FieldValue.serverTimestamp() });
+            let nextPaymentDate = null;
+            try {
+              const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
+              nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+            } catch (e) {
+              console.error(">>> [STRIPE] Erro ao buscar detalhes da assinatura no invoice:", e);
+            }
+
+            await userQuery.docs[0].ref.update({ 
+              isActive: true, 
+              nextPaymentDate: nextPaymentDate,
+              lastPayment: admin.firestore.FieldValue.serverTimestamp() 
+            });
           }
         }
         break;
@@ -191,6 +212,35 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
 
 // 2. Global JSON Body Parser (for all other routes)
 app.use("/api", express.json({ limit: '10mb' }));
+
+// New endpoint to fetch subscription details
+app.get("/api/subscription-details", async (req, res) => {
+  const userId = req.query.userId as string;
+  if (!userId) return res.status(400).json({ error: "UserId missing" });
+
+  try {
+    if (!dbAdmin) await initializeFirebaseAdmin();
+    const userDoc = await dbAdmin!.collection("usuarios").doc(userId).get();
+    const userData = userDoc.data();
+
+    if (!userData?.subscriptionId) {
+      return res.json({ nextPaymentDate: null });
+    }
+
+    const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
+    const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+
+    // Optionally update Firestore if it was missing
+    if (!userData.nextPaymentDate) {
+      await userDoc.ref.update({ nextPaymentDate });
+    }
+
+    res.json({ nextPaymentDate });
+  } catch (error: any) {
+    console.error(">>> [API] Erro ao buscar detalhes da assinatura:", error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // 3. Request Logging
 app.use((req, res, next) => {

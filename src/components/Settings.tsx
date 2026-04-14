@@ -15,7 +15,9 @@ import {
   Plus,
   Moon,
   Sun,
-  Mail
+  Mail,
+  CreditCard,
+  Calendar
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
@@ -71,6 +73,23 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       unsubscribeCategories();
     };
   }, []);
+
+  useEffect(() => {
+    if (userData?.isActive && !userData?.nextPaymentDate && auth.currentUser) {
+      const fetchSubDetails = async () => {
+        try {
+          const res = await fetch(`/api/subscription-details?userId=${auth.currentUser?.uid}`);
+          const data = await res.json();
+          if (data.nextPaymentDate) {
+            // The profile listener will pick up the change after the API updates Firestore
+          }
+        } catch (e) {
+          console.error("Error fetching sub details:", e);
+        }
+      };
+      fetchSubDetails();
+    }
+  }, [userData?.isActive, userData?.nextPaymentDate]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -329,6 +348,60 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                 <span className="font-bold text-xs uppercase tracking-widest">Modo Claro</span>
               </button>
             </div>
+          </div>
+        </section>
+        
+        {/* Subscription Section */}
+        <section className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-8 space-y-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+              <CreditCard size={20} />
+            </div>
+            <h3 className="text-xl font-bold text-proc-text-main">Assinatura</h3>
+          </div>
+
+          <div className="space-y-6">
+            <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-bg/50 border border-white/5">
+              <div>
+                <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Status</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <div className={`w-2 h-2 rounded-full ${userData?.isActive ? 'bg-proc-green animate-pulse' : 'bg-red-500'}`} />
+                  <p className={`text-sm font-bold ${userData?.isActive ? 'text-proc-green' : 'text-red-500'}`}>
+                    {userData?.isActive ? 'Premium Ativo' : 'Inativo'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Plano</p>
+                <p className="text-sm font-bold text-proc-text-main mt-1">
+                  {userData?.plan === 'premium' ? 'Mensal Premium' : 'Nenhum'}
+                </p>
+              </div>
+            </div>
+
+            {userData?.isActive && userData?.nextPaymentDate && (
+              <div className="flex items-center gap-4 p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10">
+                <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+                  <Calendar size={20} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
+                  <p className="text-sm font-bold text-proc-text-main mt-0.5">
+                    {new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'long',
+                      year: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!userData?.isActive && (
+              <p className="text-xs text-proc-text-sec italic text-center">
+                Sua assinatura não está ativa. Regularize seu pagamento para acessar todas as funcionalidades.
+              </p>
+            )}
           </div>
         </section>
 
