@@ -339,6 +339,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
           await addDoc(collection(db, "categorias"), {
             userId,
             nome: categoria,
+            origem: origem,
             createdAt: serverTimestamp()
           });
         }

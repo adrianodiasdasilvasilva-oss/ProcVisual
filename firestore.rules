@@ -82,8 +82,7 @@ service cloud.firestore {
              data.tipo in ['income', 'expense', 'birthday'] &&
              data.valor is number && data.valor >= 0 &&
              data.categoria is string && data.categoria.size() > 0 &&
-             data.data is string &&
-             (data.createdAt is timestamp || data.createdAt == null); // Allow null if it's an update and we don't want to re-validate it strictly if it was already there
+             data.data is string;
     }
 
     // ===============================================================
@@ -109,7 +108,7 @@ service cloud.firestore {
       
       // Allow unauthenticated creation for WhatsApp webhook
       allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
-                    (request.auth == null && request.resource.data.origem.matches("whatsapp.*"));
+                    (request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
       
       // Allow users to update "pending" transactions to claim them
       allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
@@ -120,9 +119,10 @@ service cloud.firestore {
 
     // Categorias Collection
     match /categorias/{categoriaId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && 
-                    request.resource.data.nome is string && request.resource.data.nome.size() > 0;
+      allow read: if true; // Allow webhook and users to read categories
+      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && 
+                    request.resource.data.nome is string && request.resource.data.nome.size() > 0) ||
+                    (request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }

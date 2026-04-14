@@ -77,7 +77,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   }, []);
 
   useEffect(() => {
-    if (userData?.isActive && !userData?.nextPaymentDate && auth.currentUser) {
+    if (!userData?.nextPaymentDate && auth.currentUser) {
       const fetchSubDetails = async () => {
         try {
           const res = await fetch(`/api/subscription-details?userId=${auth.currentUser?.uid}`);
@@ -91,7 +91,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       };
       fetchSubDetails();
     }
-  }, [userData?.isActive, userData?.nextPaymentDate]);
+  }, [userData?.nextPaymentDate]);
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();

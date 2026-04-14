@@ -243,9 +243,12 @@ app.get("/api/subscription-details", async (req, res) => {
           const subscription = customer.subscriptions?.data[0];
           if (subscription) {
             const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+            const isActive = subscription.status === 'active' || subscription.status === 'trialing';
             await userDoc.ref.update({ 
               subscriptionId: subscription.id,
-              nextPaymentDate 
+              nextPaymentDate,
+              isActive,
+              plan: 'premium'
             });
             return res.json({ nextPaymentDate });
           }
@@ -256,11 +259,14 @@ app.get("/api/subscription-details", async (req, res) => {
 
     const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
     const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+    const isActive = subscription.status === 'active' || subscription.status === 'trialing';
 
-    // Optionally update Firestore if it was missing
-    if (!userData.nextPaymentDate) {
-      await userDoc.ref.update({ nextPaymentDate });
-    }
+    // Sync Firestore with latest Stripe data
+    await userDoc.ref.update({ 
+      nextPaymentDate,
+      isActive,
+      plan: 'premium'
+    });
 
     res.json({ nextPaymentDate });
   } catch (error: any) {
