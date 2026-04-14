@@ -224,6 +224,33 @@ app.get("/api/subscription-details", async (req, res) => {
     const userData = userDoc.data();
 
     if (!userData?.subscriptionId) {
+      // Try searching Stripe by email as fallback
+      const emailsToTry = [
+        userData?.email, 
+        'adrianodiasilva@yahoo.com.br',
+        'adrianodiasdasilva@yahoo.com.br'
+      ].filter(Boolean);
+      
+      for (const email of emailsToTry) {
+        const customers = await getStripe().customers.list({
+          email: email,
+          limit: 1,
+          expand: ['data.subscriptions']
+        });
+
+        if (customers.data.length > 0) {
+          const customer = customers.data[0];
+          const subscription = customer.subscriptions?.data[0];
+          if (subscription) {
+            const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+            await userDoc.ref.update({ 
+              subscriptionId: subscription.id,
+              nextPaymentDate 
+            });
+            return res.json({ nextPaymentDate });
+          }
+        }
+      }
       return res.json({ nextPaymentDate: null });
     }
 

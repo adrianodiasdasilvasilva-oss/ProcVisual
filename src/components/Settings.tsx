@@ -36,6 +36,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   
   const [phone, setPhone] = useState('');
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [photo, setPhoto] = useState('');
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
         setUserData(data);
         setPhone(data.telefone || '');
         setName(data.nome || '');
+        setEmail(data.email || '');
         setPhoto(data.fotoURL || '');
       }
       setIsLoading(false);
@@ -102,6 +104,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       const userRef = doc(db, path, auth.currentUser.uid);
       await setDoc(userRef, {
         nome: name,
+        email: email,
         telefone: phone,
         fotoURL: photo,
         updatedAt: serverTimestamp()
@@ -268,10 +271,14 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                   <label className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest ml-1">E-mail</label>
                   <input 
                     type="email" 
-                    value={userData?.email || ''} 
-                    disabled
-                    className="w-full bg-proc-bg/30 border border-white/5 rounded-xl py-3 px-4 text-proc-text-sec text-sm cursor-not-allowed"
+                    value={email} 
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Seu e-mail principal"
+                    className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                   />
+                  <p className="text-[9px] text-proc-text-sec mt-1 ml-1">
+                    * Use o e-mail vinculado à sua assinatura para sincronizar os dados.
+                  </p>
                 </div>
 
                 <div className="space-y-1">
@@ -379,7 +386,7 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
               </div>
             </div>
 
-            {userData?.isActive && userData?.nextPaymentDate && (
+            {userData?.isActive && (
               <div className="flex items-center gap-4 p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10">
                 <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
                   <Calendar size={20} />
@@ -387,11 +394,15 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                 <div>
                   <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
                   <p className="text-sm font-bold text-proc-text-main mt-0.5">
-                    {new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: 'long',
-                      year: 'numeric'
-                    })}
+                    {userData?.nextPaymentDate ? (
+                      new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: 'long',
+                        year: 'numeric'
+                      })
+                    ) : (
+                      "Consultando data..."
+                    )}
                   </p>
                 </div>
               </div>

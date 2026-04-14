@@ -1,16 +1,16 @@
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 import fs from "fs";
 import path from "path";
 import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
-// Cache for Firebase Admin
-let dbAdmin: admin.firestore.Firestore | null = null;
+// Cache for Firebase Client
+let dbClient: any = null;
 
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
+async function initializeFirebaseClient() {
+  if (dbClient) return dbClient;
   
-  console.log(">>> [WH-WA] Inicializando Firebase Admin...");
+  console.log(">>> [WH-WA] Inicializando Firebase Client...");
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (!fs.existsSync(configPath)) {
     console.error(">>> [WH-WA] Erro: firebase-applet-config.json não encontrado!");
@@ -19,17 +19,11 @@ async function initializeFirebaseAdmin() {
 
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
-
-    if (admin.apps.length === 0) {
-      admin.initializeApp({ projectId });
-    }
-
-    dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
-    return dbAdmin;
+    const app = initializeApp(firebaseConfig);
+    dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    return dbClient;
   } catch (e: any) {
-    console.error(">>> [WH-WA] Erro ao inicializar Firebase Admin:", e.message);
+    console.error(">>> [WH-WA] Erro ao inicializar Firebase Client:", e.message);
     return null;
   }
 }
@@ -51,7 +45,7 @@ export default async function handler(req: any, res: any) {
     const type = message.type;
     console.log(`>>> [WH-WA] Mensagem de ${numero} tipo ${type}`);
 
-    const db = await initializeFirebaseAdmin();
+    const db = await initializeFirebaseClient();
 
     if (!db) {
       console.error(">>> [WH-WA] Abortando: DB não disponível.");
@@ -71,7 +65,8 @@ export default async function handler(req: any, res: any) {
     let userData: any = null;
 
     // 1. Try exact match with clean incoming
-    const snap1 = await db.collection("usuarios").where("telefone", "==", cleanIncoming).get();
+    const q1 = query(collection(db, "usuarios"), where("telefone", "==", cleanIncoming));
+    const snap1 = await getDocs(q1);
     
     if (!snap1.empty) {
       // Prefer active user if multiple found
@@ -79,7 +74,8 @@ export default async function handler(req: any, res: any) {
       userDoc = activeUser || snap1.docs[0];
     } else {
       // 2. Try short match
-      const snap2 = await db.collection("usuarios").where("telefone", "==", shortIncoming).get();
+      const q2 = query(collection(db, "usuarios"), where("telefone", "==", shortIncoming));
+      const snap2 = await getDocs(q2);
       if (!snap2.empty) {
         const activeUser = snap2.docs.find(d => d.data().isActive === true);
         userDoc = activeUser || snap2.docs[0];
@@ -89,7 +85,7 @@ export default async function handler(req: any, res: any) {
     // 3. Fallback: scan active users for normalized match
     if (!userDoc) {
        console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
-       const snapAll = await db.collection("usuarios").get();
+       const snapAll = await getDocs(collection(db, "usuarios"));
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
          const tel = (d.telefone || "").replace(/\D/g, "");
@@ -335,17 +331,15 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
     if (categoria) {
       const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
       if (!predefined.includes(categoria)) {
-        const catSnap = await db.collection("categorias")
-          .where("userId", "==", userId)
-          .where("nome", "==", categoria)
-          .get();
+        const q = query(collection(db, "categorias"), where("userId", "==", userId), where("nome", "==", categoria));
+        const catSnap = await getDocs(q);
         
         if (catSnap.empty) {
           console.log(`>>> [WH-WA] Salvando nova categoria personalizada: ${categoria}`);
-          await db.collection("categorias").add({
+          await addDoc(collection(db, "categorias"), {
             userId,
             nome: categoria,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: serverTimestamp()
           });
         }
       }
@@ -365,7 +359,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
       installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
       const dateStr = installmentDate.toISOString().split('T')[0];
 
-      await db.collection("lancamentos").add({
+      await addDoc(collection(db, "lancamentos"), {
         userId,
         tipo: 'expense',
         valor,
@@ -374,7 +368,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
         descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
         estabelecimento: descricao,
         origem,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: serverTimestamp(),
         pago: false,
         parcela: i,
         totalParcelas,
