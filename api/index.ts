@@ -68,15 +68,19 @@ async function initializeFirebaseAdmin() {
     const dbId = firebaseConfig.firestoreDatabaseId;
 
     if (admin.apps.length === 0) {
+      // No AI Studio, usamos o projectId. Se falhar por falta de credenciais,
+      // o erro será capturado no getFirestore.
       admin.initializeApp({ projectId });
       console.log(">>> [SISTEMA] Firebase Admin inicializado.");
     }
 
     try {
+      // Tenta conectar ao banco específico ou ao padrão
       dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
       console.log(`>>> [SISTEMA] Firestore conectado (DB: ${dbId || 'default'}).`);
     } catch (e: any) {
       console.warn(`>>> [SISTEMA] Erro ao conectar no DB ${dbId}: ${e.message}`);
+      // Fallback para o banco padrão se o nomeado falhar
       dbAdmin = getFirestore();
     }
 

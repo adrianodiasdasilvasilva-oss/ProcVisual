@@ -21,15 +21,26 @@ async function initializeFirebaseAdmin() {
   const dbId = firebaseConfig.firestoreDatabaseId;
 
   if (admin.apps.length === 0) {
-    admin.initializeApp({ projectId });
+    try {
+      admin.initializeApp({ projectId });
+    } catch (e) {
+      // Já pode estar inicializado por outro módulo
+    }
   }
 
   try {
+    // Tenta obter a instância já existente ou criar uma nova
     dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
     return dbAdmin;
   } catch (e: any) {
     console.error(">>> [WH-WA] Erro ao conectar Firestore Admin:", e.message);
-    return null;
+    // Se falhar por credenciais, tentamos usar a instância padrão sem ID
+    try {
+      dbAdmin = getFirestore();
+      return dbAdmin;
+    } catch (e2) {
+      return null;
+    }
   }
 }
 
