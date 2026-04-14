@@ -522,7 +522,11 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
           
           for (let i = 0; i < numInstallments; i++) {
             const installmentDate = new Date(baseDate);
-            installmentDate.setMonth(baseDate.getMonth() + i);
+            if (formData.type === 'birthday') {
+              installmentDate.setFullYear(baseDate.getFullYear() + i);
+            } else {
+              installmentDate.setMonth(baseDate.getMonth() + i);
+            }
             
             const installmentPayload = {
               ...payload,

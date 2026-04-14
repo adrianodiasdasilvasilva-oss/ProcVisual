@@ -331,6 +331,129 @@ app.post("/api/notify-transaction", async (req, res) => {
   }
 });
 
+app.post("/api/admin/run-notifications", async (req, res) => {
+  console.log(">>> [ADMIN] Disparando notificações manualmente...");
+  if (!dbAdmin) await initializeFirebaseAdmin();
+  if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
+
+  try {
+    const results = await runDailyNotifications();
+    res.json({ success: true, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function runDailyNotifications() {
+  if (!dbAdmin) return { error: "DB não disponível" };
+  
+  const now = new Date();
+  // Ajuste para Horário de Brasília (UTC-3)
+  const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+  const todayStr = brazilTime.toISOString().split('T')[0];
+  const today = new Date(todayStr + "T12:00:00");
+  
+  console.log(`>>> [JOB] Iniciando processamento para: ${todayStr}`);
+  
+  const snapshot = await dbAdmin.collection("lancamentos")
+    .where("tipo", "in", ["expense", "birthday"])
+    .get();
+
+  if (snapshot.empty) {
+    console.log(">>> [JOB] Nenhum lançamento encontrado.");
+    return { processed: 0 };
+  }
+
+  let processed = 0;
+  let notified = 0;
+
+  for (const doc of snapshot.docs) {
+    processed++;
+    const data = doc.data();
+    const userId = data.userId;
+
+    if (!userId || userId === 'whatsapp_pending') continue;
+
+    const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
+    const userData = userSnap.data();
+
+    if (!userData || userData.isActive === false) {
+      continue; 
+    }
+
+    const telefone = userData.telefone;
+    if (!telefone) continue;
+
+    const vencimento = new Date(data.data + "T12:00:00");
+    let diffDays = -1;
+
+    if (data.tipo === 'birthday') {
+      const bDay = vencimento.getDate();
+      const bMonth = vencimento.getMonth();
+      const tDay = today.getDate();
+      const tMonth = today.getMonth();
+
+      if (bDay === tDay && bMonth === tMonth) {
+        diffDays = 0;
+      } else {
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+        if (bDay === tomorrow.getDate() && bMonth === tomorrow.getMonth()) {
+          diffDays = 1;
+        }
+      }
+    } else {
+      const diffTime = vencimento.getTime() - today.getTime();
+      diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    }
+
+    const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
+    const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+    if (data.tipo === 'birthday') {
+      if (diffDays === 1 && !data.notificadoAmanha) {
+        const msg = `👀 *LEMBRETE:* Amanhã é aniversário de *${data.descricao || data.estabelecimento}*!`;
+        const res = await sendWhatsApp(telefone, msg);
+        if (res.success) {
+          await doc.ref.update({ notificadoAmanha: true });
+          notified++;
+        }
+      }
+      if (diffDays === 0 && !data.notificadoNoDia) {
+        const msg = `🥳 *HOJE:* É aniversário de *${data.descricao || data.estabelecimento}*!`;
+        const res = await sendWhatsApp(telefone, msg);
+        if (res.success) {
+          await doc.ref.update({ notificadoNoDia: true });
+          notified++;
+        }
+      }
+    } else {
+      // Apenas despesas não pagas
+      if (data.pago === true) continue;
+
+      if (diffDays === 5 && !data.notificado5dias) {
+        const msg = `⚠️ *AVISO:* Sua despesa "${data.descricao || data.estabelecimento}" vence em 5 dias (R$ ${valorFormatado}).`;
+        const res = await sendWhatsApp(telefone, msg);
+        if (res.success) {
+          await doc.ref.update({ notificado5dias: true });
+          notified++;
+        }
+      }
+      if (diffDays === 0 && !data.notificadoNoDia) {
+        const msg = `🚨 *VENCIMENTO:* Sua despesa "${data.descricao || data.estabelecimento}" vence HOJE (R$ ${valorFormatado}).`;
+        const res = await sendWhatsApp(telefone, msg);
+        if (res.success) {
+          await doc.ref.update({ notificadoNoDia: true });
+          notified++;
+        }
+      }
+    }
+  }
+
+  console.log(`>>> [JOB] Finalizado. Processados: ${processed}, Notificados: ${notified}`);
+  return { processed, notified };
+}
+
 // Server initialization for non-Vercel environments
 if (!process.env.VERCEL) {
   const PORT = 3000;
@@ -356,72 +479,9 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    cron.schedule("0 8 * * *", async () => {
-      console.log(">>> [JOB] Rodando notificações diárias...");
-      if (!dbAdmin) return;
-
-      try {
-        const now = new Date();
-        const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-        const todayStr = brazilTime.toISOString().split('T')[0];
-        const today = new Date(todayStr + "T12:00:00");
-
-        const snapshot = await dbAdmin.collection("lancamentos")
-          .where("tipo", "in", ["expense", "birthday"])
-          .get();
-
-        if (snapshot.empty) return;
-
-        for (const doc of snapshot.docs) {
-          const data = doc.data();
-          const userId = data.userId;
-
-          // Check if user is active
-          const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
-          const userData = userSnap.data();
-
-          if (!userData || userData.isActive === false) {
-            continue; // Skip inactive users
-          }
-
-          const telefone = userData.telefone;
-          if (!telefone) continue;
-
-          // Notification logic (simplified version of what was there)
-          const vencimento = new Date(data.data + "T12:00:00");
-          const diffTime = vencimento.getTime() - today.getTime();
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-          const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
-          const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-
-          if (data.tipo === 'birthday') {
-            if (diffDays === 1 && !data.notificadoAmanha) {
-              const msg = `👀 *LEMBRETE:* Amanhã é aniversário de *${data.descricao}*!`;
-              const res = await sendWhatsApp(telefone, msg);
-              if (res.success) await doc.ref.update({ notificadoAmanha: true });
-            }
-            if (diffDays === 0 && !data.notificadoNoDia) {
-              const msg = `🥳 *HOJE:* É aniversário de *${data.descricao}*!`;
-              const res = await sendWhatsApp(telefone, msg);
-              if (res.success) await doc.ref.update({ notificadoNoDia: true });
-            }
-          } else {
-            if (diffDays === 5 && !data.notificado5dias) {
-              const msg = `⚠️ *AVISO:* Sua despesa "${data.descricao}" vence em 5 dias (R$ ${valorFormatado}).`;
-              const res = await sendWhatsApp(telefone, msg);
-              if (res.success) await doc.ref.update({ notificado5dias: true });
-            }
-            if (diffDays === 0 && !data.notificadoNoDia) {
-              const msg = `🚨 *VENCIMENTO:* Sua despesa "${data.descricao}" vence HOJE (R$ ${valorFormatado}).`;
-              const res = await sendWhatsApp(telefone, msg);
-              if (res.success) await doc.ref.update({ notificadoNoDia: true });
-            }
-          }
-        }
-      } catch (err) {
-        console.error(">>> [JOB] Erro:", err);
-      }
+    // Roda às 08:00 e 09:00 para garantir (caso o servidor esteja acordando)
+    cron.schedule("0 8,9 * * *", async () => {
+      await runDailyNotifications();
     });
   });
 }
