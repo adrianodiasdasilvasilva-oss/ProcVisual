@@ -1,14 +1,14 @@
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeApp } from "firebase/app";
+import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import fs from "fs";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Cache for Firebase Admin
-let dbAdmin: admin.firestore.Firestore | null = null;
+// Cache for Firebase Client
+let dbClient: any = null;
 
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
+async function initializeFirebaseClient() {
+  if (dbClient) return dbClient;
   
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (!fs.existsSync(configPath)) {
@@ -17,31 +17,9 @@ async function initializeFirebaseAdmin() {
   }
 
   const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const projectId = firebaseConfig.projectId;
-  const dbId = firebaseConfig.firestoreDatabaseId;
-
-  if (admin.apps.length === 0) {
-    try {
-      admin.initializeApp({ projectId });
-    } catch (e) {
-      // Já pode estar inicializado por outro módulo
-    }
-  }
-
-  try {
-    // Tenta obter a instância já existente ou criar uma nova
-    dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
-    return dbAdmin;
-  } catch (e: any) {
-    console.error(">>> [WH-WA] Erro ao conectar Firestore Admin:", e.message);
-    // Se falhar por credenciais, tentamos usar a instância padrão sem ID
-    try {
-      dbAdmin = getFirestore();
-      return dbAdmin;
-    } catch (e2) {
-      return null;
-    }
-  }
+  const app = initializeApp(firebaseConfig);
+  dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  return dbClient;
 }
 
 export default async function handler(req: any, res: any) {
@@ -59,10 +37,10 @@ export default async function handler(req: any, res: any) {
 
     const numero = message.from; 
     const type = message.type;
-    const db = await initializeFirebaseAdmin();
+    const db = await initializeFirebaseClient();
 
     if (!db) {
-      console.error(">>> [WH-WA] Abortando: Admin DB não disponível.");
+      console.error(">>> [WH-WA] Abortando: DB não disponível.");
       return res.status(200).json({ ok: true });
     }
 
@@ -78,20 +56,26 @@ export default async function handler(req: any, res: any) {
     let userData = null;
 
     // Try exact match first
-    const q1 = await db.collection("usuarios").where("telefone", "==", cleanIncoming).limit(1).get();
-    if (!q1.empty) {
-      userDoc = q1.docs[0];
+    const usersRef = collection(db, "usuarios");
+    const q1 = query(usersRef, where("telefone", "==", cleanIncoming));
+    const snap1 = await getDocs(q1);
+    
+    if (!snap1.empty) {
+      userDoc = snap1.docs[0];
     } else {
       // Try short match
-      const q2 = await db.collection("usuarios").where("telefone", "==", shortIncoming).limit(1).get();
-      if (!q2.empty) userDoc = q2.docs[0];
+      const q2 = query(usersRef, where("telefone", "==", shortIncoming));
+      const snap2 = await getDocs(q2);
+      if (!snap2.empty) userDoc = snap2.docs[0];
     }
 
     // Fallback: search for users and manually check normalized phone (handling the "9" digit issue)
     if (!userDoc) {
-       const allUsers = await db.collection("usuarios").where("isActive", "==", true).get();
-       userDoc = allUsers.docs.find(doc => {
-         const tel = (doc.data().telefone || "").replace(/\D/g, "");
+       const snapAll = await getDocs(usersRef);
+       userDoc = snapAll.docs.find(doc => {
+         const d = doc.data();
+         if (!d.isActive) return false;
+         const tel = (d.telefone || "").replace(/\D/g, "");
          const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
          
          return tel === cleanIncoming || 
@@ -272,7 +256,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
       installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
       const dateStr = installmentDate.toISOString().split('T')[0];
 
-      await db.collection("lancamentos").add({
+      await addDoc(collection(db, "lancamentos"), {
         userId,
         tipo: 'expense',
         valor,
@@ -281,7 +265,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
         descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
         estabelecimento: descricao,
         origem,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: serverTimestamp(),
         pago: false,
         parcela: i,
         totalParcelas,
