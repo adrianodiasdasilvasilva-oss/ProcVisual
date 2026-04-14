@@ -213,6 +213,24 @@ app.post("/api/checkout", async (req, res) => {
   }
 });
 
+app.get("/api/admin/check-user", async (req, res) => {
+  const email = req.query.email as string;
+  if (!email) return res.status(400).json({ error: "Email é obrigatório" });
+  
+  if (!dbAdmin) await initializeFirebaseAdmin();
+  if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
+
+  try {
+    const snapshot = await dbAdmin.collection("usuarios").where("email", "==", email).get();
+    if (snapshot.empty) return res.json({ found: false });
+    
+    const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.json({ found: true, users });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/whapi-status", async (req, res) => {
   if (!WHAPI_TOKEN) return res.json({ success: false, error: "Token ausente" });
   try {
