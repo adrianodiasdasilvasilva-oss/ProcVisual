@@ -37,6 +37,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ],
       mode: "subscription",
       customer_email: email,
+      phone_number_collection: {
+        enabled: true,
+      },
       metadata: { userId },
       success_url: `${req.headers.origin}/?payment=success`,
       cancel_url: `${req.headers.origin}/?payment=cancel`,

@@ -65,14 +65,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
         const subscriptionId = session.subscription as string;
+        const customerPhone = session.customer_details?.phone;
+
         if (userId) {
           console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
-          await db.collection("usuarios").doc(userId).set({
+          const updateData: any = {
             isActive: true,
             plan: "premium",
             subscriptionId: subscriptionId,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
-          }, { merge: true });
+          };
+
+          if (customerPhone) {
+            // Normalize phone number to digits only
+            updateData.telefone = customerPhone.replace(/\D/g, "");
+            console.log(`>>> [WEBHOOK] Telefone capturado: ${updateData.telefone}`);
+          }
+
+          await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
         }
         break;
       }

@@ -201,6 +201,7 @@ app.post("/api/checkout", async (req, res) => {
       line_items: [{ price: priceId || process.env.VITE_STRIPE_PRICE_ID, quantity: 1 }],
       mode: "subscription",
       customer_email: email,
+      phone_number_collection: { enabled: true },
       metadata: { userId },
       success_url: `${req.headers.origin}/?payment=success`,
       cancel_url: `${req.headers.origin}/?payment=cancel`,
@@ -210,6 +211,27 @@ app.post("/api/checkout", async (req, res) => {
     console.error(">>> [STRIPE] Erro Checkout:", error.message);
     res.status(500).json({ error: error.message });
   }
+});
+
+app.get("/api/whapi-status", async (req, res) => {
+  if (!WHAPI_TOKEN) return res.json({ success: false, error: "Token ausente" });
+  try {
+    const response = await fetch(`${WHAPI_BASE_URL}/health`, {
+      headers: { "Authorization": `Bearer ${WHAPI_TOKEN}` }
+    });
+    const data = await response.json();
+    res.json({ success: response.ok, data });
+  } catch (error: any) {
+    res.json({ success: false, error: error.message });
+  }
+});
+
+app.post("/api/test-whatsapp", async (req, res) => {
+  const { phone, message } = req.body;
+  if (!phone) return res.status(400).json({ error: "Telefone é obrigatório" });
+  
+  const result = await sendWhatsApp(phone, message || "Teste de conexão ProcVisual");
+  res.json(result);
 });
 
 app.post("/api/webhook-whatsapp", async (req, res) => {
