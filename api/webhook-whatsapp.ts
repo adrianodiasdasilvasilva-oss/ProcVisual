@@ -184,7 +184,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-latest",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
@@ -220,7 +220,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-latest",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
@@ -255,7 +255,7 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
+      model: "gemini-1.5-flash-latest",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
