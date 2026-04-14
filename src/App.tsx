@@ -672,7 +672,7 @@ export default function App() {
                             </div>
                             <div>
                               <p className="text-proc-text-main font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                              <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data).toLocaleDateString('pt-BR')}</p>
+                              <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-6">
