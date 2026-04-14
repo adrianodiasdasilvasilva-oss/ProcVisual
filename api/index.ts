@@ -30,6 +30,12 @@ const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
 if (!WHAPI_TOKEN) {
   console.warn(">>> [WHATSAPP] WHAPI_TOKEN não configurado no ambiente!");
 }
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+if (!GEMINI_API_KEY) {
+  console.warn(">>> [GEMINI] GEMINI_API_KEY não configurada no ambiente!");
+} else {
+  console.log(">>> [GEMINI] GEMINI_API_KEY detectada (tamanho: " + GEMINI_API_KEY.trim().length + ")");
+}
 
 // --- STRIPE CONFIG ---
 let stripeInstance: Stripe | null = null;
