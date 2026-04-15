@@ -17,7 +17,8 @@ import {
   Sun,
   Mail,
   CreditCard,
-  Calendar
+  Calendar,
+  RefreshCw
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
@@ -78,22 +79,24 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
 
   const [isCheckingSub, setIsCheckingSub] = useState(false);
 
+  const fetchSubDetails = async () => {
+    if (!auth.currentUser || isCheckingSub) return;
+    setIsCheckingSub(true);
+    try {
+      const res = await fetch(`/api/subscription-details?userId=${auth.currentUser?.uid}`);
+      const data = await res.json();
+      if (data.nextPaymentDate) {
+        // The profile listener will pick up the change after the API updates Firestore
+      }
+    } catch (e) {
+      console.error("Error fetching sub details:", e);
+    } finally {
+      setIsCheckingSub(false);
+    }
+  };
+
   useEffect(() => {
     if (!userData?.nextPaymentDate && auth.currentUser && !isCheckingSub) {
-      const fetchSubDetails = async () => {
-        setIsCheckingSub(true);
-        try {
-          const res = await fetch(`/api/subscription-details?userId=${auth.currentUser?.uid}`);
-          const data = await res.json();
-          if (data.nextPaymentDate) {
-            // The profile listener will pick up the change after the API updates Firestore
-          }
-        } catch (e) {
-          console.error("Error fetching sub details:", e);
-        } finally {
-          setIsCheckingSub(false);
-        }
-      };
       fetchSubDetails();
     }
   }, [userData?.nextPaymentDate, auth.currentUser]);
@@ -392,26 +395,39 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
             </div>
 
             {userData?.isActive && (
-              <div className="flex items-center gap-4 p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10">
-                <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-                  <Calendar size={20} />
+              <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10 group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+                    <Calendar size={20} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
+                    <p className="text-sm font-bold text-proc-text-main mt-0.5">
+                      {userData?.nextPaymentDate ? (
+                        new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric'
+                        })
+                      ) : isCheckingSub ? (
+                        "Consultando data..."
+                      ) : (
+                        "Data não localizada"
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
-                  <p className="text-sm font-bold text-proc-text-main mt-0.5">
-                    {userData?.nextPaymentDate ? (
-                      new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: 'long',
-                        year: 'numeric'
-                      })
-                    ) : isCheckingSub ? (
-                      "Consultando data..."
-                    ) : (
-                      "Data não localizada"
-                    )}
-                  </p>
-                </div>
+                <button 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    fetchSubDetails();
+                  }}
+                  disabled={isCheckingSub}
+                  className={`p-2 rounded-xl transition-all ${isCheckingSub ? 'animate-spin text-proc-cyan' : 'text-proc-cyan/40 hover:text-proc-cyan hover:bg-proc-cyan/10 opacity-0 group-hover:opacity-100'}`}
+                  title="Atualizar dados da assinatura"
+                >
+                  <RefreshCw size={16} />
+                </button>
               </div>
             )}
 

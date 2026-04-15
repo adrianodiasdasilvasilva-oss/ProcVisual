@@ -222,24 +222,46 @@ app.get("/api/subscription-details", async (req, res) => {
     const userDoc = await dbAdmin!.collection("usuarios").doc(userId).get();
     const userData = userDoc.data();
 
-    if (userData?.subscriptionId) {
+    if (userData?.subscriptionId || userData?.stripeCustomerId) {
       try {
-        console.log(`>>> [API] Buscando assinatura via ID: ${userData.subscriptionId}`);
-        const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
-        const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-        const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+        if (userData.subscriptionId) {
+          console.log(`>>> [API] Buscando assinatura via ID: ${userData.subscriptionId}`);
+          const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
+          const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+          const isActive = subscription.status === 'active' || subscription.status === 'trialing';
 
-        // Sync Firestore with latest Stripe data
-        await userDoc.ref.update({ 
-          nextPaymentDate,
-          isActive,
-          plan: 'premium',
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+          // Sync Firestore with latest Stripe data
+          await userDoc.ref.update({ 
+            nextPaymentDate,
+            isActive,
+            plan: 'premium',
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
 
-        return res.json({ nextPaymentDate });
+          return res.json({ nextPaymentDate });
+        } else if (userData.stripeCustomerId) {
+          console.log(`>>> [API] Buscando assinatura via Customer ID: ${userData.stripeCustomerId}`);
+          const subscriptions = await getStripe().subscriptions.list({
+            customer: userData.stripeCustomerId,
+            status: 'all',
+            limit: 1
+          });
+          const subscription = subscriptions.data[0];
+          if (subscription) {
+            const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+            const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+            await userDoc.ref.update({ 
+              subscriptionId: subscription.id,
+              nextPaymentDate,
+              isActive,
+              plan: 'premium',
+              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            return res.json({ nextPaymentDate });
+          }
+        }
       } catch (e: any) {
-        console.warn(`>>> [API] Erro ao buscar via ID ${userData.subscriptionId}, tentando via email...`);
+        console.warn(`>>> [API] Erro ao buscar via ID ${userData.subscriptionId || userData.stripeCustomerId}, tentando via email...`);
         // Fallback to email search if ID fails
       }
     }
@@ -266,27 +288,36 @@ app.get("/api/subscription-details", async (req, res) => {
           const subscriptions = await getStripe().subscriptions.list({
             customer: customer.id,
             status: 'all',
-            limit: 1
+            limit: 5 // Check more than one to find the active one
           });
 
-          const subscription = subscriptions.data[0];
+          // Sort subscriptions: active/trialing first, then by end date
+          const sortedSubs = subscriptions.data.sort((a, b) => {
+            const aActive = a.status === 'active' || a.status === 'trialing' ? 1 : 0;
+            const bActive = b.status === 'active' || b.status === 'trialing' ? 1 : 0;
+            if (aActive !== bActive) return bActive - aActive;
+            return (b as any).current_period_end - (a as any).current_period_end;
+          });
+
+          const subscription = sortedSubs[0];
           if (subscription) {
-            console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id}`);
+            console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id} (Status: ${subscription.status})`);
             const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
             const isActive = subscription.status === 'active' || subscription.status === 'trialing';
             
             await userDoc.ref.update({ 
               subscriptionId: subscription.id,
+              stripeCustomerId: customer.id,
               nextPaymentDate,
               isActive,
               plan: 'premium',
               updatedAt: admin.firestore.FieldValue.serverTimestamp()
             });
-            return res.json({ nextPaymentDate, source: 'email_search', email });
+            return res.json({ nextPaymentDate, source: 'email_search', email, status: subscription.status });
           }
         }
       }
-      console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId}`);
+      console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId} após tentar todos os e-mails.`);
       return res.json({ nextPaymentDate: null, message: "Nenhuma assinatura encontrada nos e-mails vinculados." });
 
     res.status(404).json({ error: "User not found" });

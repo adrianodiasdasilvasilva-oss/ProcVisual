@@ -171,7 +171,7 @@ const EXPENSE_SCHEMA: any = {
     totalParcelas: { type: Type.INTEGER, description: "Total de parcelas" },
     data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" }
   },
-  required: ["descricao", "valor", "categoria", "parcela", "totalParcelas"]
+  required: ["descricao", "categoria", "parcela", "totalParcelas"]
 };
 
 async function generateWithFallback(ai: any, prompt: any) {
@@ -236,13 +236,19 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     const todayStr = brazilTime.toISOString().split('T')[0];
 
-    const prompt = `Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`;
+    const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
+    Extraia os dados da despesa para o formato JSON. 
+    Se o valor não estiver presente, deixe o campo "valor" como nulo ou omita-o, mas extraia o restante (descrição, data, categoria).
+    Se for uma conta que "vence", use a data de vencimento mencionada.`;
+    
     const response = await generateWithFallback(ai, prompt);
-
     const result = JSON.parse(response.text || "{}");
     
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
+    } else if (result.descricao) {
+      const msg = `📝 Identifiquei que você quer registrar *"${result.descricao}"*${result.data ? ` para o dia ${new Date(result.data).toLocaleDateString('pt-BR')}` : ''}, mas não encontrei o valor.\n\n*Qual o valor desta despesa?* (Ex: 50.00)`;
+      await sendWhatsAppMessage(numero, msg);
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro texto:", err.message);
@@ -271,6 +277,8 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
+    } else if (result.descricao) {
+      await sendWhatsAppMessage(numero, `📝 Identifiquei a despesa *"${result.descricao}"* na imagem, mas o valor não ficou claro. Poderia me informar o valor?`);
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro imagem:", err.message);
@@ -299,6 +307,8 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
+    } else if (result.descricao) {
+      await sendWhatsAppMessage(numero, `📝 Entendi que você falou sobre *"${result.descricao}"*, mas não identifiquei o valor. Qual seria o valor?`);
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro áudio:", err.message);
