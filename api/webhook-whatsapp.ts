@@ -23,12 +23,6 @@ async function initializeFirebaseClient() {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const app = initializeApp(firebaseConfig);
     dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    authClient = getAuth(app);
-    
-    // Sign in anonymously to bypass "unauthenticated" rules
-    await signInAnonymously(authClient);
-    console.log(">>> [WH-WA] Autenticado anonimamente.");
-    
     return dbClient;
   } catch (e: any) {
     console.error(">>> [WH-WA] Erro ao inicializar Firebase Client:", e.message);

@@ -77,7 +77,8 @@ service cloud.firestore {
     }
 
     function isValidLancamento(data) {
-      return (isAuthenticated() && (data.userId == request.auth.uid || data.userId == "whatsapp_pending" || isAdmin() || request.auth.token.firebase.sign_in_provider == 'anonymous')) &&
+      return (isAuthenticated() || (data.origem != null && data.origem.matches("whatsapp.*"))) &&
+             (request.auth == null || data.userId == request.auth.uid || data.userId == "whatsapp_pending" || isAdmin()) &&
              data.tipo in ['income', 'expense', 'birthday'] &&
              data.valor is number && data.valor >= 0 &&
              data.categoria is string && data.categoria.size() > 0 &&
@@ -90,7 +91,7 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() || request.query.limit <= 10; // Allow webhook to search
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
                       (!('isActive' in request.resource.data) || request.resource.data.isActive == false) &&
                       (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
@@ -104,14 +105,15 @@ service cloud.firestore {
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      allow read: if isAuthenticated() && (
+      allow read: if (isAuthenticated() && (
         resource == null || 
         resource.data.userId == request.auth.uid || 
         resource.data.userId == "whatsapp_pending" ||
         isAdmin()
-      );
+      )) || (request.auth == null && resource.data.origem.matches("whatsapp.*"));
       
-      allow create: if isAuthenticated() && isValidLancamento(request.resource.data);
+      allow create: if (isAuthenticated() && isValidLancamento(request.resource.data)) ||
+                    (request.auth == null && request.resource.data.origem.matches("whatsapp.*") && isValidLancamento(request.resource.data));
       
       // Allow users to update "pending" transactions to claim them
       allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
@@ -125,7 +127,7 @@ service cloud.firestore {
       allow read: if true; // Allow webhook and users to read categories
       allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && 
                     request.resource.data.nome is string && request.resource.data.nome.size() > 0) ||
-                    (request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
+                    (request.auth == null && request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
   }
