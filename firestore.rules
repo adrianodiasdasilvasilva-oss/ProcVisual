@@ -51,9 +51,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (request.auth.token.email == "adrianodiasdasilva.silva@gmail.com" || 
-         request.auth.token.email == "adrianodiasilva@yahoo.com.br" ||
-         request.auth.token.email == "adrianodiasdasilva@yahoo.com.br");
+        request.auth.token.email == "adrianodiasilva@yahoo.com.br";
     }
 
     function isDocOwner() {

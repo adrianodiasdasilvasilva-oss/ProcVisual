@@ -287,9 +287,7 @@ app.get("/api/subscription-details", async (req, res) => {
     // Try searching Stripe by email as fallback
     const emailsToTry = [
         userData?.email, 
-        'adrianodiasilva@yahoo.com.br',
-        'adrianodiasdasilva@yahoo.com.br',
-        'adrianodiasdasilva.silva@gmail.com'
+        'adrianodiasilva@yahoo.com.br'
       ].filter(Boolean);
       
       console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails:`, emailsToTry);

@@ -110,9 +110,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    const isAdmin = userData.email === "adrianodiasdasilva.silva@gmail.com" || 
-                    userData.email === "adrianodiasilva@yahoo.com.br" ||
-                    userData.email === "adrianodiasdasilva@yahoo.com.br";
+    const isAdmin = userData.email === "adrianodiasilva@yahoo.com.br";
 
     if (userData.isActive === false && !isAdmin) {
       console.log(`>>> [WH-WA] Usuário INATIVO: ${userData.email}`);
