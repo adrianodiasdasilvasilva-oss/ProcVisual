@@ -32,6 +32,9 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-proc-bg text-proc-text-main antialiased transition-colors duration-300;
   }

@@ -14,7 +14,7 @@ export default function LandingHeader({ onLogin, onSignUp }: LandingHeaderProps)
   const navLinks = [
     { name: 'Recursos', href: '#recursos' },
     { name: 'Como Funciona', href: '#como-funciona' },
-    { name: 'Preços', href: '#precos' },
+    { name: 'Preço', href: '#precos' },
   ];
 
   return (

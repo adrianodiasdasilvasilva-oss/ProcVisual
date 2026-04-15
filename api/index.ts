@@ -145,6 +145,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             plan: "premium",
             subscriptionId: subscriptionId,
             nextPaymentDate: nextPaymentDate,
+            lastPayment: admin.firestore.FieldValue.serverTimestamp(),
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
           };
 
@@ -318,6 +319,20 @@ app.get("/api/subscription-details", async (req, res) => {
         }
       }
       console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId} após tentar todos os e-mails.`);
+      
+      // Fallback: If we have lastPayment, calculate 30 days ahead as requested by user
+      if (userData?.lastPayment) {
+        const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
+        const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000)).toISOString();
+        console.log(`>>> [API] Usando cálculo interno (lastPayment + 30d): ${nextDate}`);
+        
+        await userDoc.ref.update({ 
+          nextPaymentDate: nextDate,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        return res.json({ nextPaymentDate: nextDate, source: 'internal_calculation' });
+      }
+
       return res.json({ nextPaymentDate: null, message: "Nenhuma assinatura encontrada nos e-mails vinculados." });
 
     res.status(404).json({ error: "User not found" });

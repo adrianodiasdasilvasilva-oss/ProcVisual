@@ -403,17 +403,25 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                   <div>
                     <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
                     <p className="text-sm font-bold text-proc-text-main mt-0.5">
-                      {userData?.nextPaymentDate ? (
-                        new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
-                          day: '2-digit',
-                          month: 'long',
-                          year: 'numeric'
-                        })
-                      ) : isCheckingSub ? (
-                        "Consultando data..."
-                      ) : (
-                        "Data não localizada"
-                      )}
+                      {(() => {
+                        if (userData?.nextPaymentDate) {
+                          return new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric'
+                          });
+                        }
+                        if (userData?.lastPayment) {
+                          const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
+                          const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
+                          return nextDate.toLocaleDateString('pt-BR', {
+                            day: '2-digit',
+                            month: 'long',
+                            year: 'numeric'
+                          });
+                        }
+                        return isCheckingSub ? "Consultando data..." : "Data não localizada";
+                      })()}
                     </p>
                   </div>
                 </div>

@@ -91,11 +91,16 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if true;
-      allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
-      allow update: if isAuthenticated() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isActive', 'plan', 'updatedAt']) && request.resource.data.isActive == true;
-      allow delete: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      (!('isActive' in request.resource.data) || request.resource.data.isActive == false) &&
+                      (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data) && 
+                      (isAdmin() || (
+                        request.resource.data.isActive == resource.data.isActive &&
+                        request.resource.data.plan == resource.data.plan
+                      ));
+      allow delete: if isAdmin();
     }
 
     // Lancamentos Collection
