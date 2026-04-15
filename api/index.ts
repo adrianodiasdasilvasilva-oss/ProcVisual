@@ -208,7 +208,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         
         const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscription.id).limit(1).get();
         if (!userQuery.empty) {
-          const nextPaymentDate = new Date(subscription.current_period_end * 1000).toISOString();
+          const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
           await userQuery.docs[0].ref.update({ 
             isActive: isActive,
             nextPaymentDate: nextPaymentDate,
@@ -239,6 +239,19 @@ app.get("/api/subscription-details", async (req, res) => {
     if (!dbAdmin) await initializeFirebaseAdmin();
     const userDoc = await dbAdmin!.collection("usuarios").doc(userId).get();
     const userData = userDoc.data();
+
+    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+
+    if (isAdmin) {
+      console.log(`>>> [API] Usuário ADMIN detectado: ${userData?.email}. Garantindo status ativo.`);
+      await userDoc.ref.update({
+        isActive: true,
+        plan: 'premium',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      return res.json({ status: 'active', plan: 'premium', isAdmin: true });
+    }
 
     if (userData?.subscriptionId || userData?.stripeCustomerId) {
       try {
@@ -287,7 +300,8 @@ app.get("/api/subscription-details", async (req, res) => {
     // Try searching Stripe by email as fallback
     const emailsToTry = [
         userData?.email, 
-        'adrianodiasilva@yahoo.com.br'
+        'adrianodiasilva@yahoo.com.br',
+        'adrianodiasdasilva.silva@gmail.com'
       ].filter(Boolean);
       
       console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails:`, emailsToTry);
@@ -468,8 +482,8 @@ app.post("/api/test-whatsapp", async (req, res) => {
 app.post("/api/webhook-whatsapp", async (req, res) => {
   try {
     console.log(">>> [WHATSAPP] Webhook atingido!");
-    console.log(">>> [WHATSAPP] Body:", JSON.stringify(req.body, null, 2));
-    await whatsappHandler(req, res);
+    const db = await initializeFirebaseAdmin();
+    await whatsappHandler(req, res, db!);
   } catch (err: any) {
     console.error(">>> [WHATSAPP] Erro no handler:", err.message);
     res.status(500).json({ error: err.message });

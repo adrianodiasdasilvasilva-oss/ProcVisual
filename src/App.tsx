@@ -473,7 +473,8 @@ export default function App() {
     );
   }
 
-  const isAdmin = user?.email === "adrianodiasilva@yahoo.com.br";
+  const isAdmin = (user?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
   if (profile.isActive !== true && !isAdmin) {
     return <SubscriptionPaywall user={user} onSignOut={() => signOut(auth)} />;
