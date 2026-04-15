@@ -110,7 +110,11 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    if (userData.isActive === false) {
+    const isAdmin = userData.email === "adrianodiasdasilva.silva@gmail.com" || 
+                    userData.email === "adrianodiasilva@yahoo.com.br" ||
+                    userData.email === "adrianodiasdasilva@yahoo.com.br";
+
+    if (userData.isActive === false && !isAdmin) {
       console.log(`>>> [WH-WA] Usuário INATIVO: ${userData.email}`);
       await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nSua conta na ProcVisual está inativa. Para continuar registrando despesas via WhatsApp, por favor regularize sua assinatura no dashboard do site.');
       return res.status(200).json({ ok: true });
