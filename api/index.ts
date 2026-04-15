@@ -558,7 +558,7 @@ async function runDailyNotifications() {
   console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()})`);
   
   const snapshot = await dbAdmin.collection("lancamentos")
-    .where("tipo", "in", ["expense", "birthday"])
+    .where("tipo", "in", ["expense", "birthday", "despesa"])
     .get();
 
   if (snapshot.empty) {
@@ -582,14 +582,18 @@ async function runDailyNotifications() {
     // Permitir admin mesmo se inativo (para testes) ou se for a exceção
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
-    const isException = (userData?.telefone || "").replace(/\D/g, "").includes("19994792245");
+    const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
 
     if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
+      console.log(`>>> [JOB] Lançamento ${doc.id} ignorado: Usuário ${userId} inativo e não é admin/exceção.`);
       continue; 
     }
 
-    const telefone = userData.telefone;
-    if (!telefone) continue;
+    const telefone = userData.telefone || data.telefone;
+    if (!telefone) {
+      console.log(`>>> [JOB] Lançamento ${doc.id} ignorado: Telefone não encontrado.`);
+      continue;
+    }
 
     // Data do lançamento (YYYY-MM-DD)
     const vencimento = new Date(data.data + "T12:00:00Z");
@@ -627,6 +631,8 @@ async function runDailyNotifications() {
         if (res.success) {
           await doc.ref.update({ notificadoAmanha: true });
           notified++;
+        } else {
+          console.error(`>>> [JOB] Erro ao enviar WhatsApp (Aniversário Amanhã) para ${telefone}:`, res.error);
         }
       }
       if (diffDays === 0 && !data.notificadoNoDia) {
@@ -635,6 +641,8 @@ async function runDailyNotifications() {
         if (res.success) {
           await doc.ref.update({ notificadoNoDia: true });
           notified++;
+        } else {
+          console.error(`>>> [JOB] Erro ao enviar WhatsApp (Aniversário Hoje) para ${telefone}:`, res.error);
         }
       }
     } else {
@@ -647,6 +655,8 @@ async function runDailyNotifications() {
         if (res.success) {
           await doc.ref.update({ notificado5dias: true });
           notified++;
+        } else {
+          console.error(`>>> [JOB] Erro ao enviar WhatsApp (Vencimento 5 dias) para ${telefone}:`, res.error);
         }
       }
       if (diffDays === 0 && !data.notificadoNoDia) {
@@ -655,6 +665,8 @@ async function runDailyNotifications() {
         if (res.success) {
           await doc.ref.update({ notificadoNoDia: true });
           notified++;
+        } else {
+          console.error(`>>> [JOB] Erro ao enviar WhatsApp (Vencimento Hoje) para ${telefone}:`, res.error);
         }
       }
     }

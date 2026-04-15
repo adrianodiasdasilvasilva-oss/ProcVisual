@@ -375,11 +375,15 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
         descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
         estabelecimento: descricao,
         origem,
+        telefone: numero.split('@')[0].replace(/\D/g, ""), // Salva o telefone para notificações
         createdAt: serverTimestamp(),
         pago: false,
         parcela: i,
         totalParcelas,
-        groupId
+        groupId,
+        notificado5dias: false,
+        notificadoNoDia: false,
+        notificadoAmanha: false
       });
     }
 
