@@ -2,7 +2,7 @@ import { initializeApp } from "firebase/app";
 import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 import fs from "fs";
 import path from "path";
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 // Cache for Firebase Client
 let dbClient: any = null;
@@ -162,79 +162,64 @@ async function sendWhatsAppMessage(to: string, body: string) {
 }
 
 const EXPENSE_SCHEMA: any = {
-  type: SchemaType.OBJECT,
+  type: Type.OBJECT,
   properties: {
-    descricao: { type: SchemaType.STRING, description: "O que foi pago" },
-    valor: { type: SchemaType.NUMBER, description: "Valor total ou da parcela" },
-    categoria: { type: SchemaType.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
-    parcela: { type: SchemaType.INTEGER, description: "Parcela atual" },
-    totalParcelas: { type: SchemaType.INTEGER, description: "Total de parcelas" },
-    data: { type: SchemaType.STRING, description: "Data no formato YYYY-MM-DD" }
+    descricao: { type: Type.STRING, description: "O que foi pago" },
+    valor: { type: Type.NUMBER, description: "Valor total ou da parcela" },
+    categoria: { type: Type.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
+    parcela: { type: Type.INTEGER, description: "Parcela atual" },
+    totalParcelas: { type: Type.INTEGER, description: "Total de parcelas" },
+    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" }
   },
   required: ["descricao", "valor", "categoria", "parcela", "totalParcelas"]
 };
 
-async function generateWithFallback(genAI: any, prompt: any) {
-  // List of models to try based on the ListModels output.
-  // 1.5, 2.0, 2.5 models support responseSchema.
-  const modelsWithSchema = [
-    "gemini-2.0-flash", 
-    "gemini-2.0-flash-lite", 
-    "gemini-1.5-flash-latest", 
-    "gemini-1.5-flash", 
-    "gemini-flash-latest",
-    "gemini-2.5-flash",
-    "gemini-1.5-pro-latest", 
-    "gemini-1.5-pro",
-    "gemini-pro-latest"
-  ];
-  const modelsLegacy = ["gemini-pro"];
+async function generateWithFallback(ai: any, prompt: any) {
+  // Use the recommended model from the skill
+  const modelName = "gemini-3-flash-preview";
   
-  let lastError = null;
+  try {
+    console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
+    
+    // Format contents correctly for the new SDK
+    let contents: any;
+    if (Array.isArray(prompt)) {
+      contents = { parts: prompt };
+    } else if (typeof prompt === 'string') {
+      contents = prompt;
+    } else {
+      contents = prompt;
+    }
 
-  // Try models with Schema support
-  for (const modelName of modelsWithSchema) {
+    const response = await ai.models.generateContent({ 
+      model: modelName,
+      contents: contents,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: EXPENSE_SCHEMA
+      }
+    });
+    return response;
+  } catch (e: any) {
+    console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
+    
+    // Fallback to gemini-flash-latest if preview fails
     try {
-      console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
-      const model = genAI.getGenerativeModel({ 
-        model: modelName,
-        generationConfig: {
+      console.log(`>>> [WH-WA] Tentando fallback: gemini-flash-latest`);
+      const response = await ai.models.generateContent({ 
+        model: "gemini-flash-latest",
+        contents: typeof prompt === 'string' ? prompt : { parts: prompt },
+        config: {
           responseMimeType: "application/json",
           responseSchema: EXPENSE_SCHEMA
         }
       });
-      const result = await model.generateContent(prompt);
-      return result;
-    } catch (e: any) {
-      console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
-      lastError = e;
-      if (e.message.includes("404") || e.message.includes("not found")) continue;
+      return response;
+    } catch (e2: any) {
+      console.error(`>>> [WH-WA] Erro no fallback:`, e2.message);
+      throw e;
     }
   }
-
-  // Fallback to legacy models
-  for (const modelName of modelsLegacy) {
-    try {
-      console.log(`>>> [WH-WA] Tentando modelo legado: ${modelName}`);
-      const model = genAI.getGenerativeModel({ 
-        model: modelName,
-        generationConfig: {
-          responseMimeType: "application/json"
-        }
-      });
-      
-      const textPrompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-      const finalPrompt = `${textPrompt}\n\nResponda APENAS com um JSON seguindo este formato: { "descricao": string, "valor": number, "categoria": string, "parcela": number, "totalParcelas": number, "data": "YYYY-MM-DD" }`;
-      
-      const result = await model.generateContent(finalPrompt);
-      return result;
-    } catch (e: any) {
-      console.error(`>>> [WH-WA] Erro no modelo legado ${modelName}:`, e.message);
-      lastError = e;
-    }
-  }
-
-  throw lastError;
 }
 
 async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number) {
@@ -246,16 +231,15 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const ai = new GoogleGenAI({ apiKey });
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     const todayStr = brazilTime.toISOString().split('T')[0];
 
     const prompt = `Analise: "${texto}". Hoje é ${todayStr}. Extraia os dados da despesa.`;
-    const result_ai = await generateWithFallback(genAI, prompt);
+    const response = await generateWithFallback(ai, prompt);
 
-    const response = await result_ai.response;
-    const result = JSON.parse(response.text() || "{}");
+    const result = JSON.parse(response.text || "{}");
     
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
@@ -276,15 +260,14 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const base64Image = Buffer.from(buffer).toString('base64');
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const ai = new GoogleGenAI({ apiKey });
     const prompt = [
       { text: "Extraia os dados deste comprovante." },
       { inlineData: { data: base64Image, mimeType } }
     ];
 
-    const result_ai = await generateWithFallback(genAI, prompt);
-    const response = await result_ai.response;
-    const result = JSON.parse(response.text() || "{}");
+    const response = await generateWithFallback(ai, prompt);
+    const result = JSON.parse(response.text || "{}");
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
@@ -305,15 +288,14 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const base64Audio = Buffer.from(buffer).toString('base64');
     const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const ai = new GoogleGenAI({ apiKey });
     const prompt = [
       { text: "Transcreva e extraia os dados da despesa." },
       { inlineData: { data: base64Audio, mimeType } }
     ];
 
-    const result_ai = await generateWithFallback(genAI, prompt);
-    const response = await result_ai.response;
-    const result = JSON.parse(response.text() || "{}");
+    const response = await generateWithFallback(ai, prompt);
+    const result = JSON.parse(response.text || "{}");
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);

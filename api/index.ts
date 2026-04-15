@@ -3,7 +3,6 @@ console.log(">>> [BOOT] api/index.ts carregando...");
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import admin from "firebase-admin";
