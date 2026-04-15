@@ -551,9 +551,11 @@ async function runDailyNotifications() {
   // Ajuste para Horário de Brasília (UTC-3)
   const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
   const todayStr = brazilTime.toISOString().split('T')[0];
-  const today = new Date(todayStr + "T12:00:00");
   
-  console.log(`>>> [JOB] Iniciando processamento para: ${todayStr}`);
+  // Usamos meio-dia para evitar problemas de fuso horário na comparação
+  const today = new Date(todayStr + "T12:00:00Z");
+  
+  console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()})`);
   
   const snapshot = await dbAdmin.collection("lancamentos")
     .where("tipo", "in", ["expense", "birthday"])
@@ -577,38 +579,46 @@ async function runDailyNotifications() {
     const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
     const userData = userSnap.data();
 
-    if (!userData || userData.isActive === false) {
+    // Permitir admin mesmo se inativo (para testes) ou se for a exceção
+    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+    const isException = (userData?.telefone || "").replace(/\D/g, "").includes("19994792245");
+
+    if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
       continue; 
     }
 
     const telefone = userData.telefone;
     if (!telefone) continue;
 
-    const vencimento = new Date(data.data + "T12:00:00");
+    // Data do lançamento (YYYY-MM-DD)
+    const vencimento = new Date(data.data + "T12:00:00Z");
     let diffDays = -1;
 
     if (data.tipo === 'birthday') {
-      const bDay = vencimento.getDate();
-      const bMonth = vencimento.getMonth();
-      const tDay = today.getDate();
-      const tMonth = today.getMonth();
+      const bDay = vencimento.getUTCDate();
+      const bMonth = vencimento.getUTCMonth();
+      const tDay = today.getUTCDate();
+      const tMonth = today.getUTCMonth();
 
       if (bDay === tDay && bMonth === tMonth) {
         diffDays = 0;
       } else {
         const tomorrow = new Date(today);
-        tomorrow.setDate(today.getDate() + 1);
-        if (bDay === tomorrow.getDate() && bMonth === tomorrow.getMonth()) {
+        tomorrow.setUTCDate(today.getUTCDate() + 1);
+        if (bDay === tomorrow.getUTCDate() && bMonth === tomorrow.getUTCMonth()) {
           diffDays = 1;
         }
       }
     } else {
       const diffTime = vencimento.getTime() - today.getTime();
-      diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     }
 
     const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
     const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
+
+    console.log(`>>> [JOB] Analisando: ${data.descricao} | Venc: ${data.data} | Diff: ${diffDays} dias`);
 
     if (data.tipo === 'birthday') {
       if (diffDays === 1 && !data.notificadoAmanha) {
@@ -679,8 +689,9 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    // Roda às 08:00 e 09:00 para garantir (caso o servidor esteja acordando)
-    cron.schedule("0 8,9 * * *", async () => {
+    // Roda às 08:00, 09:00 e 10:00 para garantir (caso o servidor esteja acordando)
+    cron.schedule("0 8,9,10 * * *", async () => {
+      console.log(">>> [CRON] Iniciando tarefa agendada de notificações...");
       await runDailyNotifications();
     });
   });

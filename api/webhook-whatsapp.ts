@@ -185,8 +185,8 @@ const EXPENSE_SCHEMA: any = {
 };
 
 async function generateWithFallback(ai: any, prompt: any) {
-  // Use the recommended model from the skill
-  const modelName = "gemini-3-flash-preview";
+  // Use valid model names
+  const modelName = "gemini-1.5-flash";
   
   try {
     console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
@@ -213,11 +213,11 @@ async function generateWithFallback(ai: any, prompt: any) {
   } catch (e: any) {
     console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
     
-    // Fallback to gemini-flash-latest if preview fails
+    // Fallback to gemini-1.5-pro if flash fails
     try {
-      console.log(`>>> [WH-WA] Tentando fallback: gemini-flash-latest`);
+      console.log(`>>> [WH-WA] Tentando fallback: gemini-1.5-pro`);
       const response = await ai.models.generateContent({ 
-        model: "gemini-flash-latest",
+        model: "gemini-1.5-pro",
         contents: typeof prompt === 'string' ? prompt : { parts: prompt },
         config: {
           responseMimeType: "application/json",
@@ -248,11 +248,15 @@ async function processText(db: any, userId: string, numero: string, texto: strin
 
     const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
     Extraia os dados da despesa para o formato JSON. 
-    Se o valor não estiver presente, deixe o campo "valor" como nulo ou omita-o, mas extraia o restante (descrição, data, categoria).
-    Se for uma conta que "vence", use a data de vencimento mencionada.`;
+    REGRAS CRÍTICAS:
+    1. Se o valor NÃO estiver explicitamente escrito na mensagem, deixe o campo "valor" como nulo. NUNCA invente, estime ou use valores de exemplo.
+    2. Se a mensagem não contiver um número que represente um preço ou custo, o campo "valor" DEVE ser nulo.
+    3. Extraia a descrição, data (se mencionada) e categoria.
+    4. Se for uma conta que "vence", use a data de vencimento mencionada.`;
     
     const response = await generateWithFallback(ai, prompt);
     const result = JSON.parse(response.text || "{}");
+    console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);

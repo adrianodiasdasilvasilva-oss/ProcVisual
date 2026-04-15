@@ -43,6 +43,9 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isRunningNotifications, setIsRunningNotifications] = useState(false);
+  const [notificationResult, setNotificationResult] = useState<any>(null);
+
   const [categoryToDelete, setCategoryToDelete] = useState<string | null>(null);
 
   useEffect(() => {
@@ -178,6 +181,32 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
       }
     } finally {
       setIsCropping(false);
+    }
+  };
+
+  const isAdmin = auth.currentUser && (
+    auth.currentUser.email?.toLowerCase() === 'adrianodiasilva@yahoo.com.br' ||
+    auth.currentUser.email?.toLowerCase() === 'adrianodiasdasilva.silva@gmail.com'
+  );
+
+  const runNotificationsManually = async () => {
+    if (isRunningNotifications) return;
+    setIsRunningNotifications(true);
+    setNotificationResult(null);
+    try {
+      const response = await fetch('/api/admin/run-notifications', { method: 'POST' });
+      const data = await response.json();
+      setNotificationResult(data);
+      if (data.success) {
+        setMessage({ type: 'success', text: `Notificações processadas: ${data.results.processed}, enviadas: ${data.results.notified}` });
+      } else {
+        setMessage({ type: 'error', text: 'Erro ao processar notificações' });
+      }
+    } catch (error) {
+      console.error('Erro ao rodar notificações:', error);
+      setMessage({ type: 'error', text: 'Erro de conexão ao processar notificações' });
+    } finally {
+      setIsRunningNotifications(false);
     }
   };
 
@@ -521,6 +550,49 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
             </div>
           </div>
         </section>
+
+        {/* Admin Section */}
+        {isAdmin && (
+          <section className="p-8 rounded-[2.5rem] bg-red-500/5 border border-red-500/10 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500">
+                <AlertCircle size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-proc-text-main">Administração</h2>
+                <p className="text-sm text-proc-text-sec">Ferramentas de controle do sistema</p>
+              </div>
+            </div>
+
+            <div className="p-6 rounded-2xl bg-proc-bg/50 border border-white/5 space-y-4">
+              <p className="text-sm text-proc-text-sec">
+                Forçar execução do job de notificações diárias (WhatsApp).
+              </p>
+              <button
+                onClick={runNotificationsManually}
+                disabled={isRunningNotifications}
+                className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isRunningNotifications ? (
+                  <>
+                    <Loader2 size={20} className="animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={20} />
+                    Executar Notificações Agora
+                  </>
+                )}
+              </button>
+              {notificationResult && (
+                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-xs font-mono text-proc-text-sec">
+                  <pre>{JSON.stringify(notificationResult, null, 2)}</pre>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
       </div>
 
       <CropImageModal 

@@ -456,6 +456,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         }
       }
 
+      const dateChanged = transactionToEdit && transactionToEdit.data !== formData.date;
+
       const payload: any = {
         userId: auth.currentUser.uid,
         tipo: formData.type, // 'income' or 'expense'
@@ -467,8 +469,9 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         telefone: userPhone, // Store phone for scheduled notifications
         updatedAt: serverTimestamp(),
         pago: transactionToEdit ? (transactionToEdit.pago ?? false) : false,
-        notificado5dias: transactionToEdit ? (transactionToEdit.notificado5dias ?? false) : false,
-        notificadoNoDia: transactionToEdit ? (transactionToEdit.notificadoNoDia ?? false) : false
+        notificado5dias: (transactionToEdit && !dateChanged) ? (transactionToEdit.notificado5dias ?? false) : false,
+        notificadoNoDia: (transactionToEdit && !dateChanged) ? (transactionToEdit.notificadoNoDia ?? false) : false,
+        notificadoAmanha: (transactionToEdit && !dateChanged) ? (transactionToEdit.notificadoAmanha ?? false) : false
       };
       
       let transactionId = transactionToEdit?.id;
