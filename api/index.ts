@@ -320,20 +320,33 @@ app.get("/api/subscription-details", async (req, res) => {
       }
       console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId} após tentar todos os e-mails.`);
       
+      // If we reach here, it means Stripe has no active subscription for this user
+      // We should update isActive to false unless we have a valid internal calculation
+      
       // Fallback: If we have lastPayment, calculate 30 days ahead as requested by user
       if (userData?.lastPayment) {
         const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
-        const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000)).toISOString();
-        console.log(`>>> [API] Usando cálculo interno (lastPayment + 30d): ${nextDate}`);
+        const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
+        const now = new Date();
         
-        await userDoc.ref.update({ 
-          nextPaymentDate: nextDate,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-        return res.json({ nextPaymentDate: nextDate, source: 'internal_calculation' });
+        if (nextDate > now) {
+          console.log(`>>> [API] Usando cálculo interno (lastPayment + 30d): ${nextDate.toISOString()}`);
+          await userDoc.ref.update({ 
+            nextPaymentDate: nextDate.toISOString(),
+            isActive: true,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+          });
+          return res.json({ nextPaymentDate: nextDate.toISOString(), source: 'internal_calculation' });
+        }
       }
 
-      return res.json({ nextPaymentDate: null, message: "Nenhuma assinatura encontrada nos e-mails vinculados." });
+      // If no Stripe sub and no valid internal date, set to inactive
+      await userDoc.ref.update({ 
+        isActive: false,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+
+      return res.json({ nextPaymentDate: null, isActive: false, message: "Nenhuma assinatura ativa encontrada." });
 
     res.status(404).json({ error: "User not found" });
   } catch (error: any) {

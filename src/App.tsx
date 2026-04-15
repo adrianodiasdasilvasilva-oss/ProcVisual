@@ -232,6 +232,8 @@ export default function App() {
     testConnection();
   }, []);
 
+  const [isCheckingSubscription, setIsCheckingSubscription] = useState(false);
+
   // Auth Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
@@ -241,10 +243,28 @@ export default function App() {
       if (!currentUser) {
         setProfile(null);
         setIsLoading(false);
+      } else {
+        // Force subscription check on login
+        verifySubscription(currentUser.uid);
       }
     });
     return () => unsubscribe();
   }, []);
+
+  const verifySubscription = async (userId: string) => {
+    setIsCheckingSubscription(true);
+    try {
+      console.log('>>> [AUTH] Verificando assinatura com Stripe...');
+      const res = await fetch(`/api/subscription-details?userId=${userId}`);
+      if (res.ok) {
+        console.log('>>> [AUTH] Assinatura validada com sucesso.');
+      }
+    } catch (error) {
+      console.error('>>> [AUTH] Erro ao validar assinatura:', error);
+    } finally {
+      setIsCheckingSubscription(false);
+    }
+  };
 
   // Real-time Profile Listener
   useEffect(() => {
@@ -414,10 +434,13 @@ export default function App() {
     }
   };
 
-  if (!isAuthReady) {
+  if (!isAuthReady || isCheckingSubscription) {
     return (
-      <div className="min-h-screen bg-proc-bg flex items-center justify-center">
+      <div className="min-h-screen bg-proc-bg flex flex-col items-center justify-center gap-4">
         <Loader2 className="text-proc-cyan animate-spin" size={40} />
+        <p className="text-proc-text-sec text-xs font-bold uppercase tracking-widest animate-pulse">
+          Validando Assinatura...
+        </p>
       </div>
     );
   }
@@ -450,7 +473,11 @@ export default function App() {
     );
   }
 
-  if (profile.isActive !== true) {
+  const isAdmin = user?.email === "adrianodiasdasilva.silva@gmail.com" || 
+                  user?.email === "adrianodiasilva@yahoo.com.br" ||
+                  user?.email === "adrianodiasdasilva@yahoo.com.br";
+
+  if (profile.isActive !== true && !isAdmin) {
     return <SubscriptionPaywall user={user} onSignOut={() => signOut(auth)} />;
   }
 
