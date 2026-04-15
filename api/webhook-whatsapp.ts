@@ -185,30 +185,21 @@ const EXPENSE_SCHEMA: any = {
 };
 
 async function generateWithFallback(ai: any, prompt: any) {
-  // Use valid model names
   const modelName = "gemini-1.5-flash";
   
   try {
     console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
     
-    // Format contents correctly for the new SDK
-    let contents: any;
-    if (Array.isArray(prompt)) {
-      contents = { parts: prompt };
-    } else if (typeof prompt === 'string') {
-      contents = prompt;
-    } else {
-      contents = prompt;
-    }
-
-    const response = await ai.models.generateContent({ 
+    const model = ai.getGenerativeModel({ 
       model: modelName,
-      contents: contents,
-      config: {
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
       }
     });
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
     return response;
   } catch (e: any) {
     console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
@@ -216,15 +207,16 @@ async function generateWithFallback(ai: any, prompt: any) {
     // Fallback to gemini-1.5-pro if flash fails
     try {
       console.log(`>>> [WH-WA] Tentando fallback: gemini-1.5-pro`);
-      const response = await ai.models.generateContent({ 
+      const modelPro = ai.getGenerativeModel({ 
         model: "gemini-1.5-pro",
-        contents: typeof prompt === 'string' ? prompt : { parts: prompt },
-        config: {
+        generationConfig: {
           responseMimeType: "application/json",
           responseSchema: EXPENSE_SCHEMA
         }
       });
-      return response;
+      const resultPro = await modelPro.generateContent(prompt);
+      const responsePro = await resultPro.response;
+      return responsePro;
     } catch (e2: any) {
       console.error(`>>> [WH-WA] Erro no fallback:`, e2.message);
       throw e;
@@ -255,7 +247,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     4. Se for uma conta que "vence", use a data de vencimento mencionada.`;
     
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text || "{}");
+    const result = JSON.parse(response.text() || "{}");
     console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
     if (result.valor) {
@@ -287,7 +279,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     ];
 
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text || "{}");
+    const result = JSON.parse(response.text() || "{}");
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
@@ -317,7 +309,7 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     ];
 
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text || "{}");
+    const result = JSON.parse(response.text() || "{}");
 
     if (result.valor) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
