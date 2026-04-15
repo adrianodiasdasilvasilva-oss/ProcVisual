@@ -3,7 +3,9 @@ import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestam
 import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 import path from "path";
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import * as GenAI from "@google/generative-ai";
+
+console.log(">>> [WH-WA] GenAI importado:", typeof GenAI);
 
 // Cache for Firebase Client
 let dbClient: any = null;
@@ -172,14 +174,14 @@ async function sendWhatsAppMessage(to: string, body: string) {
 }
 
 const EXPENSE_SCHEMA: any = {
-  type: SchemaType.OBJECT,
+  type: GenAI.SchemaType.OBJECT,
   properties: {
-    descricao: { type: SchemaType.STRING, description: "O que foi pago" },
-    valor: { type: SchemaType.NUMBER, description: "Valor total ou da parcela" },
-    categoria: { type: SchemaType.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
-    parcela: { type: SchemaType.INTEGER, description: "Parcela atual" },
-    totalParcelas: { type: SchemaType.INTEGER, description: "Total de parcelas" },
-    data: { type: SchemaType.STRING, description: "Data no formato YYYY-MM-DD" }
+    descricao: { type: GenAI.SchemaType.STRING, description: "O que foi pago" },
+    valor: { type: GenAI.SchemaType.NUMBER, description: "Valor total ou da parcela" },
+    categoria: { type: GenAI.SchemaType.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
+    parcela: { type: GenAI.SchemaType.INTEGER, description: "Parcela atual" },
+    totalParcelas: { type: GenAI.SchemaType.INTEGER, description: "Total de parcelas" },
+    data: { type: GenAI.SchemaType.STRING, description: "Data no formato YYYY-MM-DD" }
   },
   required: ["descricao", "categoria", "parcela", "totalParcelas"]
 };
@@ -189,7 +191,18 @@ async function generateWithFallback(ai: any, prompt: any) {
   
   try {
     console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
+    console.log(`>>> [WH-WA] Tipo de ai: ${typeof ai}, tem getGenerativeModel: ${ai && typeof ai.getGenerativeModel === 'function'}`);
     
+    if (!ai || typeof ai.getGenerativeModel !== 'function') {
+      console.error(">>> [WH-WA] O objeto 'ai' não é uma instância válida de GoogleGenerativeAI!");
+      // Tentar reconstruir se possível
+      const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+      if (apiKey) {
+        console.log(">>> [WH-WA] Reconstruindo GoogleGenerativeAI...");
+        ai = new GenAI.GoogleGenerativeAI(apiKey);
+      }
+    }
+
     const model = ai.getGenerativeModel({ 
       model: modelName,
       generationConfig: {
@@ -207,6 +220,8 @@ async function generateWithFallback(ai: any, prompt: any) {
     // Fallback to gemini-1.5-pro if flash fails
     try {
       console.log(`>>> [WH-WA] Tentando fallback: gemini-1.5-pro`);
+      console.log(`>>> [WH-WA] Tipo de ai no fallback: ${typeof ai}, tem getGenerativeModel: ${ai && typeof ai.getGenerativeModel === 'function'}`);
+      
       const modelPro = ai.getGenerativeModel({ 
         model: "gemini-1.5-pro",
         generationConfig: {
@@ -233,7 +248,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
 
   try {
-    const ai = new GoogleGenerativeAI(apiKey);
+    const ai = new GenAI.GoogleGenerativeAI(apiKey);
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     const todayStr = brazilTime.toISOString().split('T')[0];
@@ -272,7 +287,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const base64Image = Buffer.from(buffer).toString('base64');
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
-    const ai = new GoogleGenerativeAI(apiKey);
+    const ai = new GenAI.GoogleGenerativeAI(apiKey);
     const prompt = [
       { text: "Extraia os dados deste comprovante." },
       { inlineData: { data: base64Image, mimeType } }
@@ -302,7 +317,7 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const base64Audio = Buffer.from(buffer).toString('base64');
     const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
 
-    const ai = new GoogleGenerativeAI(apiKey);
+    const ai = new GenAI.GoogleGenerativeAI(apiKey);
     const prompt = [
       { text: "Transcreva e extraia os dados da despesa." },
       { inlineData: { data: base64Audio, mimeType } }
