@@ -201,6 +201,23 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         }
         break;
       }
+      case "customer.subscription.updated": {
+        const subscription = event.data.object as Stripe.Subscription;
+        const status = subscription.status;
+        const isActive = status === 'active' || status === 'trialing';
+        
+        const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscription.id).limit(1).get();
+        if (!userQuery.empty) {
+          const nextPaymentDate = new Date(subscription.current_period_end * 1000).toISOString();
+          await userQuery.docs[0].ref.update({ 
+            isActive: isActive,
+            nextPaymentDate: nextPaymentDate,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+          });
+          console.log(`>>> [STRIPE] Assinatura ${subscription.id} atualizada. Status: ${status}, Ativo: ${isActive}`);
+        }
+        break;
+      }
     }
 
     res.json({ received: true });
