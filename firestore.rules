@@ -91,7 +91,7 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isAuthenticated() || request.query.limit <= 10; // Allow webhook to search
+      allow read: if isAuthenticated() || request.query.limit <= 100; // Allow webhook to search
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
                       (!('isActive' in request.resource.data) || request.resource.data.isActive == false) &&
                       (!('plan' in request.resource.data) || request.resource.data.plan == 'free');

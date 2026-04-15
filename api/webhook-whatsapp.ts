@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, limit } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 import path from "path";
@@ -67,7 +67,7 @@ export default async function handler(req: any, res: any) {
     let userData: any = null;
 
     // 1. Try exact match with clean incoming
-    const q1 = query(collection(db, "usuarios"), where("telefone", "==", cleanIncoming));
+    const q1 = query(collection(db, "usuarios"), where("telefone", "==", cleanIncoming), limit(5));
     const snap1 = await getDocs(q1);
     
     if (!snap1.empty) {
@@ -76,7 +76,7 @@ export default async function handler(req: any, res: any) {
       userDoc = activeUser || snap1.docs[0];
     } else {
       // 2. Try short match
-      const q2 = query(collection(db, "usuarios"), where("telefone", "==", shortIncoming));
+      const q2 = query(collection(db, "usuarios"), where("telefone", "==", shortIncoming), limit(5));
       const snap2 = await getDocs(q2);
       if (!snap2.empty) {
         const activeUser = snap2.docs.find(d => d.data().isActive === true);
@@ -87,7 +87,8 @@ export default async function handler(req: any, res: any) {
     // 3. Fallback: scan active users for normalized match
     if (!userDoc) {
        console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
-       const snapAll = await getDocs(collection(db, "usuarios"));
+       const qAll = query(collection(db, "usuarios"), limit(100));
+       const snapAll = await getDocs(qAll);
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
          const tel = (d.telefone || "").replace(/\D/g, "");
@@ -115,9 +116,11 @@ export default async function handler(req: any, res: any) {
     const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
                     (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
-    console.log(`>>> [WH-WA] Verificando Admin: ${userData.email} -> ${isAdmin}`);
+    const isException = cleanIncoming === "5519994792245" || cleanIncoming === "19994792245";
 
-    if (userData.isActive === false && !isAdmin) {
+    console.log(`>>> [WH-WA] Verificando Acesso: ${userData.email} (Admin: ${isAdmin}, Exception: ${isException})`);
+
+    if (userData.isActive === false && !isAdmin && !isException) {
       console.log(`>>> [WH-WA] Usuário INATIVO: ${userData.email}`);
       await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nSua conta na ProcVisual está inativa. Para continuar registrando despesas via WhatsApp, por favor regularize sua assinatura no dashboard do site.');
       return res.status(200).json({ ok: true });

@@ -237,14 +237,16 @@ app.get("/api/subscription-details", async (req, res) => {
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
-    if (isAdmin) {
-      console.log(`>>> [API] Usuário ADMIN detectado: ${userData?.email}. Garantindo status ativo.`);
+    const isException = (userData?.telefone || "").replace(/\D/g, "").includes("19994792245");
+
+    if (isAdmin || isException) {
+      console.log(`>>> [API] Usuário ${isAdmin ? 'ADMIN' : 'EXCEÇÃO'} detectado: ${userData?.email || userData?.telefone}. Garantindo status ativo.`);
       await userDoc.ref.update({
         isActive: true,
         plan: 'premium',
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
-      return res.json({ status: 'active', plan: 'premium', isAdmin: true });
+      return res.json({ status: 'active', plan: 'premium', isAdmin });
     }
 
     if (userData?.subscriptionId || userData?.stripeCustomerId) {
