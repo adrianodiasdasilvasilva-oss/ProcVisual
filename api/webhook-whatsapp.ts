@@ -3,7 +3,7 @@ import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestam
 import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 import path from "path";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 
 // Cache for Firebase Client
 let dbClient: any = null;
@@ -172,14 +172,14 @@ async function sendWhatsAppMessage(to: string, body: string) {
 }
 
 const EXPENSE_SCHEMA: any = {
-  type: Type.OBJECT,
+  type: SchemaType.OBJECT,
   properties: {
-    descricao: { type: Type.STRING, description: "O que foi pago" },
-    valor: { type: Type.NUMBER, description: "Valor total ou da parcela" },
-    categoria: { type: Type.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
-    parcela: { type: Type.INTEGER, description: "Parcela atual" },
-    totalParcelas: { type: Type.INTEGER, description: "Total de parcelas" },
-    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" }
+    descricao: { type: SchemaType.STRING, description: "O que foi pago" },
+    valor: { type: SchemaType.NUMBER, description: "Valor total ou da parcela" },
+    categoria: { type: SchemaType.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
+    parcela: { type: SchemaType.INTEGER, description: "Parcela atual" },
+    totalParcelas: { type: SchemaType.INTEGER, description: "Total de parcelas" },
+    data: { type: SchemaType.STRING, description: "Data no formato YYYY-MM-DD" }
   },
   required: ["descricao", "categoria", "parcela", "totalParcelas"]
 };
@@ -233,7 +233,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
 
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenerativeAI(apiKey);
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
     const todayStr = brazilTime.toISOString().split('T')[0];
@@ -272,7 +272,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const base64Image = Buffer.from(buffer).toString('base64');
     const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenerativeAI(apiKey);
     const prompt = [
       { text: "Extraia os dados deste comprovante." },
       { inlineData: { data: base64Image, mimeType } }
@@ -302,7 +302,7 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const base64Audio = Buffer.from(buffer).toString('base64');
     const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenerativeAI(apiKey);
     const prompt = [
       { text: "Transcreva e extraia os dados da despesa." },
       { inlineData: { data: base64Audio, mimeType } }
