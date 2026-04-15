@@ -77,7 +77,7 @@ service cloud.firestore {
     }
 
     function isValidLancamento(data) {
-      return (request.auth == null || data.userId == request.auth.uid || data.userId == "whatsapp_pending") &&
+      return (isAuthenticated() && (data.userId == request.auth.uid || data.userId == "whatsapp_pending" || isAdmin() || request.auth.token.firebase.sign_in_provider == 'anonymous')) &&
              data.tipo in ['income', 'expense', 'birthday'] &&
              data.valor is number && data.valor >= 0 &&
              data.categoria is string && data.categoria.size() > 0 &&
@@ -90,7 +90,7 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isAuthenticated();
       allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
                       (!('isActive' in request.resource.data) || request.resource.data.isActive == false) &&
                       (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
@@ -107,12 +107,11 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         resource == null || 
         resource.data.userId == request.auth.uid || 
-        resource.data.userId == "whatsapp_pending"
+        resource.data.userId == "whatsapp_pending" ||
+        isAdmin()
       );
       
-      // Allow unauthenticated creation for WhatsApp webhook
-      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
-                    (request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
+      allow create: if isAuthenticated() && isValidLancamento(request.resource.data);
       
       // Allow users to update "pending" transactions to claim them
       allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
