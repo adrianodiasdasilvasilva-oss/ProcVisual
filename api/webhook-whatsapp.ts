@@ -89,7 +89,7 @@ export default async function handler(req: any, res: any) {
     // 3. Fallback: scan active users for normalized match
     if (!userDoc) {
        console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
-       const qAll = query(collection(db, "usuarios"), limit(100));
+       const qAll = query(collection(db, "usuarios"), limit(500));
        const snapAll = await getDocs(qAll);
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
@@ -99,10 +99,13 @@ export default async function handler(req: any, res: any) {
          const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
          
          // Match clean full, short, or 9-digit variations
-         return tel === cleanIncoming || 
+         const match = tel === cleanIncoming || 
                 shortTel === shortIncoming || 
                 (shortTel.length === 11 && shortIncoming.length === 10 && shortTel.substring(0, 2) === shortIncoming.substring(0, 2) && shortTel.substring(3) === shortIncoming.substring(2)) ||
                 (shortTel.length === 10 && shortIncoming.length === 11 && shortIncoming.substring(0, 2) === shortTel.substring(0, 2) && shortIncoming.substring(3) === shortTel.substring(2));
+         
+         if (match) console.log(`>>> [WH-WA] Usuário encontrado via scan: ${d.email}`);
+         return match;
        });
     }
 
@@ -186,6 +189,27 @@ const EXPENSE_SCHEMA: any = {
   required: ["descricao", "categoria", "parcela", "totalParcelas"]
 };
 
+function extractJSON(text: string) {
+  try {
+    // Tenta extrair JSON de blocos de código markdown se existirem
+    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
+    const cleanText = match ? match[1] : text;
+    return JSON.parse(cleanText.trim());
+  } catch (e) {
+    console.error(">>> [WH-WA] Erro ao extrair JSON:", e);
+    // Tenta encontrar algo que pareça um objeto JSON { ... }
+    const fallbackMatch = text.match(/\{[\s\S]*\}/);
+    if (fallbackMatch) {
+      try {
+        return JSON.parse(fallbackMatch[0]);
+      } catch (e2) {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 async function generateWithFallback(ai: any, prompt: any) {
   const modelName = "gemini-1.5-flash";
   
@@ -255,21 +279,36 @@ async function processText(db: any, userId: string, numero: string, texto: strin
 
     const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
     Extraia os dados da despesa para o formato JSON. 
-    REGRAS CRÍTICAS:
-    1. Se o valor NÃO estiver explicitamente escrito na mensagem, deixe o campo "valor" como nulo. NUNCA invente, estime ou use valores de exemplo.
-    2. Se a mensagem não contiver um número que represente um preço ou custo, o campo "valor" DEVE ser nulo.
-    3. Extraia a descrição, data (se mencionada) e categoria.
-    4. Se for uma conta que "vence", use a data de vencimento mencionada.`;
+    
+    REGRAS OBRIGATÓRIAS (NÃO IGNORE):
+    1. VALOR: Se o valor NÃO estiver explicitamente escrito na mensagem (ex: "35.00", "R$ 50", "dez reais"), o campo "valor" DEVE ser nulo (null). 
+    2. NUNCA invente, estime ou use valores de exemplo. Se você não vir um número que claramente seja o preço, use null.
+    3. Se a mensagem for apenas "Água vence dia 16/04", o valor é NULL.
+    4. DESCRIÇÃO: Extraia o que está sendo pago.
+    5. DATA: Se mencionada, use YYYY-MM-DD. Se não, use a data de hoje (${todayStr}).
+    6. CATEGORIA: Escolha a mais adequada.`;
     
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text() || "{}");
+    const result = extractJSON(response.text());
     console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
-    if (result.valor) {
-      await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
-    } else if (result.descricao) {
-      const msg = `📝 Identifiquei que você quer registrar *"${result.descricao}"*${result.data ? ` para o dia ${new Date(result.data).toLocaleDateString('pt-BR')}` : ''}, mas não encontrei o valor.\n\n*Qual o valor desta despesa?* (Ex: 50.00)`;
-      await sendWhatsAppMessage(numero, msg);
+    if (result && result.valor !== null && result.valor !== undefined) {
+      // Garantir que valor seja número
+      result.valor = parseFloat(String(result.valor).replace(',', '.'));
+      if (!isNaN(result.valor)) {
+        await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
+      } else {
+        result.valor = null;
+      }
+    } 
+    
+    if (!result || result.valor === null || result.valor === undefined) {
+      if (result && result.descricao) {
+        const msg = `📝 Identifiquei que você quer registrar *"${result.descricao}"*${result.data ? ` para o dia ${new Date(result.data).toLocaleDateString('pt-BR')}` : ''}, mas não encontrei o valor.\n\n*Qual o valor desta despesa?* (Ex: 50.00)`;
+        await sendWhatsAppMessage(numero, msg);
+      } else {
+        await sendWhatsAppMessage(numero, "🤔 Não consegui entender os detalhes da despesa. Pode repetir informando o item e o valor? (Ex: Almoço 35.00)");
+      }
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro texto:", err.message);
@@ -294,12 +333,15 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     ];
 
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text() || "{}");
+    const result = extractJSON(response.text());
 
-    if (result.valor) {
+    if (result && result.valor) {
+      result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
-    } else if (result.descricao) {
+    } else if (result && result.descricao) {
       await sendWhatsAppMessage(numero, `📝 Identifiquei a despesa *"${result.descricao}"* na imagem, mas o valor não ficou claro. Poderia me informar o valor?`);
+    } else {
+      await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados deste comprovante. Pode tentar tirar uma foto mais nítida ou digitar o valor?");
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro imagem:", err.message);
@@ -324,12 +366,15 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     ];
 
     const response = await generateWithFallback(ai, prompt);
-    const result = JSON.parse(response.text() || "{}");
+    const result = extractJSON(response.text());
 
-    if (result.valor) {
+    if (result && result.valor) {
+      result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
-    } else if (result.descricao) {
+    } else if (result && result.descricao) {
       await sendWhatsAppMessage(numero, `📝 Entendi que você falou sobre *"${result.descricao}"*, mas não identifiquei o valor. Qual seria o valor?`);
+    } else {
+      await sendWhatsAppMessage(numero, "🎙️ Não consegui entender o áudio. Pode repetir de forma mais clara ou digitar a despesa?");
     }
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro áudio:", err.message);
@@ -338,8 +383,18 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
 
 async function saveAndConfirm(db: any, userId: string, numero: string, data: any, origem: string, timestamp: number) {
   try {
-    const { descricao, valor, categoria, parcela, totalParcelas, data: customData } = data;
+    console.log(`>>> [WH-WA] Iniciando salvamento para usuário ${userId}...`);
+    let { descricao, valor, categoria, parcela, totalParcelas, data: customData } = data;
     
+    // Garantir tipos corretos
+    valor = parseFloat(String(valor).replace(',', '.'));
+    parcela = parseInt(String(parcela || 1));
+    totalParcelas = parseInt(String(totalParcelas || 1));
+
+    if (isNaN(valor)) {
+      throw new Error("Valor inválido após conversão.");
+    }
+
     // Check and save custom category
     if (categoria) {
       const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
