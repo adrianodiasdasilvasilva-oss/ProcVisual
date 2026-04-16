@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { Users, UserCheck, Calendar, Search, Loader2, BellRing, RefreshCw } from 'lucide-react';
-import { motion } from 'motion/react';
+import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
+import { Users, UserCheck, Calendar, Search, Loader2, BellRing, RefreshCw, FileDown, Trash2, X, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import * as XLSX from 'xlsx';
 
 interface UserProfile {
   id: string;
@@ -22,6 +23,8 @@ export default function AdminTab() {
   const [isTestingWA, setIsTestingWA] = useState(false);
   const [notifyResult, setNotifyResult] = useState<any>(null);
   const [testPhone, setTestPhone] = useState('');
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const path = 'usuarios';
@@ -75,6 +78,40 @@ export default function AdminTab() {
       setNotifyResult({ error: 'Erro de conexão' });
     } finally {
       setIsNotifying(false);
+    }
+  };
+
+  const handleExportExcel = () => {
+    try {
+      const dataToExport = filteredUsers.map(u => ({
+        Nome: u.nome || 'Sem Nome',
+        Email: u.email,
+        Telefone: u.telefone || 'N/A',
+        Status: u.isActive ? 'Ativo' : 'Inativo',
+        'Data Criacao': u.dataCriacao?.toDate ? u.dataCriacao.toDate().toLocaleDateString('pt-BR') : 'N/A',
+        'Data Assinatura': u.dataAssinatura?.toDate ? u.dataAssinatura.toDate().toLocaleDateString('pt-BR') : 'N/A'
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(dataToExport);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Usuarios");
+      XLSX.writeFile(wb, `relatorio_usuarios_procvisual_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Erro ao exportar Excel:', err);
+      alert('Erro ao gerar relatório');
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return;
+    setIsDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'usuarios', userToDelete.id));
+      setUserToDelete(null);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `usuarios/${userToDelete.id}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -179,15 +216,24 @@ export default function AdminTab() {
             </div>
           </div>
           
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-proc-text-sec" size={16} />
-            <input 
-              type="text"
-              placeholder="Buscar usuários..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-proc-text-main focus:outline-none focus:border-proc-cyan/30 transition-all"
-            />
+          <div className="relative w-full md:w-auto flex items-center gap-3">
+            <button 
+              onClick={handleExportExcel}
+              className="bg-proc-green/20 hover:bg-proc-green/30 text-proc-green px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border border-proc-green/30"
+            >
+              <FileDown size={16} />
+              Exportar Excel
+            </button>
+            <div className="relative w-full md:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-proc-text-sec" size={16} />
+              <input 
+                type="text"
+                placeholder="Buscar usuários..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-proc-text-main focus:outline-none focus:border-proc-cyan/30 transition-all"
+              />
+            </div>
           </div>
         </div>
 
@@ -197,8 +243,9 @@ export default function AdminTab() {
               <tr className="bg-white/5 border-b border-white/10">
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Usuário</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Data de Assinatura</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-right">Criado em</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Data de Assinatura</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Criado em</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -206,7 +253,7 @@ export default function AdminTab() {
                 <tr key={user.id} className="hover:bg-white/5 transition-colors group">
                   <td className="px-6 py-4">
                     <div className="flex flex-col">
-                      <span className="text-sm font-bold text-proc-text-main">{user.nome}</span>
+                      <span className="text-sm font-bold text-proc-text-main">{user.nome || 'Sem Nome'}</span>
                       <span className="text-xs text-proc-text-sec">{user.email}</span>
                       {user.telefone && <span className="text-[10px] text-proc-cyan/70 mt-0.5">{user.telefone}</span>}
                     </div>
@@ -221,16 +268,25 @@ export default function AdminTab() {
                       {user.isActive ? 'Ativo' : 'Inativo'}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
+                  <td className="px-6 py-4 text-center">
                     <span className="text-sm text-proc-text-main font-mono">
                       {user.dataAssinatura?.toDate ? user.dataAssinatura.toDate().toLocaleDateString('pt-BR') : 
                        (user.isActive ? 'Presente' : 'N/A')}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-6 py-4 text-center">
                     <span className="text-xs text-proc-text-sec">
                       {user.dataCriacao?.toDate ? user.dataCriacao.toDate().toLocaleDateString('pt-BR') : 'Sem data'}
                     </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => setUserToDelete(user)}
+                      className="p-2 text-proc-text-sec/60 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                      title="Excluir Usuário"
+                    >
+                      <Trash2 size={18} />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -245,6 +301,58 @@ export default function AdminTab() {
           </table>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {userToDelete && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setUserToDelete(null)}
+              className="absolute inset-0 bg-proc-bg/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2.5rem] p-8 shadow-2xl overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-1 bg-red-500/30" />
+              
+              <div className="flex flex-col items-center text-center gap-4">
+                <div className="w-16 h-16 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-500 mb-2">
+                  <AlertTriangle size={32} />
+                </div>
+                
+                <h3 className="text-xl font-bold text-proc-text-main">Excluir Usuário?</h3>
+                <p className="text-proc-text-sec text-sm leading-relaxed">
+                  Você está prestes a excluir permanentemente <span className="text-proc-text-main font-bold">{userToDelete.email}</span>.
+                  Esta ação não pode ser desfeita e removerá o perfil do banco de dados.
+                </p>
+
+                <div className="grid grid-cols-2 gap-4 w-full mt-6">
+                  <button 
+                    onClick={() => setUserToDelete(null)}
+                    className="py-3 px-6 rounded-2xl bg-white/5 hover:bg-white/10 text-proc-text-main font-bold transition-all border border-white/5"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleDeleteUser}
+                    disabled={isDeleting}
+                    className="py-3 px-6 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 disabled:opacity-50"
+                  >
+                    {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                    {isDeleting ? 'Excluindo...' : 'Sim, Excluir'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
