@@ -1,7 +1,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db, handleFirestoreError, OperationType } from '../firebase';
-import { collection, onSnapshot, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
-import { Users, UserCheck, Calendar, Search, Loader2, BellRing, RefreshCw, FileDown, Trash2, X, AlertTriangle } from 'lucide-react';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  deleteDoc, 
+  doc, 
+  updateDoc as firestoreUpdateDoc,
+  serverTimestamp 
+} from 'firebase/firestore';
+import { Users, UserCheck, Calendar, Search, Loader2, BellRing, RefreshCw, FileDown, Trash2, X, AlertTriangle, Power } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -25,6 +34,8 @@ export default function AdminTab() {
   const [testPhone, setTestPhone] = useState('');
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [notifyingUserId, setNotifyingUserId] = useState<string | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const path = 'usuarios';
@@ -81,6 +92,25 @@ export default function AdminTab() {
     }
   };
 
+  const handleNotifyIndividual = async (userId: string) => {
+    setNotifyingUserId(userId);
+    try {
+      const res = await fetch('/api/admin/run-notifications', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+      });
+      const data = await res.json();
+      const count = data.results?.notified || 0;
+      alert(`✅ Processamento concluído: ${count} notificação(ões) enviada(s).`);
+    } catch (err) {
+      console.error('Erro ao disparar notificação individual:', err);
+      alert('❌ Erro ao enviar notificação');
+    } finally {
+      setNotifyingUserId(null);
+    }
+  };
+
   const handleExportExcel = () => {
     try {
       const dataToExport = filteredUsers.map(u => ({
@@ -112,6 +142,21 @@ export default function AdminTab() {
       handleFirestoreError(err, OperationType.DELETE, `usuarios/${userToDelete.id}`);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleToggleActive = async (user: UserProfile) => {
+    setTogglingUserId(user.id);
+    try {
+      await firestoreUpdateDoc(doc(db, 'usuarios', user.id), {
+        isActive: !user.isActive,
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `usuarios/${user.id}`);
+      alert('Erro ao alterar status');
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -280,13 +325,35 @@ export default function AdminTab() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => setUserToDelete(user)}
-                      className="p-2 text-proc-text-sec/60 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                      title="Excluir Usuário"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleToggleActive(user)}
+                        disabled={togglingUserId === user.id}
+                        className={`p-2 rounded-lg transition-all ${
+                          user.isActive 
+                            ? 'text-proc-green/60 hover:text-proc-green hover:bg-proc-green/10' 
+                            : 'text-proc-text-sec/60 hover:text-proc-text-main hover:bg-white/10'
+                        }`}
+                        title={user.isActive ? "Desativar Usuário" : "Ativar Usuário"}
+                      >
+                        {togglingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Power size={18} />}
+                      </button>
+                      <button 
+                        onClick={() => handleNotifyIndividual(user.id)}
+                        disabled={notifyingUserId === user.id}
+                        className="p-2 text-proc-cyan/60 hover:text-proc-cyan hover:bg-proc-cyan/10 rounded-lg transition-all"
+                        title="Disparar Notificações para este usuário"
+                      >
+                        {notifyingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <BellRing size={18} />}
+                      </button>
+                      <button 
+                        onClick={() => setUserToDelete(user)}
+                        className="p-2 text-proc-text-sec/60 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
+                        title="Excluir Usuário"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

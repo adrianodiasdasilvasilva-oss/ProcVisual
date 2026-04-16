@@ -247,7 +247,7 @@ app.get("/api/subscription-details", async (req, res) => {
     const userSnap = await getDoc(doc(db, "usuarios", userId));
     const userData = userSnap.data();
 
-    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
     const isException = (userData?.telefone || "").replace(/\D/g, "").includes("19994792245");
@@ -308,7 +308,7 @@ app.get("/api/subscription-details", async (req, res) => {
     // Try searching Stripe by email as fallback
     const emailsToTry = [
         userData?.email, 
-        'adrianodiasilva@yahoo.com.br',
+        'adrianodiasdasilva@yahoo.com.br',
         'adrianodiasdasilva.silva@gmail.com'
       ].filter(Boolean);
       
@@ -534,13 +534,14 @@ app.post("/api/notify-transaction", async (req, res) => {
 });
 
 app.post("/api/admin/run-notifications", async (req, res) => {
-  console.log(">>> [ADMIN] Disparando notificações manualmente...");
+  const { userId } = req.body;
+  console.log(`>>> [ADMIN] Disparando notificações manualmente... ${userId ? `(Para usuário: ${userId})` : '(Geral)'}`);
   try {
     const db = await initializeFirebaseClient();
     if (!db) {
       return res.status(500).json({ error: "DB não disponível (null)" });
     }
-    const results = await runDailyNotifications();
+    const results = await runDailyNotifications(userId);
     res.json({ success: true, results });
   } catch (err: any) {
     console.error(">>> [ADMIN] Erro fatal:", err);
@@ -574,7 +575,7 @@ app.post("/api/admin/test-whatsapp", async (req, res) => {
   }
 });
 
-async function runDailyNotifications() {
+async function runDailyNotifications(targetUserId?: string) {
   let step = "start";
   try {
     const db = await initializeFirebaseClient();
@@ -586,10 +587,21 @@ async function runDailyNotifications() {
     const todayStr = brazilTime.toISOString().split('T')[0];
     const today = new Date(todayStr + "T12:00:00Z");
     
-    console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()})`);
+    console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()}) ${targetUserId ? `| Target: ${targetUserId}` : ''}`);
     
     step = "query_lancamentos";
-    const q = query(collection(db, "lancamentos"), where("tipo", "in", ["expense", "birthday", "despesa"]), limit(500));
+    let q;
+    if (targetUserId) {
+      q = query(
+        collection(db, "lancamentos"), 
+        where("userId", "==", targetUserId),
+        where("tipo", "in", ["expense", "birthday", "despesa"]), 
+        limit(500)
+      );
+    } else {
+      q = query(collection(db, "lancamentos"), where("tipo", "in", ["expense", "birthday", "despesa"]), limit(500));
+    }
+    
     const snapshot = await getDocs(q);
     console.log(`>>> [JOB] Snapshot obtido com ${snapshot.size} documentos.`);
 
