@@ -5,9 +5,24 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import cron from "node-cron";
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
+import { initializeApp } from "firebase/app";
+import { 
+  getFirestore, 
+  initializeFirestore,
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  setDoc, 
+  updateDoc, 
+  limit, 
+  serverTimestamp,
+  FieldValue
+} from "firebase/firestore";
+import { getAuth, signInAnonymously } from "firebase/auth";
 import Stripe from "stripe";
 import { createServer as createViteServer } from "vite";
 import whatsappHandler from "./webhook-whatsapp.js";
@@ -48,22 +63,22 @@ function getStripe() {
   return stripeInstance;
 }
 
-// --- FIREBASE ADMIN CONFIG ---
-let dbAdmin: admin.firestore.Firestore | null = null;
+// --- FIREBASE CLIENT CONFIG ---
+let dbClient: any = null;
+let authClient: any = null;
 let isInitializing = false;
 
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
+async function initializeFirebaseClient() {
+  if (dbClient && authClient) return dbClient;
   if (isInitializing) {
     while (isInitializing) {
       await new Promise(resolve => setTimeout(resolve, 100));
     }
-    return dbAdmin;
+    return dbClient;
   }
 
   isInitializing = true;
   try {
-    console.log(">>> [SISTEMA] Inicializando Firebase Admin...");
     const configPath = path.join(process.cwd(), "firebase-applet-config.json");
     
     if (!fs.existsSync(configPath)) {
@@ -73,26 +88,23 @@ async function initializeFirebaseAdmin() {
     }
 
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
+    const app = initializeApp(firebaseConfig);
+    
+    // Use initializeFirestore with long polling to avoid gRPC issues in Node
+    dbClient = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, firebaseConfig.firestoreDatabaseId);
 
-    if (admin.apps.length === 0) {
-      admin.initializeApp({ projectId });
-    }
-
-    try {
-      dbAdmin = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
-    } catch (e: any) {
-      console.warn(`>>> [SISTEMA] Erro ao conectar no DB ${dbId}: ${e.message}. Tentando fallback...`);
-      dbAdmin = getFirestore();
-    }
+    // Skip anonymous auth (not enabled by default)
+    authClient = getAuth(app);
+    console.log(">>> [SISTEMA] Firebase Client inicializado.");
 
     isInitializing = false;
-    return dbAdmin;
+    return dbClient;
   } catch (error: any) {
     console.error(">>> [SISTEMA] Erro crítico na inicialização:", error.message);
     isInitializing = false;
-    return null;
+    throw error;
   }
 }
 
@@ -111,10 +123,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
     const event = getStripe().webhooks.constructEvent(req.body, sig, endpointSecret);
     console.log(`>>> [STRIPE] Evento: ${event.type}`);
     
-    if (!dbAdmin) await initializeFirebaseAdmin();
-    if (!dbAdmin) throw new Error("Firebase Admin não disponível");
-
-    const db = dbAdmin;
+    const db = await initializeFirebaseClient();
+    if (!db) throw new Error("Firebase Client não disponível");
 
     switch (event.type) {
       case "checkout.session.completed": {
@@ -139,19 +149,19 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             plan: "premium",
             subscriptionId: subscriptionId,
             nextPaymentDate: nextPaymentDate,
-            lastPayment: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            lastPayment: serverTimestamp(),
+            updatedAt: serverTimestamp()
           };
 
           if (customerPhone) {
             updateData.telefone = customerPhone.replace(/\D/g, "");
           }
 
-          await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+          await setDoc(doc(db, "usuarios", userId), updateData, { merge: true });
 
           // Enviar mensagem de boas-vindas/ajuda se tiver telefone
-          const userDoc = await db.collection("usuarios").doc(userId).get();
-          const userData = userDoc.data();
+          const userSnap = await getDoc(doc(db, "usuarios", userId));
+          const userData = userSnap.data();
           const phoneToSend = updateData.telefone || userData?.telefone;
 
           if (phoneToSend) {
@@ -166,7 +176,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         const invoice = event.data.object as any;
         const subscriptionId = invoice.subscription as string;
         if (subscriptionId) {
-          const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscriptionId).limit(1).get();
+          const q = query(collection(db, "usuarios"), where("subscriptionId", "==", subscriptionId), limit(1));
+          const userQuery = await getDocs(q);
           if (!userQuery.empty) {
             let nextPaymentDate = null;
             try {
@@ -176,10 +187,10 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
               console.error(">>> [STRIPE] Erro ao buscar detalhes da assinatura no invoice:", e);
             }
 
-            await userQuery.docs[0].ref.update({ 
+            await updateDoc(userQuery.docs[0].ref, { 
               isActive: true, 
               nextPaymentDate: nextPaymentDate,
-              lastPayment: admin.firestore.FieldValue.serverTimestamp() 
+              lastPayment: serverTimestamp() 
             });
           }
         }
@@ -188,9 +199,10 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
       case "customer.subscription.deleted": {
         const subscription = event.data.object as Stripe.Subscription;
         if (subscription.id) {
-          const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscription.id).limit(1).get();
+          const q = query(collection(db, "usuarios"), where("subscriptionId", "==", subscription.id), limit(1));
+          const userQuery = await getDocs(q);
           if (!userQuery.empty) {
-            await userQuery.docs[0].ref.update({ isActive: false, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+            await updateDoc(userQuery.docs[0].ref, { isActive: false, updatedAt: serverTimestamp() });
           }
         }
         break;
@@ -200,13 +212,14 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         const status = subscription.status;
         const isActive = status === 'active' || status === 'trialing';
         
-        const userQuery = await db.collection("usuarios").where("subscriptionId", "==", subscription.id).limit(1).get();
+        const q = query(collection(db, "usuarios"), where("subscriptionId", "==", subscription.id), limit(1));
+        const userQuery = await getDocs(q);
         if (!userQuery.empty) {
           const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-          await userQuery.docs[0].ref.update({ 
+          await updateDoc(userQuery.docs[0].ref, { 
             isActive: isActive,
             nextPaymentDate: nextPaymentDate,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+            updatedAt: serverTimestamp() 
           });
           console.log(`>>> [STRIPE] Assinatura ${subscription.id} atualizada. Status: ${status}, Ativo: ${isActive}`);
         }
@@ -230,9 +243,11 @@ app.get("/api/subscription-details", async (req, res) => {
   if (!userId) return res.status(400).json({ error: "UserId missing" });
 
   try {
-    if (!dbAdmin) await initializeFirebaseAdmin();
-    const userDoc = await dbAdmin!.collection("usuarios").doc(userId).get();
-    const userData = userDoc.data();
+    const db = await initializeFirebaseClient();
+    if (!db) return res.status(500).json({ error: "DB não disponível" });
+
+    const userSnap = await getDoc(doc(db, "usuarios", userId));
+    const userData = userSnap.data();
 
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
@@ -241,10 +256,10 @@ app.get("/api/subscription-details", async (req, res) => {
 
     if (isAdmin || isException) {
       console.log(`>>> [API] Usuário ${isAdmin ? 'ADMIN' : 'EXCEÇÃO'} detectado: ${userData?.email || userData?.telefone}. Garantindo status ativo.`);
-      await userDoc.ref.update({
+      await updateDoc(userSnap.ref, {
         isActive: true,
         plan: 'premium',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: serverTimestamp()
       });
       return res.json({ status: 'active', plan: 'premium', isAdmin });
     }
@@ -258,11 +273,11 @@ app.get("/api/subscription-details", async (req, res) => {
           const isActive = subscription.status === 'active' || subscription.status === 'trialing';
 
           // Sync Firestore with latest Stripe data
-          await userDoc.ref.update({ 
+          await updateDoc(userSnap.ref, { 
             nextPaymentDate,
             isActive,
             plan: 'premium',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: serverTimestamp()
           });
 
           return res.json({ nextPaymentDate });
@@ -277,19 +292,18 @@ app.get("/api/subscription-details", async (req, res) => {
           if (subscription) {
             const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
             const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-            await userDoc.ref.update({ 
+            await updateDoc(userSnap.ref, { 
               subscriptionId: subscription.id,
               nextPaymentDate,
               isActive,
               plan: 'premium',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: serverTimestamp()
             });
             return res.json({ nextPaymentDate });
           }
         }
       } catch (e: any) {
         console.warn(`>>> [API] Erro ao buscar via ID ${userData.subscriptionId || userData.stripeCustomerId}, tentando via email...`);
-        // Fallback to email search if ID fails
       }
     }
 
@@ -310,14 +324,12 @@ app.get("/api/subscription-details", async (req, res) => {
 
         if (customers.data.length > 0) {
           const customer = customers.data[0];
-          // Fetch subscriptions separately to be sure
           const subscriptions = await getStripe().subscriptions.list({
             customer: customer.id,
             status: 'all',
-            limit: 5 // Check more than one to find the active one
+            limit: 5
           });
 
-          // Sort subscriptions: active/trialing first, then by end date
           const sortedSubs = subscriptions.data.sort((a, b) => {
             const aActive = a.status === 'active' || a.status === 'trialing' ? 1 : 0;
             const bActive = b.status === 'active' || b.status === 'trialing' ? 1 : 0;
@@ -331,49 +343,40 @@ app.get("/api/subscription-details", async (req, res) => {
             const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
             const isActive = subscription.status === 'active' || subscription.status === 'trialing';
             
-            await userDoc.ref.update({ 
+            await updateDoc(userSnap.ref, { 
               subscriptionId: subscription.id,
               stripeCustomerId: customer.id,
               nextPaymentDate,
               isActive,
               plan: 'premium',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: serverTimestamp()
             });
             return res.json({ nextPaymentDate, source: 'email_search', email, status: subscription.status });
           }
         }
       }
-      console.log(`>>> [API] Nenhuma assinatura encontrada para o usuário ${userId} após tentar todos os e-mails.`);
       
-      // If we reach here, it means Stripe has no active subscription for this user
-      // We should update isActive to false unless we have a valid internal calculation
-      
-      // Fallback: If we have lastPayment, calculate 30 days ahead as requested by user
       if (userData?.lastPayment) {
         const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
         const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
         const now = new Date();
         
         if (nextDate > now) {
-          console.log(`>>> [API] Usando cálculo interno (lastPayment + 30d): ${nextDate.toISOString()}`);
-          await userDoc.ref.update({ 
+          await updateDoc(userSnap.ref, { 
             nextPaymentDate: nextDate.toISOString(),
             isActive: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: serverTimestamp()
           });
           return res.json({ nextPaymentDate: nextDate.toISOString(), source: 'internal_calculation' });
         }
       }
 
-      // If no Stripe sub and no valid internal date, set to inactive
-      await userDoc.ref.update({ 
+      await updateDoc(userSnap.ref, { 
         isActive: false,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: serverTimestamp()
       });
 
       return res.json({ nextPaymentDate: null, isActive: false, message: "Nenhuma assinatura ativa encontrada." });
-
-    res.status(404).json({ error: "User not found" });
   } catch (error: any) {
     console.error(">>> [API] Erro ao buscar detalhes da assinatura:", error.message);
     res.status(500).json({ error: error.message });
@@ -388,8 +391,8 @@ app.use((req, res, next) => {
 
 // 4. Lazy Firebase Init for API routes
 app.use("/api", async (req, res, next) => {
-  if (!dbAdmin && !["/health", "/debug-vars"].includes(req.path)) {
-    await initializeFirebaseAdmin();
+  if (!dbClient && !["/health", "/debug-vars"].includes(req.path)) {
+    await initializeFirebaseClient();
   }
   next();
 });
@@ -440,11 +443,12 @@ app.get("/api/admin/check-user", async (req, res) => {
   const email = req.query.email as string;
   if (!email) return res.status(400).json({ error: "Email é obrigatório" });
   
-  if (!dbAdmin) await initializeFirebaseAdmin();
-  if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
+  const db = await initializeFirebaseClient();
+  if (!db) return res.status(500).json({ error: "DB não disponível" });
 
   try {
-    const snapshot = await dbAdmin.collection("usuarios").where("email", "==", email).get();
+    const q = query(collection(db, "usuarios"), where("email", "==", email));
+    const snapshot = await getDocs(q);
     if (snapshot.empty) return res.json({ found: false });
     
     const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -506,12 +510,12 @@ async function sendWhatsApp(to: string, message: string) {
 
 app.post("/api/notify-transaction", async (req, res) => {
   const { userId, data, phone } = req.body;
-  if (!dbAdmin) await initializeFirebaseAdmin();
-  if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
+  const db = await initializeFirebaseClient();
+  if (!db) return res.status(500).json({ error: "DB não disponível" });
 
   try {
     // Check if user is active
-    const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
+    const userSnap = await getDoc(doc(db, "usuarios", userId));
     const userData = userSnap.data();
     
     if (!userData || userData.isActive === false) {
@@ -533,51 +537,56 @@ app.post("/api/notify-transaction", async (req, res) => {
 
 app.post("/api/admin/run-notifications", async (req, res) => {
   console.log(">>> [ADMIN] Disparando notificações manualmente...");
-  if (!dbAdmin) await initializeFirebaseAdmin();
-  if (!dbAdmin) return res.status(500).json({ error: "DB não disponível" });
-
   try {
+    const db = await initializeFirebaseClient();
+    if (!db) {
+      return res.status(500).json({ error: "DB não disponível (null)" });
+    }
     const results = await runDailyNotifications();
     res.json({ success: true, results });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error(">>> [ADMIN] Erro fatal:", err);
+    res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
 async function runDailyNotifications() {
-  if (!dbAdmin) return { error: "DB não disponível" };
-  
-  const now = new Date();
-  // Ajuste para Horário de Brasília (UTC-3)
-  const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-  const todayStr = brazilTime.toISOString().split('T')[0];
-  
-  // Usamos meio-dia para evitar problemas de fuso horário na comparação
-  const today = new Date(todayStr + "T12:00:00Z");
-  
-  console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()})`);
-  
-  const snapshot = await dbAdmin.collection("lancamentos")
-    .where("tipo", "in", ["expense", "birthday", "despesa"])
-    .get();
+  let step = "start";
+  try {
+    const db = await initializeFirebaseClient();
+    step = "db_initialized";
+    if (!db) return { error: "DB não disponível" };
+    
+    const now = new Date();
+    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+    const todayStr = brazilTime.toISOString().split('T')[0];
+    const today = new Date(todayStr + "T12:00:00Z");
+    
+    console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()})`);
+    
+    step = "query_lancamentos";
+    const q = query(collection(db, "lancamentos"), where("tipo", "in", ["expense", "birthday", "despesa"]), limit(500));
+    const snapshot = await getDocs(q);
+    console.log(`>>> [JOB] Snapshot obtido com ${snapshot.size} documentos.`);
 
-  if (snapshot.empty) {
-    console.log(">>> [JOB] Nenhum lançamento encontrado.");
-    return { processed: 0 };
-  }
+    if (snapshot.empty) {
+      console.log(">>> [JOB] Nenhum lançamento encontrado.");
+      return { processed: 0 };
+    }
 
-  let processed = 0;
-  let notified = 0;
+    let processed = 0;
+    let notified = 0;
 
-  for (const doc of snapshot.docs) {
-    processed++;
-    const data = doc.data();
-    const userId = data.userId;
+    for (const docSnap of snapshot.docs) {
+      processed++;
+      const data = docSnap.data();
+      const userId = data.userId;
 
-    if (!userId || userId === 'whatsapp_pending') continue;
+      if (!userId || userId === 'whatsapp_pending') continue;
 
-    const userSnap = await dbAdmin.collection("usuarios").doc(userId).get();
-    const userData = userSnap.data();
+      step = `get_user_${userId}`;
+      const userSnap = await getDoc(doc(db, "usuarios", userId));
+      const userData = userSnap.data();
 
     // Permitir admin mesmo se inativo (para testes) ou se for a exceção
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
@@ -585,13 +594,13 @@ async function runDailyNotifications() {
     const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
 
     if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
-      console.log(`>>> [JOB] Lançamento ${doc.id} ignorado: Usuário ${userId} inativo e não é admin/exceção.`);
+      console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Usuário ${userId} inativo e não é admin/exceção.`);
       continue; 
     }
 
     const telefone = userData.telefone || data.telefone;
     if (!telefone) {
-      console.log(`>>> [JOB] Lançamento ${doc.id} ignorado: Telefone não encontrado.`);
+      console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Telefone não encontrado.`);
       continue;
     }
 
@@ -629,7 +638,7 @@ async function runDailyNotifications() {
         const msg = `👀 *LEMBRETE:* Amanhã é aniversário de *${data.descricao || data.estabelecimento}*!`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
-          await doc.ref.update({ notificadoAmanha: true });
+          await updateDoc(docSnap.ref, { notificadoAmanha: true });
           notified++;
         } else {
           console.error(`>>> [JOB] Erro ao enviar WhatsApp (Aniversário Amanhã) para ${telefone}:`, res.error);
@@ -639,7 +648,7 @@ async function runDailyNotifications() {
         const msg = `🥳 *HOJE:* É aniversário de *${data.descricao || data.estabelecimento}*!`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
-          await doc.ref.update({ notificadoNoDia: true });
+          await updateDoc(docSnap.ref, { notificadoNoDia: true });
           notified++;
         } else {
           console.error(`>>> [JOB] Erro ao enviar WhatsApp (Aniversário Hoje) para ${telefone}:`, res.error);
@@ -653,7 +662,7 @@ async function runDailyNotifications() {
         const msg = `⚠️ *AVISO:* Sua despesa "${data.descricao || data.estabelecimento}" vence em 5 dias (R$ ${valorFormatado}).`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
-          await doc.ref.update({ notificado5dias: true });
+          await updateDoc(docSnap.ref, { notificado5dias: true });
           notified++;
         } else {
           console.error(`>>> [JOB] Erro ao enviar WhatsApp (Vencimento 5 dias) para ${telefone}:`, res.error);
@@ -663,7 +672,7 @@ async function runDailyNotifications() {
         const msg = `🚨 *VENCIMENTO:* Sua despesa "${data.descricao || data.estabelecimento}" vence HOJE (R$ ${valorFormatado}).`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
-          await doc.ref.update({ notificadoNoDia: true });
+          await updateDoc(docSnap.ref, { notificadoNoDia: true });
           notified++;
         } else {
           console.error(`>>> [JOB] Erro ao enviar WhatsApp (Vencimento Hoje) para ${telefone}:`, res.error);
@@ -674,12 +683,23 @@ async function runDailyNotifications() {
 
   console.log(`>>> [JOB] Finalizado. Processados: ${processed}, Notificados: ${notified}`);
   return { processed, notified };
+  } catch (e: any) {
+    console.error(`>>> [JOB] Erro no passo ${step}:`, e.message);
+    throw new Error(`[Step: ${step}] ${e.message}`);
+  }
 }
 
 // Server initialization for non-Vercel environments
 if (!process.env.VERCEL) {
   const PORT = 3000;
-  initializeFirebaseAdmin().then(async () => {
+  
+  const startServer = async () => {
+    try {
+      await initializeFirebaseClient();
+    } catch (e: any) {
+      console.error(">>> [BOOT] Erro ao inicializar Firebase em segundo plano:", e.message);
+    }
+
     // Vite middleware for development
     if (process.env.NODE_ENV !== "production") {
       console.log(">>> [SISTEMA] Configurando middleware do Vite...");
@@ -701,12 +721,17 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    // Roda às 08:00, 09:00 e 10:00 para garantir (caso o servidor esteja acordando)
     cron.schedule("0 8,9,10 * * *", async () => {
       console.log(">>> [CRON] Iniciando tarefa agendada de notificações...");
-      await runDailyNotifications();
+      try {
+        await runDailyNotifications();
+      } catch (err) {
+        console.error(">>> [CRON] Erro ao rodar notificações:", err);
+      }
     });
-  });
+  };
+
+  startServer();
 }
 
 export default app;

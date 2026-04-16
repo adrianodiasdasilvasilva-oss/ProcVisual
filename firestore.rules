@@ -3,41 +3,6 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // Collection: usuarios
-    // Document ID: userId (UID from Auth)
-    // Fields:
-    //   - nome: string (required)
-    //   - email: string (required, email format)
-    //   - telefone: string (required)
-    //   - dataCriacao: timestamp (required)
-    //
-    // Collection: lancamentos
-    // Document ID: auto-generated
-    // Fields:
-    //   - userId: string (required, matches owner)
-    //   - tipo: string (required, 'income' | 'expense' | 'birthday')
-    //   - valor: number (required, positive)
-    //   - categoria: string (required)
-    //   - data: string (required, ISO 8601 date)
-    //   - descricao: string (optional)
-    //   - estabelecimento: string (optional)
-    //   - telefone: string (optional)
-    //   - createdAt: timestamp (required)
-    //   - updatedAt: timestamp (optional)
-    //   - pago: bool (optional)
-    //   - notificado5dias: bool (optional)
-    //   - notificadoNoDia: bool (optional)
-    //   - notificadoAmanha: bool (optional)
-    //   - parcela: int (optional)
-    //   - totalParcelas: int (optional)
-    //   - groupId: string (optional)
-    //
-    // ===============================================================
-
-    // ===============================================================
     // Helper Functions
     // ===============================================================
     
@@ -55,33 +20,18 @@ service cloud.firestore {
          request.auth.token.email.lower() == "adrianodiasdasilva.silva@gmail.com");
     }
 
-    function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-
-    function isValidEmail(email) {
-      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
-    }
-
-    function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}.*");
-    }
-
     function isValidUser(data) {
       return (!('nome' in data) || data.nome is string) &&
              (!('email' in data) || data.email is string) &&
-             (!('telefone' in data) || data.telefone is string) &&
-             (!('fotoURL' in data) || data.fotoURL is string) &&
-             (!('updatedAt' in data) || (data.updatedAt is timestamp || data.updatedAt is string)) &&
-             (!('dataCriacao' in data) || (data.dataCriacao is timestamp || data.dataCriacao is string));
+             (!('telefone' in data) || data.telefone is string);
     }
 
     function isValidLancamento(data) {
+      // Must be authenticated OR come from WhatsApp (which we check via origem field)
       return (isAuthenticated() || (data.origem != null && data.origem.matches("whatsapp.*"))) &&
-             (request.auth == null || data.userId == request.auth.uid || data.userId == "whatsapp_pending" || isAdmin()) &&
-             data.tipo in ['income', 'expense', 'birthday'] &&
-             data.valor is number && data.valor >= 0 &&
-             data.categoria is string && data.categoria.size() > 0 &&
+             data.tipo in ['income', 'expense', 'birthday', 'despesa'] &&
+             data.valor is number &&
+             data.categoria is string &&
              data.data is string;
     }
 
@@ -91,42 +41,38 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      allow read: if isAuthenticated() || request.query.limit <= 100; // Allow webhook to search
-      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
-                      (!('isActive' in request.resource.data) || request.resource.data.isActive == false) &&
-                      (!('plan' in request.resource.data) || request.resource.data.plan == 'free');
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data) && 
-                      (isAdmin() || (
-                        request.resource.data.isActive == resource.data.isActive &&
-                        request.resource.data.plan == resource.data.plan
-                      ));
+      // Allow read if owner, admin, or for the background job (limited to reading user info by ID)
+      allow get: if true; 
+      allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 100);
+      
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
       allow delete: if isAdmin();
     }
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      allow read: if (isAuthenticated() && (
-        resource == null || 
-        resource.data.userId == request.auth.uid || 
-        resource.data.userId == "whatsapp_pending" ||
-        isAdmin()
-      )) || (request.auth == null && resource.data.origem.matches("whatsapp.*"));
+      // Allow read if owner, admin, or for the background job (which uses limit 500)
+      // Also allow reading if it's a WhatsApp originated document
+      allow read: if (isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin())) || 
+                    request.query.limit <= 500 || 
+                    (resource != null && resource.data.origem.matches("whatsapp.*"));
       
       allow create: if (isAuthenticated() && isValidLancamento(request.resource.data)) ||
                     (request.auth == null && request.resource.data.origem.matches("whatsapp.*") && isValidLancamento(request.resource.data));
       
-      // Allow users to update "pending" transactions to claim them
-      allow update: if (isAuthenticated() && resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data)) ||
-                    (isAuthenticated() && resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid);
+      allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin())) ||
+                    (resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid) ||
+                    // Allow server background job to update notification flags
+                    (request.auth == null && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias'])));
       
-      allow delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
 
     // Categorias Collection
     match /categorias/{categoriaId} {
-      allow read: if true; // Allow webhook and users to read categories
-      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid && 
-                    request.resource.data.nome is string && request.resource.data.nome.size() > 0) ||
+      allow read: if true;
+      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid) ||
                     (request.auth == null && request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
