@@ -41,19 +41,19 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      // Allow read if owner, admin, or for the background job (limited to reading user info by ID)
+      // Allow read for bot and owner/admin
       allow get: if true; 
-      allow list: if isAdmin() || (isAuthenticated() && request.query.limit <= 100);
+      allow list: if true;
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
+      // Allow bot to save pending expenses
+      allow update: if (isOwner(userId) || isAdmin()) || (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingWhatsAppExpense']));
       allow delete: if isAdmin();
     }
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      // Allow read if owner, admin, or for the background job (which uses limit 500)
-      // Also allow reading if it's a WhatsApp originated document
+      // Allow read for users, admins and bot (limited to 500)
       allow read: if (isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin())) || 
                     request.query.limit <= 500 || 
                     (resource != null && resource.data.origem.matches("whatsapp.*"));
@@ -64,7 +64,7 @@ service cloud.firestore {
       allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin())) ||
                     (resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid) ||
                     // Allow server background job to update notification flags
-                    (request.auth == null && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias'])));
+                    (request.auth == null && (request.resource.data.diff(resource.data).affectedKeys().hasAny(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias'])));
       
       allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }

@@ -90,10 +90,8 @@ async function initializeFirebaseClient() {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const app = initializeApp(firebaseConfig);
     
-    // Use initializeFirestore with long polling to avoid gRPC issues in Node
-    dbClient = initializeFirestore(app, {
-      experimentalForceLongPolling: true,
-    }, firebaseConfig.firestoreDatabaseId);
+    // Use getFirestore with explicit databaseId for consistency
+    dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
     // Skip anonymous auth (not enabled by default)
     authClient = getAuth(app);
@@ -615,8 +613,7 @@ async function runDailyNotifications() {
       const userData = userSnap.data();
 
     // Permitir admin mesmo se inativo (para testes) ou se for a exceção
-    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
-                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
+    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
     const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
 

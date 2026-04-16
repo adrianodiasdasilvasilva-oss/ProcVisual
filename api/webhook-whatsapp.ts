@@ -23,6 +23,7 @@ async function initializeFirebaseClient() {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
     const app = initializeApp(firebaseConfig);
     dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+    console.log(`>>> [WH-WA] Firebase Client inicializado no banco: ${firebaseConfig.firestoreDatabaseId}`);
     return dbClient;
   } catch (e: any) {
     console.error(">>> [WH-WA] Erro ao inicializar Firebase Client:", e.message);
@@ -116,8 +117,7 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
-                    (userData.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
+    const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
                     (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
     const isException = cleanIncoming.includes("19994792245") || (userData.telefone || "").replace(/\D/g, "").includes("19994792245");

@@ -474,9 +474,8 @@ export default function App() {
     );
   }
 
-  const isAdmin = (user?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
-                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
-                  (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br";
+  const isAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
+                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
   const isSuperAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" ||
                        (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
