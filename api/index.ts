@@ -657,9 +657,11 @@ async function runDailyNotifications() {
 
     console.log(`>>> [JOB] Analisando: ${data.descricao} | Venc: ${data.data} | Diff: ${diffDays} dias`);
 
+    const userName = userData?.nome || "Cliente";
+
     if (data.tipo === 'birthday') {
       if (diffDays === 1 && !data.notificadoAmanha) {
-        const msg = `👀 *LEMBRETE:* Amanhã é aniversário de *${data.descricao || data.estabelecimento}*!`;
+        const msg = `Olá, ${userName}! Amanhã é aniversário do(a) ${data.descricao || data.estabelecimento}. Não esqueça de enviar seus parabéns! 🎂🥳`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
           await updateDoc(docSnap.ref, { notificadoAmanha: true });
@@ -669,7 +671,7 @@ async function runDailyNotifications() {
         }
       }
       if (diffDays === 0 && !data.notificadoNoDia) {
-        const msg = `🥳 *HOJE:* É aniversário de *${data.descricao || data.estabelecimento}*!`;
+        const msg = `Olá, ${userName}! HOJE é aniversário do(a) ${data.descricao || data.estabelecimento}. Já desejou os parabéns? 🎂🥳🎉\n\nA equipe da ProcVisual deseja um dia incrível para ${data.descricao || data.estabelecimento}, cheio de conquistas, alegria e momentos especiais.\nQue seu novo ciclo seja ainda mais organizado, produtivo e cheio de realizações! 🚀`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
           await updateDoc(docSnap.ref, { notificadoNoDia: true });
@@ -683,7 +685,7 @@ async function runDailyNotifications() {
       if (data.pago === true) continue;
 
       if (diffDays === 5 && !data.notificado5dias) {
-        const msg = `⚠️ *AVISO:* Sua despesa "${data.descricao || data.estabelecimento}" vence em 5 dias (R$ ${valorFormatado}).`;
+        const msg = `👋🏻 Oi, ${userName}! Só um lembrete importante:\n\nSua despesa no valor de R$ ${valorFormatado} vence em 5 dias.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
           await updateDoc(docSnap.ref, { notificado5dias: true });
@@ -693,7 +695,7 @@ async function runDailyNotifications() {
         }
       }
       if (diffDays === 0 && !data.notificadoNoDia) {
-        const msg = `🚨 *VENCIMENTO:* Sua despesa "${data.descricao || data.estabelecimento}" vence HOJE (R$ ${valorFormatado}).`;
+        const msg = `🚨 *VENCIMENTO*\n👋🏻 Oi, ${userName}! \n\nSua despesa no valor de R$ ${valorFormatado} vence HOJE.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;
         const res = await sendWhatsApp(telefone, msg);
         if (res.success) {
           await updateDoc(docSnap.ref, { notificadoNoDia: true });
@@ -745,7 +747,7 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    cron.schedule("0 8,9,10 * * *", async () => {
+    cron.schedule("0 8 * * *", async () => {
       console.log(">>> [CRON] Iniciando tarefa agendada de notificações...");
       try {
         await runDailyNotifications();
