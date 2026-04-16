@@ -208,7 +208,7 @@ function extractJSON(text: string) {
   }
 }
 
-async function generateWithFallback(ai: any, prompt: any) {
+async function generateWithFallback(ai: any, prompt: any, systemInstruction?: string) {
   const modelName = "gemini-3-flash-preview";
   
   try {
@@ -228,6 +228,7 @@ async function generateWithFallback(ai: any, prompt: any) {
       model: modelName,
       contents: contents,
       config: {
+        systemInstruction: systemInstruction || "Você é um assistente financeiro preciso.",
         responseMimeType: "application/json",
         responseSchema: EXPENSE_SCHEMA
       }
@@ -243,6 +244,7 @@ async function generateWithFallback(ai: any, prompt: any) {
         model: "gemini-3.1-pro-preview",
         contents: typeof prompt === 'string' ? prompt : { parts: prompt },
         config: {
+          systemInstruction: systemInstruction || "Você é um assistente financeiro preciso.",
           responseMimeType: "application/json",
           responseSchema: EXPENSE_SCHEMA
         }
@@ -272,15 +274,14 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
     Extraia os dados da despesa para o formato JSON. 
     
-    REGRAS OBRIGATÓRIAS (NÃO IGNORE):
-    1. VALOR: Se o valor NÃO estiver explicitamente escrito na mensagem (ex: "35.00", "R$ 50", "dez reais"), o campo "valor" DEVE ser nulo (null). 
-    2. NUNCA invente, estime ou use valores de exemplo. Se você não vir um número que claramente seja o preço, use null.
-    3. Se a mensagem for apenas "Água vence dia 16/04", o valor é NULL.
-    4. DESCRIÇÃO: Extraia o que está sendo pago.
-    5. DATA: Se mencionada, use YYYY-MM-DD. Se não, use a data de hoje (${todayStr}).
-    6. CATEGORIA: Escolha a mais adequada.`;
+    ATENÇÃO - REGRA DE OURO:
+    - Se NÃO houver um valor monetário explícito na mensagem (ex: "50", "R$ 10", "vinte reais"), o campo "valor" DEVE ser obrigatoriamente null.
+    - NUNCA invente um valor. Se a mensagem for "Água vence dia 16/04", o valor é null.
+    - Se a mensagem for "Paguei a conta de luz", o valor é null.
+    - SOMENTE preencha o valor se o usuário escreveu o número na mensagem.`;
     
-    const response = await generateWithFallback(ai, prompt);
+    const sysInst = "Você é um extrator de despesas financeiras. Sua prioridade máxima é a precisão. Se um valor não for mencionado explicitamente, você deve retornar null para o campo 'valor'. Nunca invente dados.";
+    const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
     console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
@@ -324,7 +325,8 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
       { inlineData: { data: base64Image, mimeType } }
     ];
 
-    const response = await generateWithFallback(ai, prompt);
+    const sysInst = "Você é um extrator de dados de comprovantes fiscais. Extraia apenas o que for visível. Se o valor total não estiver claro ou visível, retorne null para o campo 'valor'. NUNCA invente valores.";
+    const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
 
     if (result && result.valor) {
@@ -357,7 +359,8 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
       { inlineData: { data: base64Audio, mimeType } }
     ];
 
-    const response = await generateWithFallback(ai, prompt);
+    const sysInst = "Você é um assistente que transcreve áudios de despesas. Sua tarefa é extrair a descrição e o valor. Se o usuário não falar um valor numérico, o campo 'valor' DEVE ser null. NUNCA invente valores.";
+    const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
 
     if (result && result.valor) {
