@@ -16,7 +16,8 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (request.auth.token.email.lower() == "adrianodiasdasilva@yahoo.com.br" || 
+        (request.auth.uid == "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
+         request.auth.token.email.lower() == "adrianodiasdasilva@yahoo.com.br" || 
          request.auth.token.email.lower() == "adrianodiasdasilva.silva@gmail.com");
     }
 
