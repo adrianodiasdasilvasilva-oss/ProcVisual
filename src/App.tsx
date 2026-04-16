@@ -11,6 +11,7 @@ import NewTransactionModal from './components/NewTransactionModal';
 import Settings from './components/Settings';
 import AnalysisTab from './components/AnalysisTab';
 import ReportsTab from './components/ReportsTab';
+import AdminTab from './components/AdminTab';
 import InteractiveBalloon from './components/InteractiveBalloon';
 import SubscriptionPaywall from './components/SubscriptionPaywall';
 import { motion, AnimatePresence } from 'motion/react';
@@ -474,7 +475,11 @@ export default function App() {
   }
 
   const isAdmin = (user?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
-                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
+                  (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br";
+
+  const isSuperAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" ||
+                       (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
   if (profile.isActive !== true && !isAdmin) {
     return <SubscriptionPaywall user={user} onSignOut={() => signOut(auth)} />;
@@ -497,7 +502,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-proc-bg text-proc-text-main font-sans selection:bg-proc-green/30 flex flex-col md:flex-row">
-      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
+      <Sidebar activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} isSuperAdmin={isSuperAdmin} />
       
       <div className="flex-1 flex flex-col min-h-screen overflow-y-auto pb-24 md:pb-0">
         <Header balance={balance} />
@@ -790,6 +795,16 @@ export default function App() {
                     selectedMonths={filterMonths}
                   />
                 </motion.div>
+              ) : activeTab === 'admin' && isSuperAdmin ? (
+                <motion.div
+                  key="admin"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="md:col-span-12"
+                >
+                  <AdminTab />
+                </motion.div>
               ) : activeTab === 'configuracoes' ? (
                 <motion.div
                   key="configuracoes"
@@ -827,7 +842,7 @@ export default function App() {
       </div>
 
       <div className="md:hidden">
-        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} />
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} onInstall={deferredPrompt ? handleInstallClick : undefined} isSuperAdmin={isSuperAdmin} />
       </div>
 
       {user && (

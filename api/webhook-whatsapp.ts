@@ -117,9 +117,10 @@ export default async function handler(req: any, res: any) {
     }
 
     const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+                    (userData.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
                     (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
-    const isException = cleanIncoming === "5519994792245" || cleanIncoming === "19994792245";
+    const isException = cleanIncoming.includes("19994792245") || (userData.telefone || "").replace(/\D/g, "").includes("19994792245");
 
     console.log(`>>> [WH-WA] Verificando Acesso: ${userData.email} (Admin: ${isAdmin}, Exception: ${isException})`);
 

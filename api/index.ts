@@ -550,6 +550,32 @@ app.post("/api/admin/run-notifications", async (req, res) => {
   }
 });
 
+app.post("/api/admin/test-whatsapp", async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ success: false, error: "Número ausente" });
+  
+  try {
+    const msg = "✅ *Teste de Integração ProcVisual*\n\nSeu sistema de notificações via WhatsApp está funcionando corretamente! 🚀";
+    const result = await sendWhatsApp(to, msg);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post("/api/admin/test-whatsapp", async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ success: false, error: "Número ausente" });
+  
+  try {
+    const msg = "✅ *Teste de Integração ProcVisual*\n\nSeu sistema de notificações via WhatsApp está funcionando corretamente! 🚀";
+    const result = await sendWhatsApp(to, msg);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 async function runDailyNotifications() {
   let step = "start";
   try {
@@ -590,6 +616,7 @@ async function runDailyNotifications() {
 
     // Permitir admin mesmo se inativo (para testes) ou se for a exceção
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasilva@yahoo.com.br" || 
+                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
                     (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
     const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
 

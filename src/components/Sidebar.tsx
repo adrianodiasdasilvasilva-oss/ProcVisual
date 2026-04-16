@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, PieChart, Wallet, Settings, LogOut, Download, BarChart2 } from 'lucide-react';
+import { LayoutDashboard, PieChart, Wallet, Settings, LogOut, Download, BarChart2, ShieldCheck } from 'lucide-react';
 import { auth } from '../firebase';
 import Logo from './Logo';
 
@@ -7,14 +7,16 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onInstall?: () => void;
+  isSuperAdmin?: boolean;
 }
 
-export default function Sidebar({ activeTab, onTabChange, onInstall }: SidebarProps) {
+export default function Sidebar({ activeTab, onTabChange, onInstall, isSuperAdmin }: SidebarProps) {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'lancamentos', label: 'Lançamentos', icon: Wallet },
     { id: 'analise', label: 'Análise', icon: PieChart },
     { id: 'relatorios', label: 'Relatórios', icon: BarChart2 },
+    ...(isSuperAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck }] : []),
     { id: 'configuracoes', label: 'Configurações', icon: Settings },
   ];
 

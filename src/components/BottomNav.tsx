@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon, Download, ChevronUp, ChevronDown, PieChart } from 'lucide-react';
+import { LayoutDashboard, ArrowUpCircle, ArrowDownCircle, BarChart2, FileText, Settings as SettingsIcon, Download, ChevronUp, ChevronDown, PieChart, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface BottomNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onInstall?: () => void;
+  isSuperAdmin?: boolean;
 }
 
-export default function BottomNav({ activeTab, onTabChange, onInstall }: BottomNavProps) {
+export default function BottomNav({ activeTab, onTabChange, onInstall, isSuperAdmin }: BottomNavProps) {
   const [isMinimized, setIsMinimized] = useState(false);
 
   const tabs = [
@@ -16,6 +17,7 @@ export default function BottomNav({ activeTab, onTabChange, onInstall }: BottomN
     { id: 'lancamentos', label: 'Lançamentos', icon: FileText },
     { id: 'analise', label: 'Análise', icon: BarChart2 },
     { id: 'relatorios', label: 'Relatórios', icon: PieChart },
+    ...(isSuperAdmin ? [{ id: 'admin', label: 'Admin', icon: ShieldCheck }] : []),
     { id: 'configuracoes', label: 'Configurações', icon: SettingsIcon },
   ];
 
