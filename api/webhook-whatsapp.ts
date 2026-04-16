@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, limit } from "firebase/firestore";
+import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, limit, updateDoc } from "firebase/firestore";
 import { getAuth, signInAnonymously } from "firebase/auth";
 import fs from "fs";
 import path from "path";
@@ -137,7 +137,7 @@ export default async function handler(req: any, res: any) {
       if (texto.toLowerCase().trim() === 'ajuda') {
         await sendWhatsAppMessage(numero, '📖 *Guia de Uso - ProcVisual*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".');
       } else {
-        await processText(db, userId, numero, texto, message.timestamp);
+        await processText(db, userId, numero, texto, message.timestamp, userData);
       }
     } else if (type === 'image') {
       const imageUrl = message.image?.link;
@@ -257,12 +257,35 @@ async function generateWithFallback(ai: any, prompt: any, systemInstruction?: st
   }
 }
 
-async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number) {
+async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number, userData: any) {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
   if (!apiKey) {
     console.error(">>> [WH-WA] GEMINI_API_KEY não configurada!");
     return;
   }
+
+  // 1. Verificar se é apenas um número e se há despesa pendente
+  const cleanText = texto.trim().replace(',', '.');
+  const isJustNumber = /^\d+([.]\d+)?$/.test(cleanText);
+  
+  if (isJustNumber && userData?.pendingWhatsAppExpense) {
+    const valor = parseFloat(cleanText);
+    if (valor > 0) {
+      console.log(`>>> [WH-WA] Aplicando valor ${valor} à despesa pendente: ${userData.pendingWhatsAppExpense.descricao}`);
+      const dataToSave = {
+        ...userData.pendingWhatsAppExpense,
+        valor: valor
+      };
+      await saveAndConfirm(db, userId, numero, dataToSave, "whatsapp", timestamp);
+      
+      // Limpar pendência
+      await updateDoc(doc(db, "usuarios", userId), {
+        pendingWhatsAppExpense: null
+      });
+      return;
+    }
+  }
+
   console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
 
   try {
@@ -285,18 +308,40 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     const result = extractJSON(response.text);
     console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
+    // Tratar valor 0 como nulo para forçar a pergunta
+    if (result && (result.valor === 0 || result.valor === "0")) {
+      result.valor = null;
+    }
+
     if (result && result.valor !== null && result.valor !== undefined) {
       // Garantir que valor seja número
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
-      if (!isNaN(result.valor)) {
+      if (!isNaN(result.valor) && result.valor > 0) {
         await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
+        // Limpar pendência se houver uma nova despesa completa
+        if (userData?.pendingWhatsAppExpense) {
+          await updateDoc(doc(db, "usuarios", userId), {
+            pendingWhatsAppExpense: null
+          });
+        }
       } else {
         result.valor = null;
       }
     } 
     
-    if (!result || result.valor === null || result.valor === undefined) {
+    if (!result || result.valor === null || result.valor === undefined || result.valor <= 0) {
       if (result && result.descricao) {
+        // Salvar pendência no usuário
+        await updateDoc(doc(db, "usuarios", userId), {
+          pendingWhatsAppExpense: {
+            descricao: result.descricao,
+            categoria: result.categoria,
+            data: result.data,
+            parcela: result.parcela,
+            totalParcelas: result.totalParcelas
+          }
+        });
+
         const msg = `📝 Identifiquei que você quer registrar *"${result.descricao}"*${result.data ? ` para o dia ${new Date(result.data).toLocaleDateString('pt-BR')}` : ''}, mas não encontrei o valor.\n\n*Qual o valor desta despesa?* (Ex: 50.00)`;
         await sendWhatsAppMessage(numero, msg);
       } else {
@@ -329,10 +374,29 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
 
-    if (result && result.valor) {
+    // Tratar valor 0 como nulo para forçar a pergunta
+    if (result && (result.valor === 0 || result.valor === "0")) {
+      result.valor = null;
+    }
+
+    if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
+      // Limpar pendência se houver uma nova despesa completa
+      await updateDoc(doc(db, "usuarios", userId), {
+        pendingWhatsAppExpense: null
+      });
     } else if (result && result.descricao) {
+      // Salvar pendência no usuário
+      await updateDoc(doc(db, "usuarios", userId), {
+        pendingWhatsAppExpense: {
+          descricao: result.descricao,
+          categoria: result.categoria,
+          data: result.data,
+          parcela: result.parcela,
+          totalParcelas: result.totalParcelas
+        }
+      });
       await sendWhatsAppMessage(numero, `📝 Identifiquei a despesa *"${result.descricao}"* na imagem, mas o valor não ficou claro. Poderia me informar o valor?`);
     } else {
       await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados deste comprovante. Pode tentar tirar uma foto mais nítida ou digitar o valor?");
@@ -363,10 +427,29 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
 
-    if (result && result.valor) {
+    // Tratar valor 0 como nulo para forçar a pergunta
+    if (result && (result.valor === 0 || result.valor === "0")) {
+      result.valor = null;
+    }
+
+    if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
+      // Limpar pendência se houver uma nova despesa completa
+      await updateDoc(doc(db, "usuarios", userId), {
+        pendingWhatsAppExpense: null
+      });
     } else if (result && result.descricao) {
+      // Salvar pendência no usuário
+      await updateDoc(doc(db, "usuarios", userId), {
+        pendingWhatsAppExpense: {
+          descricao: result.descricao,
+          categoria: result.categoria,
+          data: result.data,
+          parcela: result.parcela,
+          totalParcelas: result.totalParcelas
+        }
+      });
       await sendWhatsAppMessage(numero, `📝 Entendi que você falou sobre *"${result.descricao}"*, mas não identifiquei o valor. Qual seria o valor?`);
     } else {
       await sendWhatsAppMessage(numero, "🎙️ Não consegui entender o áudio. Pode repetir de forma mais clara ou digitar a despesa?");
