@@ -18,6 +18,7 @@ service cloud.firestore {
       return isAuthenticated() && 
         (request.auth.uid == "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
          request.auth.uid == "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
+         request.auth.uid == "uCpsT3N8pAWWzAsP74qKqPTeYAt2" ||
          (request.auth.token.email != null && 
           (request.auth.token.email == "adrianodiasdasilva@yahoo.com.br" || 
            request.auth.token.email == "adrianodiasdasilva.silva@gmail.com")));
@@ -49,8 +50,10 @@ service cloud.firestore {
       allow list: if true;
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      // Allow bot to save pending expenses
-      allow update: if (isOwner(userId) || isAdmin()) || (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingWhatsAppExpense']));
+      // Allow backend (Stripe/Bot) or owner/admin
+      allow update: if (isOwner(userId) || isAdmin()) || 
+                      (request.auth == null && 
+                       (request.resource.data.diff(resource.data).affectedKeys().hasAny(['isActive', 'plan', 'subscriptionId', 'valorAssinatura', 'nextPaymentDate', 'lastPayment', 'updatedAt', 'pendingWhatsAppExpense', 'telefone'])));
       allow delete: if isAdmin();
     }
 
