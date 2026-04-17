@@ -146,6 +146,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             isActive: true,
             plan: "premium",
             subscriptionId: subscriptionId,
+            valorAssinatura: session.amount_total ? session.amount_total / 100 : 0,
             nextPaymentDate: nextPaymentDate,
             lastPayment: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -188,6 +189,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             await updateDoc(userQuery.docs[0].ref, { 
               isActive: true, 
               nextPaymentDate: nextPaymentDate,
+              valorAssinatura: invoice.amount_paid ? invoice.amount_paid / 100 : 0,
               lastPayment: serverTimestamp() 
             });
           }

@@ -22,6 +22,7 @@ interface UserProfile {
   dataCriacao?: any;
   dataAssinatura?: any;
   telefone?: string;
+  valorAssinatura?: number;
 }
 
 export default function AdminTab() {
@@ -118,6 +119,7 @@ export default function AdminTab() {
         Email: u.email,
         Telefone: u.telefone || 'N/A',
         Status: u.isActive ? 'Ativo' : 'Inativo',
+        ValorAssinatura: u.valorAssinatura ? `R$ ${u.valorAssinatura.toFixed(2)}` : 'N/A',
         'Data Criacao': u.dataCriacao?.toDate ? u.dataCriacao.toDate().toLocaleDateString('pt-BR') : 'N/A',
         'Data Assinatura': u.dataAssinatura?.toDate ? u.dataAssinatura.toDate().toLocaleDateString('pt-BR') : 'N/A'
       }));
@@ -288,6 +290,7 @@ export default function AdminTab() {
               <tr className="bg-white/5 border-b border-white/10">
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Usuário</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Status</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Assinatura</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Data de Assinatura</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Criado em</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-right">Ações</th>
@@ -311,6 +314,11 @@ export default function AdminTab() {
                     }`}>
                       <div className={`w-1 h-1 rounded-full ${user.isActive ? 'bg-proc-green' : 'bg-red-400'}`} />
                       {user.isActive ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <span className="text-sm font-bold text-proc-green font-mono">
+                      {user.valorAssinatura ? `R$ ${user.valorAssinatura.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
