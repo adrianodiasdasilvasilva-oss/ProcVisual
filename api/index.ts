@@ -492,18 +492,45 @@ app.post("/api/webhook-whatsapp", async (req, res) => {
 // WhatsApp Helpers
 async function sendWhatsApp(to: string, message: string) {
   if (!WHAPI_TOKEN) return { success: false, error: "Token ausente" };
+  
+  // Robust number cleaning (A mesma lógica de sucesso do registro de despesas)
   let cleanNumber = to.replace(/\D/g, "");
-  if (cleanNumber.length === 10 || cleanNumber.length === 11) cleanNumber = "55" + cleanNumber;
+  
+  // Se começar com 55 e tiver 12 ou 13 dígitos, assume-se que já está no formato internacional
+  // Caso contrário, tenta-se normalizar para 55 + número
+  if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+    cleanNumber = "55" + cleanNumber;
+  } else if (cleanNumber.length > 11 && !cleanNumber.startsWith("55")) {
+    // Caso seja um número internacional que não começa com 55 (improvável no contexto do usuário)
+    // Deixa passar como está
+  }
+  
   const recipient = `${cleanNumber}@s.whatsapp.net`;
+  console.log(`>>> [WHATSAPP] Enviando para: ${recipient}`);
 
   try {
     const response = await fetch(`${WHAPI_BASE_URL}/messages/text`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${WHAPI_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ to: recipient, body: message }),
+      headers: { 
+        "Authorization": `Bearer ${WHAPI_TOKEN}`, 
+        "Content-Type": "application/json" 
+      },
+      body: JSON.stringify({ 
+        to: recipient, 
+        body: message,
+        typing_time: 2 // Adiciona um pequeno delay de digitação para parecer mais humano
+      }),
     });
-    return response.ok ? { success: true } : { success: false, error: await response.text() };
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`>>> [WHATSAPP] Erro Whapi (${response.status}):`, errText);
+      return { success: false, error: errText };
+    }
+    
+    return { success: true };
   } catch (error: any) {
+    console.error(`>>> [WHATSAPP] Erro de conexão:`, error.message);
     return { success: false, error: error.message };
   }
 }
@@ -631,7 +658,11 @@ async function runDailyNotifications(targetUserId?: string) {
 
     // Permitir admin mesmo se inativo (para testes) ou se for a exceção
     const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
+                    userId === "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
+                    userId === "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
+                    userId === "uCpsT3N8pAWWzAsP74qKqPTeYAt2";
+
     const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
 
     if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
