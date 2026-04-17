@@ -535,10 +535,11 @@ app.post("/api/notify-transaction", async (req, res) => {
   }
 });
 
-app.post("/api/admin/run-notifications", async (req, res) => {
-  const { userId } = req.body;
-  console.log(`>>> [ADMIN] Disparando notificações manualmente... ${userId ? `(Para usuário: ${userId})` : '(Geral)'}`);
+app.post("/api/admin/run-notifications", async (req, res, next) => {
   try {
+    const { userId } = req.body;
+    console.log(`>>> [ADMIN] Disparando notificações manualmente... ${userId ? `(Para usuário: ${userId})` : '(Geral)'}`);
+    
     const db = await initializeFirebaseClient();
     if (!db) {
       return res.status(500).json({ error: "DB não disponível (null)" });
@@ -546,7 +547,7 @@ app.post("/api/admin/run-notifications", async (req, res) => {
     const results = await runDailyNotifications(userId);
     res.json({ success: true, results });
   } catch (err: any) {
-    console.error(">>> [ADMIN] Erro fatal:", err);
+    console.error(">>> [ADMIN] Erro fatal em run-notifications:", err);
     res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
@@ -560,21 +561,23 @@ app.post("/api/admin/test-whatsapp", async (req, res) => {
     const result = await sendWhatsApp(to, msg);
     res.json(result);
   } catch (err: any) {
+    console.error(">>> [ADMIN] Erro em test-whatsapp:", err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-app.post("/api/admin/test-whatsapp", async (req, res) => {
-  const { to } = req.body;
-  if (!to) return res.status(400).json({ success: false, error: "Número ausente" });
-  
-  try {
-    const msg = "✅ *Teste de Integração ProcVisual*\n\nSeu sistema de notificações via WhatsApp está funcionando corretamente! 🚀";
-    const result = await sendWhatsApp(to, msg);
-    res.json(result);
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
+// Final catch-all for /api routes to prevent HTML response
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.originalUrl} not found` });
+});
+
+// Global API error handler
+app.use((err: any, req: any, res: any, next: any) => {
+  if (req.path.startsWith('/api')) {
+    console.error(">>> [API ERROR]", err);
+    return res.status(500).json({ error: err.message || "Internal Server Error" });
   }
+  next(err);
 });
 
 async function runDailyNotifications(targetUserId?: string) {
@@ -617,7 +620,7 @@ async function runDailyNotifications(targetUserId?: string) {
 
     for (const docSnap of snapshot.docs) {
       processed++;
-      const data = docSnap.data();
+      const data = docSnap.data() as any;
       const userId = data.userId;
 
       if (!userId || userId === 'whatsapp_pending') continue;

@@ -17,8 +17,10 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         (request.auth.uid == "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
-         request.auth.token.email.lower() == "adrianodiasdasilva@yahoo.com.br" || 
-         request.auth.token.email.lower() == "adrianodiasdasilva.silva@gmail.com");
+         request.auth.uid == "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
+         (request.auth.token.email != null && 
+          (request.auth.token.email == "adrianodiasdasilva@yahoo.com.br" || 
+           request.auth.token.email == "adrianodiasdasilva.silva@gmail.com")));
     }
 
     function isValidUser(data) {
@@ -64,7 +66,7 @@ service cloud.firestore {
       allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin())) ||
                     (resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid) ||
                     // Allow server background job to update notification flags
-                    (request.auth == null && (request.resource.data.diff(resource.data).affectedKeys().hasAny(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias'])));
+                    (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasAny(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias', 'notificadoNoDiaAniversario', 'notificadoVesperaAniversario']));
       
       allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
     }
