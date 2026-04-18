@@ -1,8 +1,9 @@
 import admin from "firebase-admin";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import fs from "fs";
 import path from "path";
 
-let db: admin.firestore.Firestore | null = null;
+let db: any = null;
 
 export async function initializeFirebaseAdmin() {
   if (db) return db;
@@ -21,7 +22,7 @@ export async function initializeFirebaseAdmin() {
       admin.initializeApp({ projectId });
     }
     
-    db = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
+    db = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
     console.log(`>>> [FIREBASE] Admin inicializado no banco: ${dbId || '(default)'}`);
     return db;
   } catch (e: any) {
@@ -30,4 +31,4 @@ export async function initializeFirebaseAdmin() {
   }
 }
 
-export { admin };
+export { admin, FieldValue };

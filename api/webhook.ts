@@ -1,8 +1,6 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
+import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js";
 import Stripe from 'stripe';
-import admin from 'firebase-admin';
-import fs from 'fs';
-import path from 'path';
+import { VercelRequest, VercelResponse } from '@vercel/node';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -19,24 +17,6 @@ async function getRawBody(readable: any): Promise<Buffer> {
     chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
   }
   return Buffer.concat(chunks);
-}
-
-let dbAdmin: admin.firestore.Firestore | null = null;
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) return null;
-  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const projectId = firebaseConfig.projectId;
-  const dbId = firebaseConfig.firestoreDatabaseId;
-
-  if (admin.apps.length === 0) {
-    admin.initializeApp({ projectId });
-  }
-  
-  // Use named database if provided
-  dbAdmin = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
-  return dbAdmin;
 }
 
 async function sendWhatsApp(to: string, message: string) {
@@ -92,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               isActive: true,
               plan: "premium",
               subscriptionId: subscriptionId,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: FieldValue.serverTimestamp()
             };
 
             if (customerPhone) {
@@ -124,13 +104,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`>>> [WEBHOOK] Pagamento confirmado para sub: ${subscriptionId}`);
             await userQuery.docs[0].ref.update({ 
               isActive: true, 
-              lastPayment: admin.firestore.FieldValue.serverTimestamp() 
+              lastPayment: FieldValue.serverTimestamp() 
             });
           }
         }
         break;
       }
-      // ... other cases
     }
 
     res.json({ received: true });

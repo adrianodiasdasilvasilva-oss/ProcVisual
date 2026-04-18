@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import fs from "fs";
-import { initializeFirebaseAdmin, admin } from "./firebase-admin.js";
+import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js";
 import Stripe from "stripe";
 import { createServer as createViteServer } from "vite";
 import whatsappHandler from "./webhook-whatsapp.js";
@@ -88,8 +88,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             subscriptionId: subscriptionId,
             valorAssinatura: session.amount_total ? session.amount_total / 100 : 0,
             nextPaymentDate: nextPaymentDate,
-            lastPayment: admin.firestore.FieldValue.serverTimestamp(),
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            lastPayment: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
           };
 
           if (customerPhone) {
@@ -133,7 +133,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
               isActive: true, 
               nextPaymentDate: nextPaymentDate,
               valorAssinatura: invoice.amount_paid ? invoice.amount_paid / 100 : 0,
-              lastPayment: admin.firestore.FieldValue.serverTimestamp() 
+              lastPayment: FieldValue.serverTimestamp() 
             });
           }
         }
@@ -150,7 +150,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
           if (!userQuery.empty) {
             await userQuery.docs[0].ref.update({ 
               isActive: false, 
-              updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+              updatedAt: FieldValue.serverTimestamp() 
             });
           }
         }

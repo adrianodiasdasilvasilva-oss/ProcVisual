@@ -1,4 +1,4 @@
-import { initializeFirebaseAdmin, admin } from "./firebase-admin.js";
+import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js";
 import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
@@ -488,7 +488,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
             userId,
             nome: categoria,
             origem: origem,
-            createdAt: admin.firestore.FieldValue.serverTimestamp()
+            createdAt: FieldValue.serverTimestamp()
           });
         }
       }
@@ -520,7 +520,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
         estabelecimento: descricao,
         origem,
         telefone: numero.split('@')[0].replace(/\D/g, ""),
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
         pago: false,
         parcela: i,
         totalParcelas,
