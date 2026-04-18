@@ -9,17 +9,27 @@ export async function initializeFirebaseAdmin() {
   if (db) return db;
   
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) {
-    throw new Error("firebase-applet-config.json not found");
-  }
+  const firebaseConfig = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, "utf-8")) : {};
+  const projectId = firebaseConfig.projectId;
+  const dbId = firebaseConfig.firestoreDatabaseId;
 
   try {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
-
     if (admin.apps.length === 0) {
-      admin.initializeApp({ projectId });
+      const serviceAccountVar = process.env.FIREBASE_SERVICE_ACCOUNT;
+      
+      if (serviceAccountVar) {
+        console.log(">>> [FIREBASE] Inicializando com Service Account da variável de ambiente.");
+        const serviceAccount = JSON.parse(
+          serviceAccountVar.startsWith("{") ? serviceAccountVar : Buffer.from(serviceAccountVar, 'base64').toString()
+        );
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+          projectId: projectId
+        });
+      } else {
+        console.log(">>> [FIREBASE] Inicializando com credenciais padrão do ambiente.");
+        admin.initializeApp({ projectId });
+      }
     }
     
     db = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
