@@ -1,18 +1,15 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, query, where, getDocs, addDoc, serverTimestamp, doc, setDoc, limit, updateDoc } from "firebase/firestore";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import admin from "firebase-admin";
 import fs from "fs";
 import path from "path";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Cache for Firebase Client
-let dbClient: any = null;
-let authClient: any = null;
+// Global Cache for Firebase Admin
+let dbAdmin: admin.firestore.Firestore | null = null;
 
-async function initializeFirebaseClient() {
-  if (dbClient) return dbClient;
+async function initializeFirebaseAdmin() {
+  if (dbAdmin) return dbAdmin;
   
-  console.log(">>> [WH-WA] Inicializando Firebase Client...");
+  console.log(">>> [WH-WA] Inicializando Firebase Admin...");
   const configPath = path.join(process.cwd(), "firebase-applet-config.json");
   if (!fs.existsSync(configPath)) {
     console.error(">>> [WH-WA] Erro: firebase-applet-config.json não encontrado!");
@@ -21,12 +18,18 @@ async function initializeFirebaseClient() {
 
   try {
     const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const app = initializeApp(firebaseConfig);
-    dbClient = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-    console.log(`>>> [WH-WA] Firebase Client inicializado no banco: ${firebaseConfig.firestoreDatabaseId}`);
-    return dbClient;
+    const projectId = firebaseConfig.projectId;
+    const dbId = firebaseConfig.firestoreDatabaseId;
+
+    if (admin.apps.length === 0) {
+      admin.initializeApp({ projectId });
+    }
+    
+    dbAdmin = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
+    console.log(`>>> [WH-WA] Firebase Admin inicializado no banco: ${dbId || '(default)'}`);
+    return dbAdmin;
   } catch (e: any) {
-    console.error(">>> [WH-WA] Erro ao inicializar Firebase Client:", e.message);
+    console.error(">>> [WH-WA] Erro ao inicializar Firebase Admin:", e.message);
     return null;
   }
 }
@@ -48,7 +51,7 @@ export default async function handler(req: any, res: any) {
     const type = message.type;
     console.log(`>>> [WH-WA] Mensagem de ${numero} tipo ${type}`);
 
-    const db = await initializeFirebaseClient();
+    const db = await initializeFirebaseAdmin();
 
     if (!db) {
       console.error(">>> [WH-WA] Abortando: DB não disponível.");
@@ -67,29 +70,25 @@ export default async function handler(req: any, res: any) {
     let userDoc: any = null;
     let userData: any = null;
 
-    // 1. Try exact match with clean incoming
-    const q1 = query(collection(db, "usuarios"), where("telefone", "==", cleanIncoming), limit(5));
-    const snap1 = await getDocs(q1);
+    // 1. Try exact match
+    const snap1 = await db.collection("usuarios").where("telefone", "==", cleanIncoming).limit(5).get();
     
     if (!snap1.empty) {
-      // Prefer active user if multiple found
       const activeUser = snap1.docs.find(d => d.data().isActive === true);
       userDoc = activeUser || snap1.docs[0];
     } else {
       // 2. Try short match
-      const q2 = query(collection(db, "usuarios"), where("telefone", "==", shortIncoming), limit(5));
-      const snap2 = await getDocs(q2);
+      const snap2 = await db.collection("usuarios").where("telefone", "==", shortIncoming).limit(5).get();
       if (!snap2.empty) {
         const activeUser = snap2.docs.find(d => d.data().isActive === true);
         userDoc = activeUser || snap2.docs[0];
       }
     }
 
-    // 3. Fallback: scan active users for normalized match
+    // 3. Fallback: scan
     if (!userDoc) {
        console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
-       const qAll = query(collection(db, "usuarios"), limit(500));
-       const snapAll = await getDocs(qAll);
+       const snapAll = await db.collection("usuarios").limit(500).get();
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
          const tel = (d.telefone || "").replace(/\D/g, "");
@@ -97,7 +96,6 @@ export default async function handler(req: any, res: any) {
          
          const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
          
-         // Match clean full, short, or 9-digit variations
          const match = tel === cleanIncoming || 
                 shortTel === shortIncoming || 
                 (shortTel.length === 11 && shortIncoming.length === 10 && shortTel.substring(0, 2) === shortIncoming.substring(0, 2) && shortTel.substring(3) === shortIncoming.substring(2)) ||
@@ -110,15 +108,18 @@ export default async function handler(req: any, res: any) {
 
     userData = userDoc ? userDoc.data() : null;
 
-    // Block if user not found or explicitly inactive
     if (!userData) {
       console.log(`>>> [WH-WA] Usuário NÃO cadastrado: ${cleanIncoming}`);
-      await sendWhatsAppMessage(numero, '👋 *Olá! Bem-vindo à ProcVisual.*\n\nIdentificamos que seu número ainda não está vinculado a uma conta.\n\nPara usar o registro via WhatsApp, você precisa:\n1. Criar uma conta em nosso site.\n2. Cadastrar seu número de WhatsApp no seu perfil.\n3. Ter uma assinatura ativa.\n\nAcesse: ' + (req.headers.origin || 'nosso site') + ' para começar!');
+      await sendWhatsAppMessage(numero, '👋 *Olá! Bem-vindo à ProcVisual.*\n\nIdentificamos que seu número ainda não está vinculado a uma conta.\n\nPara usar o registro via WhatsApp, você precisa:\n1. Criar uma conta em nosso site.\n2. Cadastrar seu número de WhatsApp no seu perfil.\n3. Ter uma assinatura ativa.\n\nAcesse: https://ais-dev-7iis7a6rm3flvsuq5lpqy5-45020863239.us-east1.run.app para começar!');
       return res.status(200).json({ ok: true });
     }
 
+    const userId = userDoc!.id;
     const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                    (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+                    (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
+                    userId === "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
+                    userId === "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
+                    userId === "uCpsT3N8pAWWzAsP74qKqPTeYAt2";
 
     const isException = cleanIncoming.includes("19994792245") || (userData.telefone || "").replace(/\D/g, "").includes("19994792245");
 
@@ -130,13 +131,13 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    const userId = userDoc!.id;
     console.log(`>>> [WH-WA] Usuário identificado: ${userId} (${userData.email})`);
 
     if (type === 'text') {
       const texto = message.text?.body || message.body || "";
       if (texto.toLowerCase().trim() === 'ajuda') {
-        await sendWhatsAppMessage(numero, '📖 *Guia de Uso - ProcVisual*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".');
+        const guide = '📖 *Guia de Uso - ProcVisual*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".';
+        await sendWhatsAppMessage(numero, guide);
       } else {
         await processText(db, userId, numero, texto, message.timestamp, userData);
       }
@@ -158,20 +159,31 @@ export default async function handler(req: any, res: any) {
 async function sendWhatsAppMessage(to: string, body: string) {
   const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
   if (!WHAPI_TOKEN) return;
+  
+  // Clean number similar to robust sendWhatsApp in index.ts
+  let cleanNumber = to.split('@')[0].replace(/\D/g, "");
+  if (cleanNumber.length === 10 || cleanNumber.length === 11) {
+    cleanNumber = "55" + cleanNumber;
+  }
+  const recipient = `${cleanNumber}@s.whatsapp.net`;
+  
   try {
     const response = await fetch('https://gate.whapi.cloud/messages/text', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${WHAPI_TOKEN}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, body })
+      method: "POST",
+      headers: { "Authorization": `Bearer ${WHAPI_TOKEN}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        to: recipient, 
+        body,
+        typing_delay: 2
+      }),
     });
     if (!response.ok) {
-      const errText = await response.text();
-      console.error(`>>> [WH-WA] Erro Whapi (${response.status}):`, errText);
+      console.error(`>>> [WH-WA] Erro Whapi (${response.status}):`, await response.text());
     } else {
-      console.log(`>>> [WH-WA] Mensagem enviada com sucesso para ${to}`);
+      console.log(`>>> [WH-WA] Mensagem enviada para ${recipient}`);
     }
-  } catch (e) {
-    console.error(">>> [WH-WA] Erro ao enviar mensagem:", e);
+  } catch (e: any) {
+    console.error(">>> [WH-WA] Erro ao enviar mensagem:", e.message);
   }
 }
 
@@ -267,10 +279,10 @@ async function processText(db: any, userId: string, numero: string, texto: strin
 
   // 1. Verificar se é apenas um número e se há despesa pendente
   const cleanText = texto.trim().replace(',', '.');
-  const isJustNumber = /^\d+([.]\d+)?$/.test(cleanText);
+  const isJustNumberMatch = cleanText.match(/^\d+([.]\d+)?$/);
   
-  if (isJustNumber && userData?.pendingWhatsAppExpense) {
-    const valor = parseFloat(cleanText);
+  if (isJustNumberMatch && userData?.pendingWhatsAppExpense) {
+    const valor = parseFloat(isJustNumberMatch[0]);
     if (valor > 0) {
       console.log(`>>> [WH-WA] Aplicando valor ${valor} à despesa pendente: ${userData.pendingWhatsAppExpense.descricao}`);
       const dataToSave = {
@@ -280,8 +292,8 @@ async function processText(db: any, userId: string, numero: string, texto: strin
       await saveAndConfirm(db, userId, numero, dataToSave, "whatsapp", timestamp);
       
       // Limpar pendência
-      await updateDoc(doc(db, "usuarios", userId), {
-        pendingWhatsAppExpense: null
+      await db.collection("usuarios").doc(userId).update({
+        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
       });
       return;
     }
@@ -321,8 +333,8 @@ async function processText(db: any, userId: string, numero: string, texto: strin
         await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
         // Limpar pendência se houver uma nova despesa completa
         if (userData?.pendingWhatsAppExpense) {
-          await updateDoc(doc(db, "usuarios", userId), {
-            pendingWhatsAppExpense: null
+          await db.collection("usuarios").doc(userId).update({
+            pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
           });
         }
       } else {
@@ -333,13 +345,13 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     if (!result || result.valor === null || result.valor === undefined || result.valor <= 0) {
       if (result && result.descricao) {
         // Salvar pendência no usuário
-        await updateDoc(doc(db, "usuarios", userId), {
+        await db.collection("usuarios").doc(userId).update({
           pendingWhatsAppExpense: {
             descricao: result.descricao,
             categoria: result.categoria,
-            data: result.data,
-            parcela: result.parcela,
-            totalParcelas: result.totalParcelas
+            data: result.data || null,
+            parcela: result.parcela || 1,
+            totalParcelas: result.totalParcelas || 1
           }
         });
 
@@ -354,7 +366,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   }
 }
 
-async function processImage(db: any, userId: string, numero: string, imageUrl: string, timestamp: number) {
+async function processImage(db: admin.firestore.Firestore, userId: string, numero: string, imageUrl: string, timestamp: number) {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
   if (!apiKey) return;
 
@@ -383,19 +395,17 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
     if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
-      // Limpar pendência se houver uma nova despesa completa
-      await updateDoc(doc(db, "usuarios", userId), {
-        pendingWhatsAppExpense: null
+      await db.collection("usuarios").doc(userId).update({
+        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
       });
     } else if (result && result.descricao) {
-      // Salvar pendência no usuário
-      await updateDoc(doc(db, "usuarios", userId), {
+      await db.collection("usuarios").doc(userId).update({
         pendingWhatsAppExpense: {
           descricao: result.descricao,
           categoria: result.categoria,
-          data: result.data,
-          parcela: result.parcela,
-          totalParcelas: result.totalParcelas
+          data: result.data || null,
+          parcela: result.parcela || 1,
+          totalParcelas: result.totalParcelas || 1
         }
       });
       await sendWhatsAppMessage(numero, `📝 Identifiquei a despesa *"${result.descricao}"* na imagem, mas o valor não ficou claro. Poderia me informar o valor?`);
@@ -407,7 +417,7 @@ async function processImage(db: any, userId: string, numero: string, imageUrl: s
   }
 }
 
-async function processAudio(db: any, userId: string, numero: string, audioUrl: string, timestamp: number) {
+async function processAudio(db: admin.firestore.Firestore, userId: string, numero: string, audioUrl: string, timestamp: number) {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
   if (!apiKey) return;
 
@@ -436,19 +446,17 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
     if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
-      // Limpar pendência se houver uma nova despesa completa
-      await updateDoc(doc(db, "usuarios", userId), {
-        pendingWhatsAppExpense: null
+      await db.collection("usuarios").doc(userId).update({
+        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
       });
     } else if (result && result.descricao) {
-      // Salvar pendência no usuário
-      await updateDoc(doc(db, "usuarios", userId), {
+      await db.collection("usuarios").doc(userId).update({
         pendingWhatsAppExpense: {
           descricao: result.descricao,
           categoria: result.categoria,
-          data: result.data,
-          parcela: result.parcela,
-          totalParcelas: result.totalParcelas
+          data: result.data || null,
+          parcela: result.parcela || 1,
+          totalParcelas: result.totalParcelas || 1
         }
       });
       await sendWhatsAppMessage(numero, `📝 Entendi que você falou sobre *"${result.descricao}"*, mas não identifiquei o valor. Qual seria o valor?`);
@@ -460,34 +468,31 @@ async function processAudio(db: any, userId: string, numero: string, audioUrl: s
   }
 }
 
-async function saveAndConfirm(db: any, userId: string, numero: string, data: any, origem: string, timestamp: number) {
+async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, numero: string, data: any, origem: string, timestamp: number) {
   try {
     console.log(`>>> [WH-WA] Iniciando salvamento para usuário ${userId}...`);
     let { descricao, valor, categoria, parcela, totalParcelas, data: customData } = data;
     
-    // Garantir tipos corretos
     valor = parseFloat(String(valor).replace(',', '.'));
     parcela = parseInt(String(parcela || 1));
     totalParcelas = parseInt(String(totalParcelas || 1));
 
-    if (isNaN(valor)) {
-      throw new Error("Valor inválido após conversão.");
-    }
+    if (isNaN(valor)) throw new Error("Valor inválido após conversão.");
 
-    // Check and save custom category
     if (categoria) {
       const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
       if (!predefined.includes(categoria)) {
-        const q = query(collection(db, "categorias"), where("userId", "==", userId), where("nome", "==", categoria));
-        const catSnap = await getDocs(q);
+        const catSnap = await db.collection("categorias")
+          .where("userId", "==", userId)
+          .where("nome", "==", categoria)
+          .get();
         
         if (catSnap.empty) {
-          console.log(`>>> [WH-WA] Salvando nova categoria personalizada: ${categoria}`);
-          await addDoc(collection(db, "categorias"), {
+          await db.collection("categorias").add({
             userId,
             nome: categoria,
             origem: origem,
-            createdAt: serverTimestamp()
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
           });
         }
       }
@@ -498,16 +503,18 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
       const [y, m, d] = customData.split('-');
       baseDate = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0));
     }
-    baseDate.setHours(baseDate.getHours() - 3); // Adjust for Brazil
+    baseDate.setHours(baseDate.getHours() - 3);
 
     const groupId = totalParcelas > 1 ? `wa_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : null;
     
+    const batch = db.batch();
     for (let i = parcela; i <= totalParcelas; i++) {
       const installmentDate = new Date(baseDate);
       installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
       const dateStr = installmentDate.toISOString().split('T')[0];
 
-      await addDoc(collection(db, "lancamentos"), {
+      const ref = db.collection("lancamentos").doc();
+      batch.set(ref, {
         userId,
         tipo: 'expense',
         valor,
@@ -516,8 +523,8 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
         descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
         estabelecimento: descricao,
         origem,
-        telefone: numero.split('@')[0].replace(/\D/g, ""), // Salva o telefone para notificações
-        createdAt: serverTimestamp(),
+        telefone: numero.split('@')[0].replace(/\D/g, ""),
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
         pago: false,
         parcela: i,
         totalParcelas,
@@ -527,6 +534,7 @@ async function saveAndConfirm(db: any, userId: string, numero: string, data: any
         notificadoAmanha: false
       });
     }
+    await batch.commit();
 
     const valorFormatado = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     const confirmacao = `✅ *Lançamento Confirmado!*\n\n*Item:* ${descricao}\n*Valor:* R$ ${valorFormatado}\n*Categoria:* ${categoria}\n*Data:* ${baseDate.toLocaleDateString('pt-BR')}${totalParcelas > 1 ? `\n*Parcelas:* ${parcela}/${totalParcelas}` : ''}\n\nSua despesa foi registrada com sucesso.`;
