@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import cron from "node-cron";
 import fs from "fs";
-import admin from "firebase-admin";
+import { initializeFirebaseAdmin, admin } from "./firebase-admin.js";
 import Stripe from "stripe";
 import { createServer as createViteServer } from "vite";
 import whatsappHandler from "./webhook-whatsapp.js";
@@ -14,44 +14,7 @@ import whatsappHandler from "./webhook-whatsapp.js";
 dotenv.config();
 
 // Global Cache for Firebase Admin
-let dbAdmin: admin.firestore.Firestore | null = null;
-
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
-  
-  console.log(">>> [BOOT] Inicializando Firebase Admin...");
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) {
-    console.error(">>> [BOOT] Erro: firebase-applet-config.json não encontrado!");
-    return null;
-  }
-
-  try {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
-
-    if (admin.apps.length === 0) {
-      admin.initializeApp({ projectId });
-    }
-    
-    dbAdmin = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
-    console.log(`>>> [BOOT] Firebase Admin inicializado no banco: ${dbId || '(default)'}`);
-    return dbAdmin;
-  } catch (e: any) {
-    console.error(">>> [BOOT] Erro ao inicializar Firebase Admin:", e.message);
-    return null;
-  }
-}
-
-// Global error handlers
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('>>> [CRÍTICO] Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('>>> [CRÍTICO] Uncaught Exception:', error);
-});
+let dbAdmin: any = null; // We keep it local to index.ts for the middleware check if needed, but it will be set by the new initializeFirebaseAdmin
 
 const app = express();
 const WHAPI_BASE_URL = "https://gate.whapi.cloud";
@@ -380,7 +343,7 @@ app.use((req, res, next) => {
 
 // 4. Lazy Firebase Init for API routes
 app.use("/api", async (req, res, next) => {
-  if (!dbAdmin && !["/health", "/debug-vars"].includes(req.path)) {
+  if (!admin.apps.length && !["/health", "/debug-vars"].includes(req.path)) {
     await initializeFirebaseAdmin();
   }
   next();

@@ -1,38 +1,5 @@
-import admin from "firebase-admin";
-import fs from "fs";
-import path from "path";
+import { initializeFirebaseAdmin, admin } from "./firebase-admin.js";
 import { GoogleGenAI, Type } from "@google/genai";
-
-// Global Cache for Firebase Admin
-let dbAdmin: admin.firestore.Firestore | null = null;
-
-async function initializeFirebaseAdmin() {
-  if (dbAdmin) return dbAdmin;
-  
-  console.log(">>> [WH-WA] Inicializando Firebase Admin...");
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  if (!fs.existsSync(configPath)) {
-    console.error(">>> [WH-WA] Erro: firebase-applet-config.json não encontrado!");
-    return null;
-  }
-
-  try {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const projectId = firebaseConfig.projectId;
-    const dbId = firebaseConfig.firestoreDatabaseId;
-
-    if (admin.apps.length === 0) {
-      admin.initializeApp({ projectId });
-    }
-    
-    dbAdmin = dbId && dbId !== '(default)' ? admin.firestore(dbId) : admin.firestore();
-    console.log(`>>> [WH-WA] Firebase Admin inicializado no banco: ${dbId || '(default)'}`);
-    return dbAdmin;
-  } catch (e: any) {
-    console.error(">>> [WH-WA] Erro ao inicializar Firebase Admin:", e.message);
-    return null;
-  }
-}
 
 export default async function handler(req: any, res: any) {
   console.log(`>>> [WH-WA] Request recebida: ${req.method} ${req.url}`);
@@ -60,49 +27,78 @@ export default async function handler(req: any, res: any) {
 
     console.log(">>> [WH-WA] Buscando usuário...");
     // Normalize incoming number
-    const rawNumero = numero.split('@')[0];
+    const rawNumero = String(numero || "").split('@')[0];
     const cleanIncoming = rawNumero.replace(/\D/g, "");
-    const shortIncoming = cleanIncoming.startsWith('55') ? cleanIncoming.substring(2) : cleanIncoming;
     
-    console.log(`>>> [WH-WA] Processando: ${cleanIncoming} (Short: ${shortIncoming})`);
+    // Brazilian normalization: handling 55 and the 9th digit
+    let shortIncoming = cleanIncoming;
+    if (cleanIncoming.startsWith('55')) {
+      shortIncoming = cleanIncoming.substring(2);
+    }
+    
+    // Normalize further: if starts with 1-9 (DDD), it could be a Brazilian number without 55
+    console.log(`>>> [WH-WA] Raw: ${numero} -> Clean: ${cleanIncoming} (Short: ${shortIncoming})`);
 
     // Search for user
     let userDoc: any = null;
     let userData: any = null;
 
-    // 1. Try exact match
-    const snap1 = await db.collection("usuarios").where("telefone", "==", cleanIncoming).limit(5).get();
+    // 1. Try exact matches in sequence
+    const possibleMatches = [cleanIncoming, shortIncoming];
     
-    if (!snap1.empty) {
-      const activeUser = snap1.docs.find(d => d.data().isActive === true);
-      userDoc = activeUser || snap1.docs[0];
-    } else {
-      // 2. Try short match
-      const snap2 = await db.collection("usuarios").where("telefone", "==", shortIncoming).limit(5).get();
-      if (!snap2.empty) {
-        const activeUser = snap2.docs.find(d => d.data().isActive === true);
-        userDoc = activeUser || snap2.docs[0];
+    // If it has 11 digits and starts with a DDD >= 11, try the 10-digit version (no 9th digit)
+    if (shortIncoming.length === 11 && parseInt(shortIncoming.substring(0, 2)) >= 11) {
+      const noNinth = shortIncoming.substring(0, 2) + shortIncoming.substring(3);
+      possibleMatches.push(noNinth);
+      console.log(`>>> [WH-WA] Digit 9 treatment (11->10): Adding ${noNinth} to search`);
+    } 
+    // If it has 10 digits, try adding the 9th digit (only if DDD >= 11)
+    else if (shortIncoming.length === 10 && parseInt(shortIncoming.substring(0, 2)) >= 11) {
+      const withNinth = shortIncoming.substring(0, 2) + "9" + shortIncoming.substring(2);
+      possibleMatches.push(withNinth);
+      console.log(`>>> [WH-WA] Digit 9 treatment (10->11): Adding ${withNinth} to search`);
+    }
+
+    for (const telToTry of possibleMatches) {
+      if (!userDoc) {
+        const snap = await db.collection("usuarios").where("telefone", "==", telToTry).get();
+        if (!snap.empty) {
+          console.log(`>>> [WH-WA] Usuário encontrado via Query (${telToTry})`);
+          const activeUser = snap.docs.find(d => d.data().isActive === true);
+          userDoc = activeUser || snap.docs[0];
+        }
       }
     }
 
-    // 3. Fallback: scan
+    // 2. Fallback: scan with deep normalization
     if (!userDoc) {
-       console.log(">>> [WH-WA] Usuário não encontrado em query direta. Iniciando scan...");
-       const snapAll = await db.collection("usuarios").limit(500).get();
+       console.log(">>> [WH-WA] Usuário não encontrado em queries diretas. Iniciando scan profundo...");
+       const snapAll = await db.collection("usuarios").limit(1000).get();
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
-         const tel = (d.telefone || "").replace(/\D/g, "");
+         let tel = String(d.telefone || "").replace(/\D/g, "");
          if (!tel) return false;
          
-         const shortTel = tel.startsWith('55') ? tel.substring(2) : tel;
+         const sTel = tel.startsWith('55') ? tel.substring(2) : tel;
          
-         const match = tel === cleanIncoming || 
-                shortTel === shortIncoming || 
-                (shortTel.length === 11 && shortIncoming.length === 10 && shortTel.substring(0, 2) === shortIncoming.substring(0, 2) && shortTel.substring(3) === shortIncoming.substring(2)) ||
-                (shortTel.length === 10 && shortIncoming.length === 11 && shortIncoming.substring(0, 2) === shortTel.substring(0, 2) && shortIncoming.substring(3) === shortTel.substring(2));
+         // Direct match
+         if (tel === cleanIncoming || sTel === shortIncoming) return true;
          
-         if (match) console.log(`>>> [WH-WA] Usuário encontrado via scan: ${d.email}`);
-         return match;
+         // 9th digit flexibility match
+         const isUserNinth = sTel.length === 11 && parseInt(sTel.substring(0, 2)) >= 11;
+         const isIncomingNinth = shortIncoming.length === 11 && parseInt(shortIncoming.substring(0, 2)) >= 11;
+         
+         if (isUserNinth && !isIncomingNinth && shortIncoming.length === 10) {
+           const userNoNinth = sTel.substring(0, 2) + sTel.substring(3);
+           return userNoNinth === shortIncoming;
+         }
+         
+         if (!isUserNinth && isIncomingNinth && sTel.length === 10) {
+           const incomingNoNinth = shortIncoming.substring(0, 2) + shortIncoming.substring(3);
+           return incomingNoNinth === sTel;
+         }
+         
+         return false;
        });
     }
 
