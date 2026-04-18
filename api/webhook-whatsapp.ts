@@ -2,12 +2,19 @@ import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js"
 import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
-  console.log(`>>> [WH-WA] Request recebida: ${req.method} ${req.url}`);
+  const bodyString = JSON.stringify(req.body);
+  console.log(`>>> [WH-WA] Request recebida: ${req.method} ${req.url} | BodyLength: ${bodyString.length}`);
   
   if (req.method !== 'POST') return res.status(405).end();
 
   try {
     const data = req.body;
+    
+    // Log do evento se não houver mensagens diretas
+    if (!data?.messages) {
+      console.log(">>> [WH-WA] Payload sem mensagens detectado. Eventos:", Object.keys(data || {}));
+    }
+
     const message = data?.messages?.[0];
 
     if (!message || message.from_me) {

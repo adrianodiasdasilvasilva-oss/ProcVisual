@@ -436,11 +436,19 @@ app.post("/api/test-whatsapp", async (req, res) => {
 app.post("/api/webhook-whatsapp", async (req, res) => {
   try {
     console.log(">>> [WHATSAPP] Webhook atingido!");
+    console.log(">>> [WHATSAPP] Payload length:", JSON.stringify(req.body).length);
     await whatsappHandler(req, res);
   } catch (err: any) {
     console.error(">>> [WHATSAPP] Erro no handler:", err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+app.post("/api/webhook-debug", (req, res) => {
+  console.log(">>> [DEBUG-WEBHOOK] Método:", req.method);
+  console.log(">>> [DEBUG-WEBHOOK] Headers:", JSON.stringify(req.headers));
+  console.log(">>> [DEBUG-WEBHOOK] Body:", JSON.stringify(req.body, null, 2));
+  res.json({ status: "received", body_type: typeof req.body });
 });
 
 // WhatsApp Helpers
