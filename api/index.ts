@@ -406,12 +406,6 @@ app.post("/api/checkout", async (req, res) => {
       cancel_url: `${req.headers.origin}/?payment=cancel`,
     };
 
-    if (phone) {
-      sessionOptions.customer_details = {
-        phone: phone.startsWith('+') ? phone : `+55${phone.replace(/\D/g, '')}`
-      };
-    }
-
     const session = await getStripe().checkout.sessions.create(sessionOptions);
     res.json({ url: session.url });
   } catch (error: any) {

@@ -45,14 +45,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       cancel_url: `${req.headers.origin}/?payment=cancel`,
     };
 
-    if (phone) {
-      // Normalizar telefone para E.164 se possível, mas o Stripe aceita vários formatos se o país for identificável
-      // Se já vier com +55 ou (xx) xxxxx-xxxx, tentamos passar direto
-      (sessionOptions as any).customer_details = {
-        phone: phone.startsWith('+') ? phone : `+55${phone.replace(/\D/g, '')}`
-      };
-    }
-
     const session = await stripe.checkout.sessions.create(sessionOptions);
 
     return res.status(200).json({ url: session.url });
