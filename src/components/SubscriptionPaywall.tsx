@@ -5,10 +5,11 @@ import Logo from './Logo';
 
 interface SubscriptionPaywallProps {
   user: any;
+  profile: any;
   onSignOut: () => void;
 }
 
-export default function SubscriptionPaywall({ user, onSignOut }: SubscriptionPaywallProps) {
+export default function SubscriptionPaywall({ user, profile, onSignOut }: SubscriptionPaywallProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const assinarPlano = async () => {
@@ -22,6 +23,7 @@ export default function SubscriptionPaywall({ user, onSignOut }: SubscriptionPay
         body: JSON.stringify({
           userId: user.uid,
           email: user.email,
+          phone: profile?.telefone || '',
           priceId: (import.meta as any).env.VITE_STRIPE_PRICE_ID || "SEU_PRICE_ID"
         }),
       });

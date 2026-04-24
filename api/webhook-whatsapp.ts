@@ -1,4 +1,5 @@
 import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js";
+import { isUserAdmin, isPhoneException } from "./index.js";
 import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
@@ -118,13 +119,8 @@ export default async function handler(req: any, res: any) {
     }
 
     const userId = userDoc!.id;
-    const isAdmin = (userData.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                    (userData.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
-                    userId === "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
-                    userId === "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
-                    userId === "uCpsT3N8pAWWzAsP74qKqPTeYAt2";
-
-    const isException = cleanIncoming.includes("19994792245") || (userData.telefone || "").replace(/\D/g, "").includes("19994792245");
+    const isAdmin = isUserAdmin(userId, userData.email);
+    const isException = isPhoneException(cleanIncoming) || isPhoneException(userData.telefone);
 
     console.log(`>>> [WH-WA] Verificando Acesso: ${userData.email} (Admin: ${isAdmin}, Exception: ${isException})`);
 
@@ -296,7 +292,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
       
       // Limpar pendência
       await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
+        pendingWhatsAppExpense: FieldValue.delete()
       });
       return;
     }
@@ -337,7 +333,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
         // Limpar pendência se houver uma nova despesa completa
         if (userData?.pendingWhatsAppExpense) {
           await db.collection("usuarios").doc(userId).update({
-            pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
+            pendingWhatsAppExpense: FieldValue.delete()
           });
         }
       } else {
@@ -399,7 +395,7 @@ async function processImage(db: admin.firestore.Firestore, userId: string, numer
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
       await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
+        pendingWhatsAppExpense: FieldValue.delete()
       });
     } else if (result && result.descricao) {
       await db.collection("usuarios").doc(userId).update({
@@ -450,7 +446,7 @@ async function processAudio(db: admin.firestore.Firestore, userId: string, numer
       result.valor = parseFloat(String(result.valor).replace(',', '.'));
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
       await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: admin.firestore.FieldValue.delete()
+        pendingWhatsAppExpense: FieldValue.delete()
       });
     } else if (result && result.descricao) {
       await db.collection("usuarios").doc(userId).update({

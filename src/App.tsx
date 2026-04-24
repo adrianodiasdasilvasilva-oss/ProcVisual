@@ -481,7 +481,7 @@ export default function App() {
                        (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
   if (profile.isActive !== true && !isAdmin) {
-    return <SubscriptionPaywall user={user} onSignOut={() => signOut(auth)} />;
+    return <SubscriptionPaywall user={user} profile={profile} onSignOut={() => signOut(auth)} />;
   }
 
   const totalIncome = filteredTransactions

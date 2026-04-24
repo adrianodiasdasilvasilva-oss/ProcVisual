@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const { userId, email, priceId } = req.body;
+  const { userId, email, phone, priceId } = req.body;
 
   if (!userId || !email) {
     return res.status(400).json({ error: "UserId e Email são obrigatórios." });
@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       apiVersion: '2023-10-16' as any,
     });
 
-    const session = await stripe.checkout.sessions.create({
+    const sessionOptions: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ["card"],
       line_items: [
         {
@@ -43,7 +43,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: { userId },
       success_url: `${req.headers.origin}/?payment=success`,
       cancel_url: `${req.headers.origin}/?payment=cancel`,
-    });
+    };
+
+    if (phone) {
+      // Normalizar telefone para E.164 se possível, mas o Stripe aceita vários formatos se o país for identificável
+      // Se já vier com +55 ou (xx) xxxxx-xxxx, tentamos passar direto
+      (sessionOptions as any).customer_details = {
+        phone: phone.startsWith('+') ? phone : `+55${phone.replace(/\D/g, '')}`
+      };
+    }
+
+    const session = await stripe.checkout.sessions.create(sessionOptions);
 
     return res.status(200).json({ url: session.url });
   } catch (error: any) {

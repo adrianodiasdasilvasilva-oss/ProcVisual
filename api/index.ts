@@ -13,6 +13,29 @@ import whatsappHandler from "./webhook-whatsapp.js";
 
 dotenv.config();
 
+// Constants for shared logic
+export const ADMIN_EMAILS = [
+  "adrianodiasdasilva@yahoo.com.br",
+  "adrianodiasdasilva.silva@gmail.com"
+];
+
+export const ADMIN_USER_IDS = [
+  "24cC8kguY3X3IwSwfh6tTAKmJOK2",
+  "o60eUYDOD6WD4o1j8YBZoOXqfiR2",
+  "uCpsT3N8pAWWzAsP74qKqPTeYAt2"
+];
+
+export function isUserAdmin(uid: string, email?: string) {
+  if (ADMIN_USER_IDS.includes(uid)) return true;
+  if (email && ADMIN_EMAILS.includes(email.toLowerCase())) return true;
+  return false;
+}
+
+export function isPhoneException(phone?: string) {
+  if (!phone) return false;
+  return phone.replace(/\D/g, "").includes("19994792245");
+}
+
 // Global Cache for Firebase Admin
 let dbAdmin: any = null; // We keep it local to index.ts for the middleware check if needed, but it will be set by the new initializeFirebaseAdmin
 
@@ -171,7 +194,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
           await userQuery.docs[0].ref.update({ 
             isActive: isActive,
             nextPaymentDate: nextPaymentDate,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+            updatedAt: FieldValue.serverTimestamp() 
           });
           console.log(`>>> [STRIPE] Assinatura ${subscription.id} atualizada. Status: ${status}, Ativo: ${isActive}`);
         }
@@ -201,17 +224,15 @@ app.get("/api/subscription-details", async (req, res) => {
     const userDoc = await db.collection("usuarios").doc(userId).get();
     const userData = userDoc.data();
 
-    const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                    (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
-
-    const isException = (userData?.telefone || "").replace(/\D/g, "").includes("19994792245");
+    const isAdmin = isUserAdmin(userId, userData?.email);
+    const isException = isPhoneException(userData?.telefone);
 
     if (isAdmin || isException) {
       console.log(`>>> [API] Usuário ${isAdmin ? 'ADMIN' : 'EXCEÇÃO'} detectado: ${userData?.email || userData?.telefone}. Garantindo status ativo.`);
       await userDoc.ref.update({
         isActive: true,
         plan: 'premium',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
       return res.json({ status: 'active', plan: 'premium', isAdmin });
     }
@@ -229,7 +250,7 @@ app.get("/api/subscription-details", async (req, res) => {
             nextPaymentDate,
             isActive,
             plan: 'premium',
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           });
 
           return res.json({ nextPaymentDate });
@@ -249,7 +270,7 @@ app.get("/api/subscription-details", async (req, res) => {
               nextPaymentDate,
               isActive,
               plan: 'premium',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: FieldValue.serverTimestamp()
             });
             return res.json({ nextPaymentDate });
           }
@@ -301,7 +322,7 @@ app.get("/api/subscription-details", async (req, res) => {
               nextPaymentDate,
               isActive,
               plan: 'premium',
-              updatedAt: admin.firestore.FieldValue.serverTimestamp()
+              updatedAt: FieldValue.serverTimestamp()
             });
             return res.json({ nextPaymentDate, source: 'email_search', email, status: subscription.status });
           }
@@ -317,7 +338,7 @@ app.get("/api/subscription-details", async (req, res) => {
           await userDoc.ref.update({ 
             nextPaymentDate: nextDate.toISOString(),
             isActive: true,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            updatedAt: FieldValue.serverTimestamp()
           });
           return res.json({ nextPaymentDate: nextDate.toISOString(), source: 'internal_calculation' });
         }
@@ -325,7 +346,7 @@ app.get("/api/subscription-details", async (req, res) => {
 
       await userDoc.ref.update({ 
         isActive: false,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        updatedAt: FieldValue.serverTimestamp()
       });
 
       return res.json({ nextPaymentDate: null, isActive: false, message: "Nenhuma assinatura ativa encontrada." });
@@ -370,11 +391,11 @@ app.get("/api/debug-vars", (req, res) => {
 });
 
 app.post("/api/checkout", async (req, res) => {
-  const { userId, email, priceId } = req.body;
+  const { userId, email, phone, priceId } = req.body;
   if (!userId || !email) return res.status(400).json({ error: "UserId e Email são obrigatórios." });
 
   try {
-    const session = await getStripe().checkout.sessions.create({
+    const sessionOptions: any = {
       payment_method_types: ["card"],
       line_items: [{ price: priceId || process.env.VITE_STRIPE_PRICE_ID, quantity: 1 }],
       mode: "subscription",
@@ -383,7 +404,15 @@ app.post("/api/checkout", async (req, res) => {
       metadata: { userId },
       success_url: `${req.headers.origin}/?payment=success`,
       cancel_url: `${req.headers.origin}/?payment=cancel`,
-    });
+    };
+
+    if (phone) {
+      sessionOptions.customer_details = {
+        phone: phone.startsWith('+') ? phone : `+55${phone.replace(/\D/g, '')}`
+      };
+    }
+
+    const session = await getStripe().checkout.sessions.create(sessionOptions);
     res.json({ url: session.url });
   } catch (error: any) {
     console.error(">>> [STRIPE] Erro Checkout:", error.message);
@@ -617,15 +646,8 @@ async function runDailyNotifications(targetUserId?: string) {
       step = `get_user_${userId}`;
       const userDoc = await db.collection("usuarios").doc(userId).get();
       const userData = userDoc.data();
-
-      // Permitir admin mesmo se inativo (para testes) ou se for a exceção
-      const isAdmin = (userData?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                      (userData?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
-                      userId === "24cC8kguY3X3IwSwfh6tTAKmJOK2" ||
-                      userId === "o60eUYDOD6WD4o1j8YBZoOXqfiR2" ||
-                      userId === "uCpsT3N8pAWWzAsP74qKqPTeYAt2";
-
-      const isException = (userData?.telefone || data.telefone || "").replace(/\D/g, "").includes("19994792245");
+      const isAdmin = isUserAdmin(userId, userData?.email);
+      const isException = isPhoneException(userData?.telefone || data.telefone);
 
       if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
         console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Usuário ${userId} inativo e não é admin/exceção.`);
