@@ -400,7 +400,6 @@ app.post("/api/checkout", async (req, res) => {
       line_items: [{ price: priceId || process.env.VITE_STRIPE_PRICE_ID, quantity: 1 }],
       mode: "subscription",
       customer_email: email,
-      phone_number_collection: { enabled: true },
       metadata: { userId },
       success_url: `${req.headers.origin}/?payment=success`,
       cancel_url: `${req.headers.origin}/?payment=cancel`,
