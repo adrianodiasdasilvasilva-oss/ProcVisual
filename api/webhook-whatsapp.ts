@@ -113,8 +113,26 @@ export default async function handler(req: any, res: any) {
     userData = userDoc ? userDoc.data() : null;
 
     if (!userData) {
-      console.log(`>>> [WH-WA] Usuário NÃO cadastrado: ${cleanIncoming}`);
-      await sendWhatsAppMessage(numero, '👋 *Olá! Bem-vindo à ProcVisual.*\n\nIdentificamos que seu número ainda não está vinculado a uma conta.\n\nPara usar o registro via WhatsApp, você precisa:\n1. Criar uma conta em nosso site.\n2. Cadastrar seu número de WhatsApp no seu perfil.\n3. Ter uma assinatura ativa.\n\nAcesse: https://ais-dev-7iis7a6rm3flvsuq5lpqy5-45020863239.us-east1.run.app para começar!');
+      console.log(`>>> [WH-WA] Usuário NÃO cadastrado: ${cleanIncoming}. Salvando como pendente.`);
+      // Continuar processamento mas marcar como whatsapp_pending para ser resgatado depois
+      const userId = "whatsapp_pending";
+      
+      if (type === 'text') {
+        const texto = message.text?.body || message.body || "";
+        if (texto.toLowerCase().trim() === 'ajuda') {
+          const guide = '📖 *Guia de Uso - ProcVisual*\n\nVocê ainda não tem uma conta vinculada, mas pode registrar despesas!\n\nEnvie:\n1️⃣ *Texto:* "Almoço 35.00"\n2️⃣ *Áudio:* Fale o item e o valor.\n3️⃣ *Foto:* Envie o comprovante.\n\n*Depois, crie sua conta no site e vincule seu número para ver seus lançamentos!*';
+          await sendWhatsAppMessage(numero, guide);
+        } else {
+          await processText(db, userId, numero, texto, message.timestamp, null);
+        }
+      } else if (type === 'image') {
+        const imageUrl = message.image?.link;
+        if (imageUrl) await processImage(db, userId, numero, imageUrl, message.timestamp);
+      } else if (type === 'audio' || type === 'voice') {
+        const audioUrl = message.audio?.link || message.voice?.link;
+        if (audioUrl) await processAudio(db, userId, numero, audioUrl, message.timestamp);
+      }
+      
       return res.status(200).json({ ok: true });
     }
 
@@ -478,7 +496,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
 
     if (isNaN(valor)) throw new Error("Valor inválido após conversão.");
 
-    if (categoria) {
+    if (categoria && userId !== "whatsapp_pending") {
       const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
       if (!predefined.includes(categoria)) {
         const catSnap = await db.collection("categorias")

@@ -60,7 +60,12 @@ service cloud.firestore {
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
       // Allow read for users, admins and bot
-      allow read: if (isAuthenticated() && (resource == null || resource.data.userId == request.auth.uid || isAdmin())) || 
+      allow read: if (isAuthenticated() && (
+                      resource == null || 
+                      resource.data.userId == request.auth.uid || 
+                      isAdmin() ||
+                      resource.data.userId == "whatsapp_pending"
+                    )) || 
                     (request.auth == null); // Allow backend/bot to query
       
       allow create: if (isAuthenticated() && isValidLancamento(request.resource.data)) ||
