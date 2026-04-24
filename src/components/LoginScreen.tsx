@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogIn, Mail, Lock, ArrowRight, UserPlus, Loader2, User, Phone, ArrowLeft, CheckCircle } from 'lucide-react';
+import { LogIn, Mail, Lock, ArrowRight, UserPlus, Loader2, User, Phone, ArrowLeft, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import Logo from './Logo';
 import { auth } from '../firebase';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -21,6 +21,7 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack, initi
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resetSent, setResetSent] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleForgotPassword = async () => {
     if (!email) {
@@ -197,13 +198,21 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack, initi
                 <Lock size={18} />
               </div>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white placeholder:text-white/20 focus:outline-none focus:border-proc-cyan/50 focus:ring-4 focus:ring-proc-cyan/10 transition-all"
+                className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-white placeholder:text-white/20 focus:outline-none focus:border-proc-cyan/50 focus:ring-4 focus:ring-proc-cyan/10 transition-all"
                 required={!resetSent}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-4 flex items-center text-proc-text-sec hover:text-proc-cyan transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
             {!isSignUp && (
               <div className="flex justify-end px-1">
