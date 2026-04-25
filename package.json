@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx api/index.ts",
+    "start": "NODE_ENV=production tsx api/index.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -17,6 +18,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vercel/node": "^5.7.4",
     "@vitejs/plugin-react": "^5.0.4",
+    "rollup": "^4.60.1",
     "@rollup/rollup-linux-x64-gnu": "^4.60.1",
     "@rollup/rollup-linux-x64-musl": "^4.60.1",
     "clsx": "^2.1.1",
@@ -37,6 +39,7 @@
     "tailwind-merge": "^3.5.0",
     "tailwind-scrollbar": "^4.0.2",
     "tesseract.js": "^7.0.0",
+    "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "xlsx": "^0.18.5"
   },
@@ -45,7 +48,6 @@
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
-    "tsx": "^4.21.0",
-    "typescript": "~5.8.2"
+    "tsx": "^4.21.0"
   }
 }

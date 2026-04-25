@@ -8,7 +8,7 @@ import cron from "node-cron";
 import fs from "fs";
 import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js";
 import Stripe from "stripe";
-import { createServer as createViteServer } from "vite";
+// import { createServer as createViteServer } from "vite"; // Dynamic import used below
 import whatsappHandler from "./webhook-whatsapp.js";
 
 dotenv.config();
@@ -744,13 +744,32 @@ if (!process.env.VERCEL) {
     }
 
     // Vite middleware for development
-    if (process.env.NODE_ENV !== "production") {
+    const nodeEnv = process.env.NODE_ENV || 'development';
+    console.log(`>>> [BOOT] Ambiente detectado: ${nodeEnv}`);
+
+    if (nodeEnv !== "production") {
       console.log(">>> [SISTEMA] Configurando middleware do Vite...");
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-      });
-      app.use(vite.middlewares);
+      try {
+        const { createServer: createViteServer } = await import("vite");
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+        });
+        app.use(vite.middlewares);
+        console.log(">>> [SISTEMA] Middleware do Vite configurado com sucesso.");
+      } catch (viteError: any) {
+        console.error(">>> [SISTEMA] FALHA AO INICIALIZAR VITE:", viteError.message);
+        // Em alguns ambientes, o Vite/Rollup falha devido a binários. 
+        // Se já houver um 'dist', podemos tentar servir estático como fallback.
+        if (fs.existsSync(path.join(process.cwd(), 'dist'))) {
+          console.warn(">>> [SISTEMA] Fallback: Servindo arquivos de 'dist' devido a erro no Vite.");
+          const distPath = path.join(process.cwd(), 'dist');
+          app.use(express.static(distPath));
+          app.get('*', (req, res) => {
+            res.sendFile(path.join(distPath, 'index.html'));
+          });
+        }
+      }
     } else {
       const distPath = path.join(process.cwd(), 'dist');
       app.use(express.static(distPath));
