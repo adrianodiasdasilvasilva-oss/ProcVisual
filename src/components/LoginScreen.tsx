@@ -60,7 +60,8 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack, initi
     setError(null);
     try {
       if (isSignUp) {
-        await onEmailSignUp(email, password, name, phone);
+        const cleanPhone = phone.replace(/\D/g, "");
+        await onEmailSignUp(email, password, name, cleanPhone);
       } else {
         await onEmailLogin(email, password);
       }

@@ -111,12 +111,13 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
     setIsSaving(true);
     setMessage(null);
     const path = 'usuarios';
+    const cleanPhone = phone.replace(/\D/g, "");
     try {
       const userRef = doc(db, path, auth.currentUser.uid);
       await setDoc(userRef, {
         nome: name,
         email: email,
-        telefone: phone,
+        telefone: cleanPhone,
         fotoURL: photo,
         updatedAt: serverTimestamp()
       }, { merge: true });

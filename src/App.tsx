@@ -58,8 +58,11 @@ export default function App() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [filterYears, setFilterYears] = useState<string[]>(['2026']);
-  const [filterMonths, setFilterMonths] = useState<string[]>(['Abril']);
+  const [filterYears, setFilterYears] = useState<string[]>(() => [new Date().getFullYear().toString()]);
+  const [filterMonths, setFilterMonths] = useState<string[]>(() => {
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return [months[new Date().getMonth()]];
+  });
   const [filterCategory, setFilterCategory] = useState('Todas Categorias');
   const [searchTerm, setSearchTerm] = useState('');
   const [modalInitialType, setModalInitialType] = useState<'income' | 'expense' | 'birthday'>('expense');
@@ -368,20 +371,35 @@ export default function App() {
 
       // Create a list of possible phone formats to check
       // WhatsApp usually sends with 55. Profile might be with or without.
-      const possiblePhones = [rawProfilePhone];
-      if (rawProfilePhone.startsWith('55')) {
-        possiblePhones.push(rawProfilePhone.substring(2));
-      } else {
-        possiblePhones.push('55' + rawProfilePhone);
+      // We also handle the 9th digit variation (Brazilian DDD >= 11)
+      const possiblePhones = new Set<string>();
+      
+      const clean = (p: string) => p.startsWith('55') ? p.substring(2) : p;
+      const short = clean(rawProfilePhone);
+      
+      possiblePhones.add(rawProfilePhone);
+      possiblePhones.add('55' + short);
+      possiblePhones.add(short);
+      
+      // 9th digit flexibility (Brazilian DDDs)
+      if (short.length === 11 && parseInt(short.substring(0, 2)) >= 11) {
+        const noNinth = short.substring(0, 2) + short.substring(3);
+        possiblePhones.add(noNinth);
+        possiblePhones.add('55' + noNinth);
+      } else if (short.length === 10 && parseInt(short.substring(0, 2)) >= 11) {
+        const withNinth = short.substring(0, 2) + "9" + short.substring(2);
+        possiblePhones.add(withNinth);
+        possiblePhones.add('55' + withNinth);
       }
 
-      console.log('>>> [CLAIM] Buscando lançamentos pendentes para variações de:', possiblePhones);
+      const phones = Array.from(possiblePhones);
+      console.log('>>> [CLAIM] Buscando lançamentos pendentes para variações de:', phones);
       
       try {
         const q = query(
           collection(db, 'lancamentos'),
           where('userId', '==', 'whatsapp_pending'),
-          where('telefone', 'in', possiblePhones)
+          where('telefone', 'in', phones)
         );
         
         const snapshot = await getDocs(q);
