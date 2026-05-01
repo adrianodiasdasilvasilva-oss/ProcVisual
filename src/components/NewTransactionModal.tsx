@@ -62,7 +62,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     type: 'expense',
     value: '',
     category: 'Outros',
-    date: new Date().toISOString().split('T')[0],
+    date: (() => {
+      const d = new Date();
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    })(),
     description: '',
     establishment: '',
     installments: 1
@@ -130,7 +136,13 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       type: initialType,
       value: initialType === 'birthday' ? '0' : '',
       category: initialType === 'birthday' ? 'Aniversário' : 'Outros',
-      date: new Date().toISOString().split('T')[0],
+      date: (() => {
+        const d = new Date();
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      })(),
       description: '',
       establishment: '',
       installments: 1
@@ -531,9 +543,14 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
               installmentDate.setMonth(baseDate.getMonth() + i);
             }
             
+            const year = installmentDate.getFullYear();
+            const month = String(installmentDate.getMonth() + 1).padStart(2, '0');
+            const day = String(installmentDate.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+
             const installmentPayload = {
               ...payload,
-              data: installmentDate.toISOString().split('T')[0],
+              data: dateStr,
               descricao: `${formData.description || formData.establishment || 'Sem descrição'} (${i + 1}/${numInstallments})`,
               parcela: i + 1,
               totalParcelas: numInstallments,

@@ -150,7 +150,7 @@ export default function App() {
   }, [transactions]);
 
   const availableCategories = useMemo(() => {
-    const predefined = ['Todas Categorias', 'Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação'];
+    const predefined = ['Todas Categorias', 'Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
     // Merge with custom categories and remove duplicates
     const all = Array.from(new Set([...predefined, ...customCategories]));
     return all;
@@ -618,7 +618,10 @@ export default function App() {
                                 </div>
                                   <div>
                                     <p className="text-proc-text-main font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                                    <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                                    <p className="text-proc-text-sec text-xs">{t.categoria} • {(() => {
+                                      const d = new Date(t.data + 'T12:00:00');
+                                      return d.toLocaleDateString('pt-BR');
+                                    })()}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4">

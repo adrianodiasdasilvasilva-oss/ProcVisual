@@ -528,7 +528,11 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     for (let i = parcela; i <= totalParcelas; i++) {
       const installmentDate = new Date(baseDate);
       installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
-      const dateStr = installmentDate.toISOString().split('T')[0];
+      
+      const year = installmentDate.getFullYear();
+      const month = String(installmentDate.getMonth() + 1).padStart(2, '0');
+      const day = String(installmentDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
 
       const ref = db.collection("lancamentos").doc();
       batch.set(ref, {
