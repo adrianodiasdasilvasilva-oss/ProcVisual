@@ -60,12 +60,14 @@ export default function SubscriptionPaywall({ user, profile, onSignOut }: Subscr
       if (response.ok) {
         const data = await response.json();
         console.log('>>> [PAYWALL] Resultado da verificação:', data);
-        if (data.status === 'active' || data.isActive) {
+        if (data.status === 'blocked') {
+          alert('Sua conta foi desativada por um administrador. Favor entrar em contato para regularizar seu acesso.');
+        } else if (data.status === 'active' || data.isActive) {
           // O onSnapshot no App.tsx deve capturar a mudança no Firestore e liberar o acesso
           // mas vamos recarregar para garantir
           setTimeout(() => window.location.reload(), 1000);
         } else {
-          alert('Ainda não detectamos seu pagamento no Stripe. Se você acabou de pagar, aguarde 1 minuto e tente novamente.');
+          alert('Ainda não detectamos seu pagamento, favor atualizar sua assinatura');
         }
       }
     } catch (error) {
