@@ -141,6 +141,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             stripeCustomerId: stripeCustomerId,
             valorAssinatura: session.amount_total ? session.amount_total / 100 : 0,
             nextPaymentDate: nextPaymentDate,
+            dataAssinatura: FieldValue.serverTimestamp(),
             lastPayment: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
           };
@@ -193,6 +194,7 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
               isActive: true, 
               nextPaymentDate: nextPaymentDate,
               valorAssinatura: invoice.amount_paid ? invoice.amount_paid / 100 : 0,
+              dataAssinatura: FieldValue.serverTimestamp(),
               lastPayment: FieldValue.serverTimestamp() 
             });
           }
@@ -283,15 +285,31 @@ app.get("/api/subscription-details", async (req, res) => {
         const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
         const isActive = subscription.status === 'active' || subscription.status === 'trialing';
         const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-
-        await userDoc.ref.set({ 
+        
+        const stripeStartDate = new Date((subscription as any).start_date * 1000);
+        const updateObj: any = { 
           nextPaymentDate,
           isActive,
           plan: 'premium',
           updatedAt: FieldValue.serverTimestamp()
-        }, { merge: true });
+        };
 
-        if (isActive) return res.json({ status: 'active', plan: 'premium', isActive, nextPaymentDate, source: 'sub_id' });
+        // Salvar data da assinatura se não existir
+        if (!userData?.dataAssinatura) {
+          updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
+          console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial: ${stripeStartDate}`);
+        }
+
+        await userDoc.ref.set(updateObj, { merge: true });
+
+        if (isActive) return res.json({ 
+          status: 'active', 
+          plan: 'premium', 
+          isActive, 
+          nextPaymentDate, 
+          dataAssinatura: stripeStartDate.toISOString(),
+          source: 'sub_id' 
+        });
       } catch (e: any) {
         console.warn(`>>> [API-SUBS] Erro SubID ${userData.subscriptionId}:`, e.message);
       }
@@ -310,14 +328,30 @@ app.get("/api/subscription-details", async (req, res) => {
         if (subs.data.length > 0) {
           const sub = subs.data[0];
           const nextPaymentDate = new Date((sub as any).current_period_end * 1000).toISOString();
-          await userDoc.ref.set({ 
+          const stripeStartDate = new Date((sub as any).start_date * 1000);
+          
+          const updateObj: any = { 
             subscriptionId: sub.id,
             nextPaymentDate,
             isActive: true,
             plan: 'premium',
             updatedAt: FieldValue.serverTimestamp()
-          }, { merge: true });
-          return res.json({ status: 'active', plan: 'premium', isActive: true, nextPaymentDate, source: 'customer_id' });
+          };
+
+          if (!userData?.dataAssinatura) {
+            updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
+            console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial via Customer: ${stripeStartDate}`);
+          }
+
+          await userDoc.ref.set(updateObj, { merge: true });
+          return res.json({ 
+            status: 'active', 
+            plan: 'premium', 
+            isActive: true, 
+            nextPaymentDate, 
+            dataAssinatura: stripeStartDate.toISOString(),
+            source: 'customer_id' 
+          });
         }
       } catch (e: any) {
         console.warn(`>>> [API-SUBS] Erro CustomerID ${userData.stripeCustomerId}:`, e.message);
@@ -349,8 +383,9 @@ app.get("/api/subscription-details", async (req, res) => {
             const sub = subs.data[0];
             console.log(`>>> [API-SUBS] Sucesso! Assinatura encontrada para ${email}`);
             const nextPaymentDate = new Date((sub as any).current_period_end * 1000).toISOString();
+            const stripeStartDate = new Date((sub as any).start_date * 1000);
             
-            await userDoc.ref.set({ 
+            const updateObj: any = { 
               subscriptionId: sub.id,
               stripeCustomerId: customer.id,
               stripeEmail: email,
@@ -358,9 +393,24 @@ app.get("/api/subscription-details", async (req, res) => {
               isActive: true,
               plan: 'premium',
               updatedAt: FieldValue.serverTimestamp()
-            }, { merge: true });
+            };
 
-            return res.json({ status: 'active', plan: 'premium', isActive: true, nextPaymentDate, source: 'email_search', email });
+            if (!userData?.dataAssinatura) {
+              updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
+              console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial via Email Search: ${stripeStartDate}`);
+            }
+            
+            await userDoc.ref.set(updateObj, { merge: true });
+
+            return res.json({ 
+              status: 'active', 
+              plan: 'premium', 
+              isActive: true, 
+              nextPaymentDate, 
+              dataAssinatura: stripeStartDate.toISOString(),
+              source: 'email_search', 
+              email 
+            });
           }
         }
       } catch (e: any) {

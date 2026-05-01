@@ -21,6 +21,7 @@ interface UserProfile {
   isActive: boolean;
   dataCriacao?: any;
   dataAssinatura?: any;
+  lastPayment?: any;
   telefone?: string;
   valorAssinatura?: number;
 }
@@ -37,6 +38,7 @@ export default function AdminTab() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [notifyingUserId, setNotifyingUserId] = useState<string | null>(null);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [syncingUserId, setSyncingUserId] = useState<string | null>(null);
 
   useEffect(() => {
     const path = 'usuarios';
@@ -120,8 +122,8 @@ export default function AdminTab() {
         Telefone: u.telefone || 'N/A',
         Status: u.isActive ? 'Ativo' : 'Inativo',
         ValorAssinatura: u.valorAssinatura ? `R$ ${u.valorAssinatura.toFixed(2)}` : 'N/A',
-        'Data Criacao': u.dataCriacao?.toDate ? u.dataCriacao.toDate().toLocaleDateString('pt-BR') : 'N/A',
-        'Data Assinatura': u.dataAssinatura?.toDate ? u.dataAssinatura.toDate().toLocaleDateString('pt-BR') : 'N/A'
+        'Data Criacao': formatDate(u.dataCriacao) || 'N/A',
+        'Data Assinatura': formatDate(u.dataAssinatura) || formatDate(u.lastPayment) || (u.isActive ? 'Em processamento' : 'N/A')
       }));
 
       const ws = XLSX.utils.json_to_sheet(dataToExport);
@@ -160,6 +162,40 @@ export default function AdminTab() {
     } finally {
       setTogglingUserId(null);
     }
+  };
+
+  const handleSyncStripe = async (userId: string) => {
+    setSyncingUserId(userId);
+    try {
+      const res = await fetch(`/api/subscription-details?userId=${userId}`);
+      if (!res.ok) throw new Error('Erro ao buscar dados no Stripe');
+      const data = await res.json();
+      console.log('>>> [ADMIN] Sincronização Stripe concluída:', data);
+      
+      if (data.status === 'active' || data.isActive) {
+        alert('✅ Dados sincronizados! Assinatura ativa encontrada e data atualizada.');
+      } else {
+        alert('ℹ️ Sincronizado, mas nenhuma assinatura ativa foi encontrada para este usuário no Stripe.');
+      }
+    } catch (err) {
+      console.error('Erro ao sincronizar Stripe:', err);
+      alert('❌ Erro ao sincronizar dados com o Stripe');
+    } finally {
+      setSyncingUserId(null);
+    }
+  };
+
+  const formatDate = (val: any) => {
+    if (!val) return null;
+    try {
+      if (val.toDate) return val.toDate().toLocaleDateString('pt-BR');
+      if (val instanceof Date) return val.toLocaleDateString('pt-BR');
+      const d = new Date(val);
+      if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+    } catch (e) {
+      console.warn('Erro ao formatar data:', e);
+    }
+    return null;
   };
 
   const filteredUsers = useMemo(() => {
@@ -323,8 +359,8 @@ export default function AdminTab() {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <span className="text-sm text-proc-text-main font-mono">
-                      {user.dataAssinatura?.toDate ? user.dataAssinatura.toDate().toLocaleDateString('pt-BR') : 
-                       (user.isActive ? 'Presente' : 'N/A')}
+                      {formatDate(user.dataAssinatura) || formatDate(user.lastPayment) || 
+                       (user.isActive ? <span className="text-proc-cyan animate-pulse">Sincronizar...</span> : 'N/A')}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -334,6 +370,14 @@ export default function AdminTab() {
                   </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleSyncStripe(user.id)}
+                        disabled={syncingUserId === user.id}
+                        className="p-2 text-proc-cyan/60 hover:text-proc-cyan hover:bg-proc-cyan/10 rounded-lg transition-all"
+                        title="Sincronizar com Stripe (Puxar data histórica)"
+                      >
+                        {syncingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                      </button>
                       <button 
                         onClick={() => handleToggleActive(user)}
                         disabled={togglingUserId === user.id}
