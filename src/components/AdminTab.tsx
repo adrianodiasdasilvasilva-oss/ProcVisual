@@ -10,7 +10,7 @@ import {
   updateDoc as firestoreUpdateDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Users, UserCheck, Calendar, Search, Loader2, BellRing, RefreshCw, FileDown, Trash2, X, AlertTriangle, Power } from 'lucide-react';
+import { Users, UserCheck, Calendar, Search, Loader2, Bell, RefreshCw, FileDown, Trash2, X, AlertTriangle, Power } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 
@@ -88,8 +88,11 @@ export default function AdminTab() {
       const res = await fetch('/api/admin/run-notifications', { method: 'POST' });
       const data = await res.json();
       setNotifyResult(data.results || data);
+      const count = data.results?.notified || 0;
+      alert(`✅ Processamento global concluído: ${count} notificações enviadas.`);
     } catch (err) {
       console.error('Erro ao disparar notificações:', err);
+      alert('❌ Erro de conexão ao disparar notificações globais');
       setNotifyResult({ error: 'Erro de conexão' });
     } finally {
       setIsNotifying(false);
@@ -122,7 +125,6 @@ export default function AdminTab() {
         Email: u.email,
         Telefone: u.telefone || 'N/A',
         Status: u.isActive ? 'Ativo' : 'Inativo',
-        ValorAssinatura: u.valorAssinatura ? `R$ ${u.valorAssinatura.toFixed(2)}` : 'N/A',
         'Data Criacao': formatDate(u.dataCriacao) || 'N/A',
         'Data Assinatura': formatDate(u.dataAssinatura) || formatDate(u.lastPayment) || (u.isActive ? 'Em processamento' : 'N/A')
       }));
@@ -263,7 +265,7 @@ export default function AdminTab() {
         >
           <div className="flex items-center justify-between w-full">
             <div className={`w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan ${isNotifying ? 'animate-spin' : 'group-hover:scale-110 transition-transform'}`}>
-              {isNotifying ? <RefreshCw size={20} /> : <BellRing size={24} />}
+              {isNotifying ? <RefreshCw size={20} /> : <Bell size={24} />}
             </div>
             {notifyResult && (
               <span className="text-[10px] font-bold bg-proc-green/20 text-proc-green px-2 py-1 rounded">
@@ -329,7 +331,6 @@ export default function AdminTab() {
               <tr className="bg-white/5 border-b border-white/10">
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Usuário</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Status</th>
-                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Assinatura</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Data de Assinatura</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Criado em</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-right">Ações</th>
@@ -353,11 +354,6 @@ export default function AdminTab() {
                     }`}>
                       <div className={`w-1 h-1 rounded-full ${user.isActive ? 'bg-proc-green' : 'bg-red-400'}`} />
                       {user.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <span className="text-sm font-bold text-proc-green font-mono">
-                      {user.valorAssinatura ? `R$ ${user.valorAssinatura.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -399,7 +395,7 @@ export default function AdminTab() {
                         className="p-2 text-proc-cyan/60 hover:text-proc-cyan hover:bg-proc-cyan/10 rounded-lg transition-all"
                         title="Disparar Notificações para este usuário"
                       >
-                        {notifyingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <BellRing size={18} />}
+                        {notifyingUserId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />}
                       </button>
                       <button 
                         onClick={() => setUserToDelete(user)}

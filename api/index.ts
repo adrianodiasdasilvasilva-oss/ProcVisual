@@ -681,7 +681,7 @@ async function runDailyNotifications(targetUserId?: string) {
   try {
     const db = await initializeFirebaseAdmin();
     step = "db_initialized";
-    if (!db) return { error: "DB não disponível" };
+    if (!db) return { error: "DB não disponível", processed: 0, notified: 0 };
     
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
@@ -708,11 +708,14 @@ async function runDailyNotifications(targetUserId?: string) {
 
     if (snapshot.empty) {
       console.log(">>> [JOB] Nenhum lançamento encontrado.");
-      return { processed: 0 };
+      return { processed: 0, notified: 0 };
     }
 
     let processed = 0;
     let notified = 0;
+    
+    // Cache de dados de usuário para otimizar se processando muitos registros
+    const userCache: Record<string, any> = {};
 
     for (const docSnap of snapshot.docs) {
       processed++;
@@ -722,13 +725,21 @@ async function runDailyNotifications(targetUserId?: string) {
       if (!userId || userId === 'whatsapp_pending') continue;
 
       step = `get_user_${userId}`;
-      const userDoc = await db.collection("usuarios").doc(userId).get();
-      const userData = userDoc.data();
+      
+      let userData = userCache[userId];
+      if (!userData) {
+        const userDoc = await db.collection("usuarios").doc(userId).get();
+        userData = userDoc.exists ? userDoc.data() : { _not_found: true };
+        userCache[userId] = userData;
+      }
+
+      if (userData._not_found) continue;
+
       const isAdmin = isUserAdmin(userId, userData?.email);
       const isException = isPhoneException(userData?.telefone || data.telefone);
 
-      if (!userData || (userData.isActive === false && !isAdmin && !isException)) {
-        console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Usuário ${userId} inativo e não é admin/exceção.`);
+      if (userData.isActive === false && !isAdmin && !isException) {
+        console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Usuário ${userId} inativo.`);
         continue; 
       }
 
