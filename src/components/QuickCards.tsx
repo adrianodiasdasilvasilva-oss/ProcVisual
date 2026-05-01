@@ -19,7 +19,7 @@ export default function QuickCards({ income, expense }: QuickCardsProps) {
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-1 gap-4 mb-0">
+    <div className="grid grid-cols-2 md:grid-cols-1 gap-6 mb-0">
       {cards.map((card, index) => (
         <motion.div
           key={card.title}
