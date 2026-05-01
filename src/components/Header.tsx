@@ -36,7 +36,7 @@ export default function Header({ balance }: HeaderProps) {
   const firstName = displayName ? displayName.split(' ')[0] : '';
 
   return (
-    <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-white/10">
+    <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-proc-border">
       <div className="flex items-center gap-3 md:hidden">
         <Logo size="small" className="h-7" />
         <div className="flex flex-col">
@@ -64,7 +64,7 @@ export default function Header({ balance }: HeaderProps) {
           <input 
             type="text" 
             placeholder="Pesquisar lançamentos, categorias..." 
-            className="w-full bg-proc-secondary/30 border border-white/10 rounded-2xl py-2.5 pl-12 pr-4 text-sm text-proc-text-main placeholder:text-proc-text-sec focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all"
+            className="w-full bg-proc-secondary/30 border border-proc-border rounded-2xl py-2.5 pl-12 pr-4 text-sm text-proc-text-main placeholder:text-proc-text-sec focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-secondary/50 transition-all"
           />
         </div>
         
@@ -77,7 +77,7 @@ export default function Header({ balance }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3 md:gap-4">
-        <div className="flex items-center gap-3 pr-4 border-r border-white/5">
+        <div className="flex items-center gap-3 pr-4 border-r border-proc-border">
           <div 
             className="w-10 h-10 rounded-xl bg-gradient-to-br from-proc-cyan to-proc-green p-[1px] shadow-[0_0_15px_rgba(0,209,255,0.2)] group relative"
           >

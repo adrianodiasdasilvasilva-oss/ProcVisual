@@ -583,7 +583,7 @@ export default function App() {
                         />
                         
                         {/* Desktop Activity Feed Placeholder or List */}
-                        <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6">
+                        <div className="bg-proc-secondary/20 border border-proc-border rounded-[2.5rem] p-6">
                           <h3 className="text-proc-text-main font-bold text-lg mb-4">Lançamentos do mês</h3>
                           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             {filteredTransactions
@@ -643,7 +643,7 @@ export default function App() {
                         {transactions.length > 0 && (
                           <button 
                             onClick={handleSelectAll}
-                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-proc-text-main text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
+                            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-proc-border text-proc-text-main text-xs font-bold uppercase tracking-widest hover:bg-white/10 transition-all"
                           >
                             {selectedIds.length === transactions.length ? <CheckSquare size={16} /> : <Square size={16} />}
                             {selectedIds.length === transactions.length ? 'Desmarcar Tudo' : 'Selecionar Tudo'}
@@ -675,7 +675,7 @@ export default function App() {
                         placeholder="Buscar por estabelecimento ou descrição..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full bg-proc-bg/50 border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-bg transition-all"
+                        className="w-full bg-proc-bg/50 border border-proc-border rounded-2xl py-4 pl-12 pr-12 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/30 focus:bg-proc-bg transition-all"
                       />
                       {searchTerm && (
                         <button 

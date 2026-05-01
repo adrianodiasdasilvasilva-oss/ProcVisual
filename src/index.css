@@ -11,6 +11,7 @@
   --color-proc-green: var(--proc-green, #00E676);
   --color-proc-text-sec: var(--proc-text-sec, #94A3B8);
   --color-proc-text-main: var(--proc-text-main, #FFFFFF);
+  --color-proc-border: var(--proc-border, rgba(255, 255, 255, 0.1));
 }
 
 :root {
@@ -20,18 +21,23 @@
   --proc-green: #00E676;
   --proc-text-sec: #94A3B8;
   --proc-text-main: #FFFFFF;
+  --proc-border: rgba(255, 255, 255, 0.1);
 }
 
 :root.light {
-  --proc-bg: #D1D5DB;
-  --proc-secondary: #F3F4F6;
-  --proc-cyan: #0369A1;
-  --proc-green: #047857;
-  --proc-text-sec: #4B5563;
-  --proc-text-main: #111827;
+  --proc-bg: #F9FAFB; /* Gray-50 - Lighter background as requested */
+  --proc-secondary: #FFFFFF;
+  --proc-cyan: #0284C7;
+  --proc-green: #059669;
+  --proc-text-sec: #1F2937; /* Gray-800 for much stronger bold feel */
+  --proc-text-main: #000000;
+  --proc-border: rgba(0, 0, 0, 0.08);
 }
 
 @layer base {
+  html.light body {
+    font-weight: 500; /* Bolder text globally in light mode */
+  }
   html {
     scroll-behavior: smooth;
   }

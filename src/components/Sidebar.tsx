@@ -21,7 +21,7 @@ export default function Sidebar({ activeTab, onTabChange, onInstall, isSuperAdmi
   ];
 
   return (
-    <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-white/10 h-screen sticky top-0 p-6">
+    <aside className="hidden md:flex flex-col w-64 bg-proc-secondary/20 border-r border-proc-border h-screen sticky top-0 p-6">
       <div className="mb-10 flex items-center gap-3">
         <Logo size="small" className="h-8" />
         <div>
@@ -44,7 +44,7 @@ export default function Sidebar({ activeTab, onTabChange, onInstall, isSuperAdmi
             }`}
           >
             <item.icon size={20} className={activeTab === item.id ? 'text-proc-cyan' : 'group-hover:text-proc-text-main'} />
-            <span className="font-medium text-sm">{item.label}</span>
+            <span className="font-bold text-sm tracking-tight">{item.label}</span>
             {activeTab === item.id && (
               <div className="ml-auto w-1.5 h-1.5 rounded-full bg-proc-cyan shadow-[0_0_8px_#00D1FF]" />
             )}
@@ -52,14 +52,14 @@ export default function Sidebar({ activeTab, onTabChange, onInstall, isSuperAdmi
         ))}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-white/10 space-y-2">
+      <div className="mt-auto pt-6 border-t border-proc-border space-y-2">
         {onInstall && (
           <button 
             onClick={onInstall}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-proc-cyan bg-proc-cyan/10 hover:bg-proc-cyan/20 transition-all duration-300 group"
           >
             <Download size={20} />
-            <span className="font-medium text-sm">Instalar App</span>
+            <span className="font-bold text-sm">Instalar App</span>
           </button>
         )}
         <button 
@@ -67,7 +67,7 @@ export default function Sidebar({ activeTab, onTabChange, onInstall, isSuperAdmi
           className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all duration-300 group"
         >
           <LogOut size={20} />
-          <span className="font-medium text-sm">Sair da conta</span>
+          <span className="font-bold text-sm">Sair da conta</span>
         </button>
       </div>
     </aside>

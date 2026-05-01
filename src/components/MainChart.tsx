@@ -29,16 +29,16 @@ export default function MainChart({ transactions, month, year }: MainChartProps)
 
   if (data.length === 0) {
     return (
-      <div className="bg-proc-secondary/20 p-8 rounded-[2rem] border border-white/5 mb-6 text-center">
+      <div className="bg-proc-secondary/20 p-8 rounded-[2rem] border border-proc-border mb-6 text-center">
         <p className="text-proc-text-sec text-sm">Nenhuma despesa registrada para exibir no gráfico.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 rounded-[2rem] border border-white/10 mb-6 bg-proc-secondary/10">
+    <div className="p-6 rounded-[2rem] border border-proc-border mb-6 bg-proc-secondary/10">
       <div className="flex justify-between items-end mb-6">
-        <h3 className="text-sm font-semibold text-proc-text-sec uppercase tracking-widest">Despesas por Categoria</h3>
+        <h3 className="text-sm font-bold text-proc-text-sec uppercase tracking-widest">Despesas por Categoria</h3>
         <span className="text-xs font-bold text-proc-cyan">{month} {year}</span>
       </div>
       
@@ -73,10 +73,11 @@ export default function MainChart({ transactions, month, year }: MainChartProps)
               cursor={{ fill: 'var(--proc-text-sec)', opacity: 0.05 }}
               contentStyle={{ 
                 backgroundColor: 'var(--proc-secondary)', 
-                border: '1px solid var(--proc-text-sec)',
-                borderRadius: '12px',
+                border: '1px solid var(--proc-border)',
+                borderRadius: '16px',
                 fontSize: '12px',
-                color: 'var(--proc-text-main)'
+                color: 'var(--proc-text-main)',
+                fontWeight: 'bold'
               }}
               itemStyle={{ color: 'var(--proc-text-main)' }}
               formatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`}

@@ -49,7 +49,7 @@ export default function BottomNav({ activeTab, onTabChange, onInstall, isSuperAd
           paddingBottom: isMinimized ? '0px' : '32px'
         }}
         onClick={() => isMinimized && setIsMinimized(false)}
-        className={`bg-proc-bg/95 backdrop-blur-xl border-t border-white/10 px-4 shadow-[0_-10px_20px_rgba(0,0,0,0.3)] relative overflow-hidden ${isMinimized ? 'cursor-pointer' : ''}`}
+        className={`bg-proc-bg/95 backdrop-blur-xl border-t border-proc-border px-4 shadow-[0_-10px_20px_rgba(0,0,0,0.3)] relative overflow-hidden ${isMinimized ? 'cursor-pointer' : ''}`}
       >
         {/* Toggle Button */}
         <button 
