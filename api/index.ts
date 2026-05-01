@@ -264,7 +264,13 @@ app.get("/api/subscription-details", async (req, res) => {
             updatedAt: FieldValue.serverTimestamp()
           });
 
-          return res.json({ nextPaymentDate });
+          return res.json({ 
+            status: isActive ? 'active' : 'inactive',
+            plan: 'premium',
+            isActive,
+            nextPaymentDate,
+            source: 'sub_id'
+          });
         } else if (userData.stripeCustomerId) {
           console.log(`>>> [API] Buscando assinatura via Customer ID: ${userData.stripeCustomerId}`);
           const subscriptions = await getStripe().subscriptions.list({
@@ -283,7 +289,13 @@ app.get("/api/subscription-details", async (req, res) => {
               plan: 'premium',
               updatedAt: FieldValue.serverTimestamp()
             });
-            return res.json({ nextPaymentDate });
+            return res.json({ 
+              status: isActive ? 'active' : 'inactive',
+              plan: 'premium',
+              isActive,
+              nextPaymentDate,
+              source: 'customer_id'
+            });
           }
         }
       } catch (e: any) {
@@ -344,7 +356,14 @@ app.get("/api/subscription-details", async (req, res) => {
               };
 
               await userDoc.ref.update(finalUpdate);
-              return res.json({ ...finalUpdate, source: 'email_search', email });
+              return res.json({ 
+                status: isActive ? 'active' : 'inactive', 
+                plan: 'premium', 
+                isActive, 
+                nextPaymentDate,
+                source: 'email_search', 
+                email 
+              });
             }
           }
         } catch (searchError: any) {

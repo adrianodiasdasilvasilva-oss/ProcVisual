@@ -253,6 +253,7 @@ export default function App() {
   }, []);
 
   const verifySubscription = async (userId: string) => {
+    if (isCheckingSubscription) return;
     setIsCheckingSubscription(true);
     try {
       console.log('>>> [AUTH] Verificando assinatura com Stripe...');
@@ -260,10 +261,7 @@ export default function App() {
       if (res.ok) {
         const data = await res.json();
         console.log('>>> [AUTH] Assinatura validada:', data);
-        if (data.status === 'active' || data.isActive) {
-          // O perfil será atualizado pelo onSnapshot, mas podemos forçar um reload ou log
-          console.log('>>> [AUTH] Assinatura ATIVA detectada.');
-        }
+        // Se o sync funcionou, o onSnapshot cuidará de atualizar o perfil local
       }
     } catch (error) {
       console.error('>>> [AUTH] Erro ao validar assinatura:', error);
@@ -271,6 +269,17 @@ export default function App() {
       setIsCheckingSubscription(false);
     }
   };
+
+  // Payment Success Handler
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('payment') === 'success' && user) {
+      console.log('>>> [AUTH] Retorno de pagamento detectado. Forçando verificação...');
+      verifySubscription(user.uid);
+      // Limpar os parâmetros da URL para evitar chamadas duplicadas ao recarregar
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [user]);
 
   // Real-time Profile Listener
   useEffect(() => {
