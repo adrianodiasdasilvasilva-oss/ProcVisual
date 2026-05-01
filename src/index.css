@@ -25,7 +25,7 @@
 }
 
 :root.light {
-  --proc-bg: #F9FAFB; /* Gray-50 - Lighter background as requested */
+  --proc-bg: #F3F4F6;
   --proc-secondary: #FFFFFF;
   --proc-cyan: #0284C7;
   --proc-green: #059669;
