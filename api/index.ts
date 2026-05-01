@@ -92,23 +92,29 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
         const subscriptionId = session.subscription as string;
+        const customerEmail = session.customer_email || session.customer_details?.email;
         const customerPhone = session.customer_details?.phone;
+
+        console.log(`>>> [STRIPE] Sessão Completada. User: ${userId}, Email: ${customerEmail}, Sub: ${subscriptionId}`);
 
         if (userId) {
           console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
           
           let nextPaymentDate = null;
+          let stripeCustomerId = session.customer as string;
+
           try {
             const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
             nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-          } catch (e) {
-            console.error(">>> [STRIPE] Erro ao buscar detalhes da assinatura:", e);
+          } catch (e: any) {
+            console.error(">>> [STRIPE] Erro ao buscar detalhes da assinatura:", e.message);
           }
 
           const updateData: any = {
             isActive: true,
             plan: "premium",
             subscriptionId: subscriptionId,
+            stripeCustomerId: stripeCustomerId,
             valorAssinatura: session.amount_total ? session.amount_total / 100 : 0,
             nextPaymentDate: nextPaymentDate,
             lastPayment: FieldValue.serverTimestamp(),
@@ -118,8 +124,13 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
           if (customerPhone) {
             updateData.telefone = customerPhone.replace(/\D/g, "");
           }
+          
+          if (customerEmail) {
+            updateData.stripeEmail = customerEmail;
+          }
 
           await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+          console.log(`>>> [STRIPE] Documento do usuário ${userId} atualizado com sucesso.`);
 
           // Enviar mensagem de boas-vindas/ajuda se tiver telefone
           const userDoc = await db.collection("usuarios").doc(userId).get();
@@ -281,51 +292,63 @@ app.get("/api/subscription-details", async (req, res) => {
     }
 
     // Try searching Stripe by email as fallback
-    const emailsToTry = [
-        userData?.email, 
+    const emailsToTry = Array.from(new Set([
+        userData?.email,
+        userData?.stripeEmail,
         'adrianodiasdasilva@yahoo.com.br',
         'adrianodiasdasilva.silva@gmail.com'
-      ].filter(Boolean);
+      ])).filter(Boolean);
       
-      console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails:`, emailsToTry);
+      console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails a verificar:`, emailsToTry);
       
       for (const email of emailsToTry) {
-        const customers = await getStripe().customers.list({
-          email: email as string,
-          limit: 1
-        });
-
-        if (customers.data.length > 0) {
-          const customer = customers.data[0];
-          const subscriptions = await getStripe().subscriptions.list({
-            customer: customer.id,
-            status: 'all',
-            limit: 5
+        try {
+          const customers = await getStripe().customers.list({
+            email: email as string,
+            limit: 1
           });
 
-          const sortedSubs = subscriptions.data.sort((a, b) => {
-            const aActive = a.status === 'active' || a.status === 'trialing' ? 1 : 0;
-            const bActive = b.status === 'active' || b.status === 'trialing' ? 1 : 0;
-            if (aActive !== bActive) return bActive - aActive;
-            return (b as any).current_period_end - (a as any).current_period_end;
-          });
-
-          const subscription = sortedSubs[0];
-          if (subscription) {
-            console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id} (Status: ${subscription.status})`);
-            const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-            const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-            
-            await userDoc.ref.update({ 
-              subscriptionId: subscription.id,
-              stripeCustomerId: customer.id,
-              nextPaymentDate,
-              isActive,
-              plan: 'premium',
-              updatedAt: FieldValue.serverTimestamp()
+          if (customers.data.length > 0) {
+            const customer = customers.data[0];
+            const subscriptions = await getStripe().subscriptions.list({
+              customer: customer.id,
+              status: 'active', // Only look for active ones to start
+              limit: 1
             });
-            return res.json({ nextPaymentDate, source: 'email_search', email, status: subscription.status });
+
+            let subscription = subscriptions.data[0];
+            
+            // If no active ones, check all and pick most recent
+            if (!subscription) {
+              const allSubs = await getStripe().subscriptions.list({
+                customer: customer.id,
+                status: 'all',
+                limit: 5
+              });
+              subscription = allSubs.data[0];
+            }
+
+            if (subscription) {
+              console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id} (Status: ${subscription.status})`);
+              const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
+              const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+              
+              const finalUpdate = { 
+                subscriptionId: subscription.id,
+                stripeCustomerId: customer.id,
+                stripeEmail: email,
+                nextPaymentDate,
+                isActive,
+                plan: 'premium',
+                updatedAt: FieldValue.serverTimestamp()
+              };
+
+              await userDoc.ref.update(finalUpdate);
+              return res.json({ ...finalUpdate, source: 'email_search', email });
+            }
           }
+        } catch (searchError: any) {
+          console.warn(`>>> [API] Falha na busca pelo email ${email}:`, searchError.message);
         }
       }
       

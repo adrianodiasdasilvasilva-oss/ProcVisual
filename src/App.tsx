@@ -258,7 +258,12 @@ export default function App() {
       console.log('>>> [AUTH] Verificando assinatura com Stripe...');
       const res = await fetch(`/api/subscription-details?userId=${userId}`);
       if (res.ok) {
-        console.log('>>> [AUTH] Assinatura validada com sucesso.');
+        const data = await res.json();
+        console.log('>>> [AUTH] Assinatura validada:', data);
+        if (data.status === 'active' || data.isActive) {
+          // O perfil será atualizado pelo onSnapshot, mas podemos forçar um reload ou log
+          console.log('>>> [AUTH] Assinatura ATIVA detectada.');
+        }
       }
     } catch (error) {
       console.error('>>> [AUTH] Erro ao validar assinatura:', error);

@@ -64,23 +64,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
         const subscriptionId = session.subscription as string;
+        const customerEmail = session.customer_email || session.customer_details?.email;
         const customerPhone = session.customer_details?.phone;
+        const stripeCustomerId = session.customer as string;
 
-          if (userId) {
-            console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
-            const updateData: any = {
-              isActive: true,
-              plan: "premium",
-              subscriptionId: subscriptionId,
-              updatedAt: FieldValue.serverTimestamp()
-            };
+        console.log(`>>> [WEBHOOK] Sessão Completada. User: ${userId}, Email: ${customerEmail}, Sub: ${subscriptionId}`);
 
-            if (customerPhone) {
-              updateData.telefone = customerPhone.replace(/\D/g, "");
-              console.log(`>>> [WEBHOOK] Telefone capturado: ${updateData.telefone}`);
-            }
+        if (userId) {
+          console.log(`>>> [WEBHOOK] Ativando premium para: ${userId}`);
+          const updateData: any = {
+            isActive: true,
+            plan: "premium",
+            subscriptionId: subscriptionId,
+            stripeCustomerId: stripeCustomerId,
+            lastPayment: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+          };
 
-            await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+          if (customerPhone) {
+            updateData.telefone = customerPhone.replace(/\D/g, "");
+            console.log(`>>> [WEBHOOK] Telefone capturado: ${updateData.telefone}`);
+          }
+          
+          if (customerEmail) {
+            updateData.stripeEmail = customerEmail;
+          }
+
+          await db.collection("usuarios").doc(userId).set(updateData, { merge: true });
+          console.log(`>>> [WEBHOOK] Documento ${userId} atualizado no Firestore.`);
 
             // Enviar mensagem de boas-vindas/ajuda se tiver telefone
             const userDoc = await db.collection("usuarios").doc(userId).get();
