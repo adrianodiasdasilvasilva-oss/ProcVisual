@@ -662,6 +662,30 @@ app.post("/api/admin/test-whatsapp", async (req, res) => {
   }
 });
 
+app.post("/api/admin/send-custom-message", async (req, res) => {
+  const { userId, message } = req.body;
+  if (!userId || !message) return res.status(400).json({ error: "UserId e Mensagem são obrigatórios" });
+
+  try {
+    const db = await initializeFirebaseAdmin();
+    if (!db) return res.status(500).json({ error: "DB não disponível" });
+
+    const userDoc = await db.collection("usuarios").doc(userId).get();
+    if (!userDoc.exists) return res.status(404).json({ error: "Usuário não encontrado" });
+
+    const userData = userDoc.data();
+    const phone = userData?.telefone;
+    if (!phone) return res.status(400).json({ error: "Usuário não possui telefone cadastrado" });
+
+    console.log(`>>> [ADMIN] Enviando mensagem customizada para ${userId} (${phone})`);
+    const result = await sendWhatsApp(phone, message);
+    res.json(result);
+  } catch (err: any) {
+    console.error(">>> [ADMIN] Erro ao enviar mensagem customizada:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Final catch-all for /api routes to prevent HTML response
 app.use("/api/*", (req, res) => {
   res.status(404).json({ error: `Route ${req.method} ${req.originalUrl} not found` });

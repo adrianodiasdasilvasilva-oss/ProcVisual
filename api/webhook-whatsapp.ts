@@ -327,17 +327,24 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
     Extraia os dados da despesa para o formato JSON. 
     
-    ATENÇÃO - REGRA DE OURO:
-    - Se NÃO houver um valor monetário explícito na mensagem (ex: "50", "R$ 10", "vinte reais"), o campo "valor" DEVE ser obrigatoriamente null.
-    - NUNCA invente um valor. Se a mensagem for "Água vence dia 16/04", o valor é null.
-    - Se a mensagem for "Paguei a conta de luz", o valor é null.
-    - SOMENTE preencha o valor se o usuário escreveu o número na mensagem.`;
+    ESTRITAMENTE OBRIGATÓRIO - REGRA DE OURO:
+    1. Se NÃO houver um valor numérico ou menção explícita a valor (ex: "50", "R$ 10", "vinte reais") na mensagem, o campo "valor" DEVE ser null.
+    2. NUNCA, SOB HIPÓTESE ALGUMA, INVENTE UM VALOR. Se o usuário disse "agua vence amanhã", o valor é NULL.
+    3. Não assuma valores padrão (como 0, 1 ou 100).
+    4. Se houver dúvida sobre o valor, retorne null no campo "valor".`;
     
-    const sysInst = "Você é um extrator de despesas financeiras. Sua prioridade máxima é a precisão. Se um valor não for mencionado explicitamente, você deve retornar null para o campo 'valor'. Nunca invente dados.";
+    const sysInst = "Você é um extrator de dados financeiros ultra-preciso. Sua regra mais importante é: NUNCA invente valores. Se o usuário não informou um valor claramente na mensagem, o campo 'valor' no JSON deve ser null, sem exceções.";
     const response = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(response.text);
     console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
     
+    // Safety check: Se a mensagem não contém dígitos nem palavras de valor, anular o valor alucinado pela IA
+    const hasNumber = /\d/.test(texto) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|cem|mil|reais|real)/i.test(texto);
+    if (!hasNumber && result && result.valor !== null) {
+      console.log(`>>> [WH-WA] Alucinação detectada! IA inventou valor sem números na mensagem. Anulando valor.`);
+      result.valor = null;
+    }
+
     // Tratar valor 0 como nulo para forçar a pergunta
     if (result && (result.valor === 0 || result.valor === "0")) {
       result.valor = null;

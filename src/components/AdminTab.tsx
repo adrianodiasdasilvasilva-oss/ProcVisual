@@ -40,6 +40,9 @@ export default function AdminTab() {
   const [notifyingUserId, setNotifyingUserId] = useState<string | null>(null);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
   const [syncingUserId, setSyncingUserId] = useState<string | null>(null);
+  const [selectedUserForMessage, setSelectedUserForMessage] = useState('');
+  const [customMessage, setCustomMessage] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   useEffect(() => {
     const path = 'usuarios';
@@ -109,12 +112,50 @@ export default function AdminTab() {
       });
       const data = await res.json();
       const count = data.results?.notified || 0;
-      alert(`✅ Processamento concluído: ${count} notificação(ões) enviada(s).`);
+      if (count === 0) {
+        alert('ℹ️ Nenhuma despesa ou aniversário vencendo hoje/amanhã para este usuário.');
+      } else {
+        alert(`✅ Processamento concluído: ${count} notificação(ões) enviada(s).`);
+      }
     } catch (err) {
       console.error('Erro ao disparar notificação individual:', err);
       alert('❌ Erro ao enviar notificação');
     } finally {
       setNotifyingUserId(null);
+    }
+  };
+
+  const handleSendCustomMessage = async () => {
+    if (!selectedUserForMessage) {
+      alert('Selecione um usuário');
+      return;
+    }
+    if (!customMessage.trim()) {
+      alert('Digite uma mensagem');
+      return;
+    }
+
+    setIsSendingMessage(true);
+    try {
+      const res = await fetch('/api/admin/send-custom-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          userId: selectedUserForMessage, 
+          message: customMessage 
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('✅ Mensagem enviada com sucesso!');
+        setCustomMessage('');
+      } else {
+        alert('❌ Erro: ' + (data.error || 'Falha ao enviar'));
+      }
+    } catch (err) {
+      alert('❌ Erro de conexão');
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -278,6 +319,57 @@ export default function AdminTab() {
             <p className="text-proc-text-sec text-[10px]">Executar rotina de vencimentos</p>
           </div>
         </button>
+      </div>
+
+      {/* Custom Message Section */}
+      <div className="bg-proc-secondary/20 border border-white/10 p-6 rounded-[2.5rem] shadow-xl space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+            <Bell size={20} />
+          </div>
+          <h3 className="text-lg font-bold text-proc-text-main">Disparar Mensagem Avulsa</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div className="md:col-span-4 space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-proc-text-sec ml-2">Selecionar Usuário</label>
+            <select 
+              value={selectedUserForMessage}
+              onChange={(e) => setSelectedUserForMessage(e.target.value)}
+              className="w-full bg-proc-bg/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-proc-text-main focus:outline-none focus:border-proc-cyan/30 appearance-none"
+            >
+              <option value="">Escolha um usuário...</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>
+                  {u.nome || u.email} {u.telefone ? `(${u.telefone})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="md:col-span-6 space-y-1.5">
+            <label className="text-[10px] font-bold uppercase tracking-widest text-proc-text-sec ml-2">Mensagem do Administrador</label>
+            <input 
+              type="text"
+              placeholder="Digite o texto da mensagem para enviar pelo WhatsApp..."
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              className="w-full bg-proc-bg/50 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-proc-text-main focus:outline-none focus:border-proc-cyan/30"
+              onKeyDown={(e) => e.key === 'Enter' && handleSendCustomMessage()}
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <button 
+              onClick={handleSendCustomMessage}
+              disabled={isSendingMessage || !selectedUserForMessage || !customMessage}
+              className="w-full bg-proc-cyan text-white py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-proc-cyan/20 hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:hover:scale-100"
+            >
+              {isSendingMessage ? <Loader2 size={18} className="animate-spin" /> : <Bell size={18} />}
+              Enviar
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Main Table Container */}
