@@ -821,6 +821,14 @@ async function runDailyNotifications(targetUserId?: string) {
             notified++;
           }
         }
+        if (diffDays === 1 && !data.notificadoAmanha) {
+          const msg = `🔔 *CONTA PRÓXIMA*\n👋🏻 Oi, ${userName}! \n\nSua despesa no valor de R$ ${valorFormatado} vence AMANHÃ.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;
+          const res = await sendWhatsApp(telefone, msg);
+          if (res.success) {
+            await docSnap.ref.update({ notificadoAmanha: true });
+            notified++;
+          }
+        }
         if (diffDays === 0 && !data.notificadoNoDia) {
           const msg = `🚨 *VENCIMENTO*\n👋🏻 Oi, ${userName}! \n\nSua despesa no valor de R$ ${valorFormatado} vence HOJE.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;
           const res = await sendWhatsApp(telefone, msg);
