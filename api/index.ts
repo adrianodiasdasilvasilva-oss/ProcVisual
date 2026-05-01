@@ -296,19 +296,15 @@ app.get("/api/subscription-details", async (req, res) => {
         const isActive = subscription.status === 'active' || subscription.status === 'trialing';
         const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
         
+        // Atualizar data da assinatura detectada no Stripe
         const stripeStartDate = new Date((subscription as any).start_date * 1000);
         const updateObj: any = { 
           nextPaymentDate,
           isActive,
           plan: 'premium',
+          dataAssinatura: admin.firestore.Timestamp.fromDate(stripeStartDate),
           updatedAt: FieldValue.serverTimestamp()
         };
-
-        // Salvar data da assinatura se não existir
-        if (!userData?.dataAssinatura) {
-          updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
-          console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial: ${stripeStartDate}`);
-        }
 
         await userDoc.ref.set(updateObj, { merge: true });
 
@@ -345,13 +341,9 @@ app.get("/api/subscription-details", async (req, res) => {
             nextPaymentDate,
             isActive: true,
             plan: 'premium',
+            dataAssinatura: admin.firestore.Timestamp.fromDate(stripeStartDate),
             updatedAt: FieldValue.serverTimestamp()
           };
-
-          if (!userData?.dataAssinatura) {
-            updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
-            console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial via Customer: ${stripeStartDate}`);
-          }
 
           await userDoc.ref.set(updateObj, { merge: true });
           return res.json({ 
@@ -402,13 +394,9 @@ app.get("/api/subscription-details", async (req, res) => {
               nextPaymentDate,
               isActive: true,
               plan: 'premium',
+              dataAssinatura: admin.firestore.Timestamp.fromDate(stripeStartDate),
               updatedAt: FieldValue.serverTimestamp()
             };
-
-            if (!userData?.dataAssinatura) {
-              updateObj.dataAssinatura = admin.firestore.Timestamp.fromDate(stripeStartDate);
-              console.log(`>>> [API-SUBS] Definindo dataAssinatura inicial via Email Search: ${stripeStartDate}`);
-            }
             
             await userDoc.ref.set(updateObj, { merge: true });
 
