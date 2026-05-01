@@ -903,10 +903,11 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    cron.schedule("0 8 * * *", async () => {
-      console.log(">>> [CRON] Iniciando tarefa agendada de notificações...");
+    cron.schedule("0 11 * * *", async () => {
+      console.log(">>> [CRON] [LOG] Despertando às 11:00 UTC (08:00 Brasília) para notificações...");
       try {
-        await runDailyNotifications();
+        const result = await runDailyNotifications();
+        console.log(`>>> [CRON] Suceso: ${result.notified} notificações enviadas.`);
       } catch (err) {
         console.error(">>> [CRON] Erro ao rodar notificações:", err);
       }
