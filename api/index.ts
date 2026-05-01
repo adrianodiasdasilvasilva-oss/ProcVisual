@@ -90,18 +90,42 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
+        let userId = session.metadata?.userId;
         const subscriptionId = session.subscription as string;
         const customerEmail = session.customer_email || session.customer_details?.email;
         const customerPhone = session.customer_details?.phone;
+        const stripeCustomerId = session.customer as string;
 
-        console.log(`>>> [STRIPE] Sessão Completada. User: ${userId}, Email: ${customerEmail}, Sub: ${subscriptionId}`);
+        console.log(`>>> [STRIPE] Sessão Completada. User Metadata: ${userId}, Email: ${customerEmail}, Sub: ${subscriptionId}`);
+
+        // Fallback: Tentar encontrar usuário pelo email se o userId sumir do metadado
+        if (!userId && customerEmail) {
+          console.log(`>>> [STRIPE] Metadado userId ausente. Buscando usuário pelo email: ${customerEmail}`);
+          const userQuery = await db.collection("usuarios")
+            .where("email", "==", customerEmail)
+            .limit(1)
+            .get();
+          
+          if (!userQuery.empty) {
+            userId = userQuery.docs[0].id;
+            console.log(`>>> [STRIPE] Usuário encontrado via email match: ${userId}`);
+          } else {
+            // Tentar busca secundária
+            const userQuery2 = await db.collection("usuarios")
+              .where("stripeEmail", "==", customerEmail)
+              .limit(1)
+              .get();
+            if (!userQuery2.empty) {
+              userId = userQuery2.docs[0].id;
+              console.log(`>>> [STRIPE] Usuário encontrado via stripeEmail match: ${userId}`);
+            }
+          }
+        }
 
         if (userId) {
           console.log(`>>> [STRIPE] Ativando assinatura para o usuário: ${userId}`);
           
           let nextPaymentDate = null;
-          let stripeCustomerId = session.customer as string;
 
           try {
             const subscription = await getStripe().subscriptions.retrieve(subscriptionId);
@@ -142,6 +166,8 @@ app.post("/api/webhook", express.raw({ type: "application/json" }), async (req, 
             const welcomeMsg = `🚀 *Bem-vindo ao ProcVisual Premium!*\n\nSeu pagamento foi confirmado e sua conta já está ativa. Agora você pode registrar despesas direto por aqui!\n\n📖 *Guia de Uso*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".`;
             await sendWhatsApp(phoneToSend, welcomeMsg);
           }
+        } else {
+          console.error(`>>> [STRIPE] CRÍTICO: Não foi possível vincular o pagamento ao usuário. Email: ${customerEmail}`);
         }
         break;
       }
@@ -238,162 +264,119 @@ app.get("/api/subscription-details", async (req, res) => {
     const isAdmin = isUserAdmin(userId, userData?.email);
     const isException = isPhoneException(userData?.telefone);
 
+    console.log(`>>> [API-SUBS] Verificando User: ${userId} | Email: ${userData?.email} | Admin: ${isAdmin} | Exceção: ${isException}`);
+
     if (isAdmin || isException) {
-      console.log(`>>> [API] Usuário ${isAdmin ? 'ADMIN' : 'EXCEÇÃO'} detectado: ${userData?.email || userData?.telefone}. Garantindo status ativo.`);
-      await userDoc.ref.update({
+      console.log(`>>> [API-SUBS] Acesso priviligiado detectado (Admin/Exceção). Forçando Ativo.`);
+      await userDoc.ref.set({
         isActive: true,
         plan: 'premium',
         updatedAt: FieldValue.serverTimestamp()
-      });
-      return res.json({ status: 'active', plan: 'premium', isAdmin });
+      }, { merge: true });
+      return res.json({ status: 'active', plan: 'premium', isAdmin, source: 'admin_check' });
     }
 
-    if (userData?.subscriptionId || userData?.stripeCustomerId) {
+    // 1. Tentar via subscriptionId direto
+    if (userData?.subscriptionId) {
       try {
-        if (userData.subscriptionId) {
-          console.log(`>>> [API] Buscando assinatura via ID: ${userData.subscriptionId}`);
-          const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
-          const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-          const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+        console.log(`>>> [API-SUBS] Buscando via SubID: ${userData.subscriptionId}`);
+        const subscription = await getStripe().subscriptions.retrieve(userData.subscriptionId);
+        const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+        const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
 
-          // Sync Firestore with latest Stripe data
-          await userDoc.ref.update({ 
+        await userDoc.ref.set({ 
+          nextPaymentDate,
+          isActive,
+          plan: 'premium',
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        if (isActive) return res.json({ status: 'active', plan: 'premium', isActive, nextPaymentDate, source: 'sub_id' });
+      } catch (e: any) {
+        console.warn(`>>> [API-SUBS] Erro SubID ${userData.subscriptionId}:`, e.message);
+      }
+    }
+
+    // 2. Tentar via stripeCustomerId
+    if (userData?.stripeCustomerId) {
+      try {
+        console.log(`>>> [API-SUBS] Buscando via CustomerID: ${userData.stripeCustomerId}`);
+        const subs = await getStripe().subscriptions.list({
+          customer: userData.stripeCustomerId,
+          status: 'active',
+          limit: 1
+        });
+        
+        if (subs.data.length > 0) {
+          const sub = subs.data[0];
+          const nextPaymentDate = new Date((sub as any).current_period_end * 1000).toISOString();
+          await userDoc.ref.set({ 
+            subscriptionId: sub.id,
             nextPaymentDate,
-            isActive,
+            isActive: true,
             plan: 'premium',
             updatedAt: FieldValue.serverTimestamp()
-          });
+          }, { merge: true });
+          return res.json({ status: 'active', plan: 'premium', isActive: true, nextPaymentDate, source: 'customer_id' });
+        }
+      } catch (e: any) {
+        console.warn(`>>> [API-SUBS] Erro CustomerID ${userData.stripeCustomerId}:`, e.message);
+      }
+    }
 
-          return res.json({ 
-            status: isActive ? 'active' : 'inactive',
-            plan: 'premium',
-            isActive,
-            nextPaymentDate,
-            source: 'sub_id'
-          });
-        } else if (userData.stripeCustomerId) {
-          console.log(`>>> [API] Buscando assinatura via Customer ID: ${userData.stripeCustomerId}`);
-          const subscriptions = await getStripe().subscriptions.list({
-            customer: userData.stripeCustomerId,
-            status: 'all',
+    // 3. Tentar via Email Search (Fallback agressivo)
+    const emailsToTry = Array.from(new Set([
+      userData?.email,
+      userData?.stripeEmail,
+      'adrianodiasdasilva@yahoo.com.br',
+      'adrianodiasdasilva.silva@gmail.com'
+    ])).filter(Boolean);
+
+    console.log(`>>> [API-SUBS] Busca agressiva por email:`, emailsToTry);
+
+    for (const email of emailsToTry) {
+      try {
+        const customers = await getStripe().customers.list({ email: email as string, limit: 1 });
+        if (customers.data.length > 0) {
+          const customer = customers.data[0];
+          const subs = await getStripe().subscriptions.list({
+            customer: customer.id,
+            status: 'active',
             limit: 1
           });
-          const subscription = subscriptions.data[0];
-          if (subscription) {
-            const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-            const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-            await userDoc.ref.update({ 
-              subscriptionId: subscription.id,
+
+          if (subs.data.length > 0) {
+            const sub = subs.data[0];
+            console.log(`>>> [API-SUBS] Sucesso! Assinatura encontrada para ${email}`);
+            const nextPaymentDate = new Date((sub as any).current_period_end * 1000).toISOString();
+            
+            await userDoc.ref.set({ 
+              subscriptionId: sub.id,
+              stripeCustomerId: customer.id,
+              stripeEmail: email,
               nextPaymentDate,
-              isActive,
+              isActive: true,
               plan: 'premium',
               updatedAt: FieldValue.serverTimestamp()
-            });
-            return res.json({ 
-              status: isActive ? 'active' : 'inactive',
-              plan: 'premium',
-              isActive,
-              nextPaymentDate,
-              source: 'customer_id'
-            });
+            }, { merge: true });
+
+            return res.json({ status: 'active', plan: 'premium', isActive: true, nextPaymentDate, source: 'email_search', email });
           }
         }
       } catch (e: any) {
-        console.warn(`>>> [API] Erro ao buscar via ID ${userData.subscriptionId || userData.stripeCustomerId}, tentando via email...`);
+        console.warn(`>>> [API-SUBS] Erro busca email ${email}:`, e.message);
       }
     }
 
-    // Try searching Stripe by email as fallback
-    const emailsToTry = Array.from(new Set([
-        userData?.email,
-        userData?.stripeEmail,
-        'adrianodiasdasilva@yahoo.com.br',
-        'adrianodiasdasilva.silva@gmail.com'
-      ])).filter(Boolean);
-      
-      console.log(`>>> [API] Buscando assinatura para o usuário ${userId}. Emails a verificar:`, emailsToTry);
-      
-      for (const email of emailsToTry) {
-        try {
-          const customers = await getStripe().customers.list({
-            email: email as string,
-            limit: 1
-          });
+    // 4. Último suspiro: Verificar se houve pagamento recente mas sem assinatura recorrente (Checkout avulso se houver)
+    // (Omitido por enquanto para focar em assinaturas)
 
-          if (customers.data.length > 0) {
-            const customer = customers.data[0];
-            const subscriptions = await getStripe().subscriptions.list({
-              customer: customer.id,
-              status: 'active', // Only look for active ones to start
-              limit: 1
-            });
+    console.log(`>>> [API-SUBS] Nenhuma assinatura encontrada para o usuário ${userId}`);
+    await userDoc.ref.set({ isActive: false, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return res.json({ status: 'inactive', isActive: false, userId });
 
-            let subscription = subscriptions.data[0];
-            
-            // If no active ones, check all and pick most recent
-            if (!subscription) {
-              const allSubs = await getStripe().subscriptions.list({
-                customer: customer.id,
-                status: 'all',
-                limit: 5
-              });
-              subscription = allSubs.data[0];
-            }
-
-            if (subscription) {
-              console.log(`>>> [API] Assinatura encontrada para ${email}: ${subscription.id} (Status: ${subscription.status})`);
-              const nextPaymentDate = new Date((subscription as any).current_period_end * 1000).toISOString();
-              const isActive = subscription.status === 'active' || subscription.status === 'trialing';
-              
-              const finalUpdate = { 
-                subscriptionId: subscription.id,
-                stripeCustomerId: customer.id,
-                stripeEmail: email,
-                nextPaymentDate,
-                isActive,
-                plan: 'premium',
-                updatedAt: FieldValue.serverTimestamp()
-              };
-
-              await userDoc.ref.update(finalUpdate);
-              return res.json({ 
-                status: isActive ? 'active' : 'inactive', 
-                plan: 'premium', 
-                isActive, 
-                nextPaymentDate,
-                source: 'email_search', 
-                email 
-              });
-            }
-          }
-        } catch (searchError: any) {
-          console.warn(`>>> [API] Falha na busca pelo email ${email}:`, searchError.message);
-        }
-      }
-      
-      if (userData?.lastPayment) {
-        const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
-        const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
-        const now = new Date();
-        
-        if (nextDate > now) {
-          await userDoc.ref.update({ 
-            nextPaymentDate: nextDate.toISOString(),
-            isActive: true,
-            updatedAt: FieldValue.serverTimestamp()
-          });
-          return res.json({ nextPaymentDate: nextDate.toISOString(), source: 'internal_calculation' });
-        }
-      }
-
-      await userDoc.ref.update({ 
-        isActive: false,
-        updatedAt: FieldValue.serverTimestamp()
-      });
-
-      return res.json({ nextPaymentDate: null, isActive: false, message: "Nenhuma assinatura ativa encontrada." });
   } catch (error: any) {
-    console.error(">>> [API] Erro ao buscar detalhes da assinatura:", error.message);
+    console.error(">>> [API-SUBS] Erro Crítico:", error.message);
     res.status(500).json({ error: error.message });
   }
 });

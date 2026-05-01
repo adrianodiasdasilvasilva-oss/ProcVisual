@@ -50,6 +50,31 @@ export default function SubscriptionPaywall({ user, profile, onSignOut }: Subscr
     }
   };
 
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const verificarPagamento = async () => {
+    setIsVerifying(true);
+    try {
+      console.log('>>> [PAYWALL] Verificando pagamento manualmente...');
+      const response = await fetch(`/api/subscription-details?userId=${user.uid}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('>>> [PAYWALL] Resultado da verificação:', data);
+        if (data.status === 'active' || data.isActive) {
+          // O onSnapshot no App.tsx deve capturar a mudança no Firestore e liberar o acesso
+          // mas vamos recarregar para garantir
+          setTimeout(() => window.location.reload(), 1000);
+        } else {
+          alert('Ainda não detectamos seu pagamento no Stripe. Se você acabou de pagar, aguarde 1 minuto e tente novamente.');
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao verificar pagamento:', error);
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
   const benefits = [
     { title: 'Controle Ilimitado', desc: 'Lance quantas despesas e receitas desejar sem restrições.' },
     { title: 'IA & OCR Avançado', desc: 'Leitura automática de comprovantes via foto ou PDF.' },
@@ -129,10 +154,16 @@ export default function SubscriptionPaywall({ user, profile, onSignOut }: Subscr
                 Já realizou o pagamento? O acesso é liberado automaticamente em instantes.
               </p>
               <button 
-                onClick={() => window.location.reload()}
-                className="text-[10px] font-bold text-proc-cyan hover:underline uppercase tracking-widest"
+                onClick={verificarPagamento}
+                disabled={isVerifying}
+                className="text-[10px] font-bold text-proc-cyan hover:underline uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Já paguei, atualizar agora
+                {isVerifying ? (
+                  <>
+                    <Loader2 className="animate-spin" size={10} />
+                    Verificando...
+                  </>
+                ) : 'Já paguei, atualizar agora'}
               </button>
             </div>
 
