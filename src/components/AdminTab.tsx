@@ -19,6 +19,7 @@ interface UserProfile {
   nome: string;
   email: string;
   isActive: boolean;
+  manuallyBlocked?: boolean;
   dataCriacao?: any;
   dataAssinatura?: any;
   lastPayment?: any;
@@ -151,9 +152,11 @@ export default function AdminTab() {
 
   const handleToggleActive = async (user: UserProfile) => {
     setTogglingUserId(user.id);
+    const newActiveState = !user.isActive;
     try {
       await firestoreUpdateDoc(doc(db, 'usuarios', user.id), {
-        isActive: !user.isActive,
+        isActive: newActiveState,
+        manuallyBlocked: !newActiveState, // Se o admin desativou, bloqueia manualmente
         updatedAt: serverTimestamp()
       });
     } catch (err) {

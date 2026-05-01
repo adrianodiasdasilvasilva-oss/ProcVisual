@@ -263,6 +263,16 @@ app.get("/api/subscription-details", async (req, res) => {
     const userDoc = await db.collection("usuarios").doc(userId).get();
     const userData = userDoc.data();
 
+    // BLOQUEIO MANUAL: Se o admin desativou, não deixa o Stripe reativar sozinho
+    if (userData?.manuallyBlocked === true) {
+      console.log(`>>> [API-SUBS] Bloqueio manual ativo para ${userId}. Recusando reativação automática.`);
+      return res.json({ 
+        status: 'blocked', 
+        isActive: false, 
+        message: "Sua conta foi desativada por um administrador. Favor entrar em contato." 
+      });
+    }
+
     const isAdmin = isUserAdmin(userId, userData?.email);
     const isException = isPhoneException(userData?.telefone);
 
