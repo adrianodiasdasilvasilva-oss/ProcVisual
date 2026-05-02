@@ -700,7 +700,7 @@ async function runDailyNotifications(targetUserId?: string) {
     const todayStr = brazilTime.toISOString().split('T')[0];
     const today = new Date(todayStr + "T12:00:00Z");
     
-    console.log(`>>> [JOB] Iniciando processamento para: ${todayStr} (UTC: ${today.toISOString()}) ${targetUserId ? `| Target: ${targetUserId}` : ''}`);
+    console.log(`>>> [JOB] Ativado em: ${now.toISOString()} | Brasília: ${todayStr} | Target: ${targetUserId || 'Todos'}`);
     
     step = "query_lancamentos";
     let query: admin.firestore.Query;
@@ -716,7 +716,7 @@ async function runDailyNotifications(targetUserId?: string) {
     }
     
     const snapshot = await query.get();
-    console.log(`>>> [JOB] Snapshot obtido com ${snapshot.size} documentos.`);
+    console.log(`>>> [JOB] Localizados ${snapshot.size} lançamentos para análise.`);
 
     if (snapshot.empty) {
       console.log(">>> [JOB] Nenhum lançamento encontrado.");
@@ -726,7 +726,6 @@ async function runDailyNotifications(targetUserId?: string) {
     let processed = 0;
     let notified = 0;
     
-    // Cache de dados de usuário para otimizar se processando muitos registros
     const userCache: Record<string, any> = {};
 
     for (const docSnap of snapshot.docs) {
@@ -750,19 +749,25 @@ async function runDailyNotifications(targetUserId?: string) {
       const isAdmin = isUserAdmin(userId, userData?.email);
       const isException = isPhoneException(userData?.telefone || data.telefone);
 
+      // Se o usuário estiver inativo e não for admin/exceção, pula
       if (userData.isActive === false && !isAdmin && !isException) {
-        console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Usuário ${userId} inativo.`);
         continue; 
       }
 
       const telefone = userData.telefone || data.telefone;
-      if (!telefone) {
-        console.log(`>>> [JOB] Lançamento ${docSnap.id} ignorado: Telefone não encontrado.`);
-        continue;
-      }
+      if (!telefone) continue;
 
-      // Data do lançamento (YYYY-MM-DD)
-      const vencimento = new Date(data.data + "T12:00:00Z");
+      // Sanitização e parsing da data do lançamento
+      let dataLancamento = data.data;
+      if (dataLancamento instanceof admin.firestore.Timestamp) {
+        dataLancamento = dataLancamento.toDate().toISOString().split('T')[0];
+      }
+      
+      if (!dataLancamento || typeof dataLancamento !== 'string') continue;
+
+      const vencimento = new Date(dataLancamento + "T12:00:00Z");
+      if (isNaN(vencimento.getTime())) continue;
+
       let diffDays = -1;
 
       if (data.tipo === 'birthday') {
@@ -781,16 +786,20 @@ async function runDailyNotifications(targetUserId?: string) {
           }
         }
       } else {
-        const diffTime = vencimento.getTime() - today.getTime();
-        diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+        // Cálculo robusto de diferença de dias usando componentes UTC
+        const d_venc = Date.UTC(vencimento.getUTCFullYear(), vencimento.getUTCMonth(), vencimento.getUTCDate());
+        const d_today = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+        diffDays = Math.floor((d_venc - d_today) / (1000 * 60 * 60 * 24));
       }
 
       const valor = parseFloat(String(data.valor || 0).replace(',', '.'));
       const valorFormatado = valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 });
-
-      console.log(`>>> [JOB] Analisando: ${data.descricao} | Venc: ${data.data} | Diff: ${diffDays} dias`);
-
       const userName = userData?.nome || "Cliente";
+
+      // Log discreto para debug em caso de falha
+      if (diffDays >= 0 && diffDays <= 5) {
+        console.log(`>>> [JOB] [HIT] ${userName} | ${data.descricao} | Venc: ${dataLancamento} | Diff: ${diffDays}`);
+      }
 
       if (data.tipo === 'birthday') {
         if (diffDays === 1 && !data.notificadoAmanha) {
