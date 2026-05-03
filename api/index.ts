@@ -797,8 +797,8 @@ async function runDailyNotifications(targetUserId?: string) {
       const userName = userData?.nome || "Cliente";
 
       // Log discreto para debug em caso de falha
-      if (diffDays >= 0 && diffDays <= 5) {
-        console.log(`>>> [JOB] [HIT] ${userName} | ${data.descricao} | Venc: ${dataLancamento} | Diff: ${diffDays}`);
+      if (diffDays >= -1 && diffDays <= 5) {
+        console.log(`>>> [JOB] [HIT] ${userName} | ${data.descricao} | Venc: ${dataLancamento} | Diff: ${diffDays} | Pago: ${data.pago}`);
       }
 
       if (data.tipo === 'birthday') {
@@ -821,6 +821,16 @@ async function runDailyNotifications(targetUserId?: string) {
       } else {
         // Apenas despesas não pagas
         if (data.pago === true) continue;
+
+        // Notificação de atraso (1 dia após o vencimento)
+        if (diffDays === -1 && !data.notificadoAtrasada) {
+          const msg = `⚠️ *CONTA ATRASADA*\n👋🏻 Oi, ${userName}! \n\nIdentificamos que sua despesa no valor de R$ ${valorFormatado} venceu ONTEM (${dataLancamento}).\nCaso já tenha pago, ignore este aviso.\n\nNome: ${data.descricao || data.estabelecimento}`;
+          const res = await sendWhatsApp(telefone, msg);
+          if (res.success) {
+            await docSnap.ref.update({ notificadoAtrasada: true });
+            notified++;
+          }
+        }
 
         if (diffDays === 5 && !data.notificado5dias) {
           const msg = `👋🏻 Oi, ${userName}! Só um lembrete importante:\n\nSua despesa no valor de R$ ${valorFormatado} vence em 5 dias.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;
