@@ -46,11 +46,20 @@ export default function AdminTab() {
   const [lastCronStatus, setLastCronStatus] = useState<any>(null);
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'config', 'lastCronRun'), (snapshot) => {
-      if (snapshot.exists()) {
-        setLastCronStatus(snapshot.data());
+    if (!db) return;
+    
+    // Solo permitir el listener si el usuario es Admin (esto se verifica en las reglas, 
+    // pero aquí evitamos el error en consola si no lo es)
+    const unsubscribe = onSnapshot(doc(db, 'config', 'lastCronRun'), 
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setLastCronStatus(snapshot.data());
+        }
+      },
+      (error) => {
+        console.warn('>>> [ADMIN] Falha ao monitorar cron (pode ser falta de permissão):', error.message);
       }
-    });
+    );
     return () => unsubscribe();
   }, []);
 

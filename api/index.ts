@@ -453,44 +453,55 @@ app.use((req, res, next) => {
 // Novo: Robô de auto-despertar (Garante execução diária caso o cron interno falhe/durma)
 let lastWakeupCheck = 0;
 app.use(async (req, res, next) => {
+  // Skip for health checks and non-api calls to stay responsive
+  if (req.path === "/api/health" || !req.path.startsWith("/api")) return next();
+
   const now = Date.now();
   // Evitar checar o banco em cada requisição (limite de 1 check a cada 10 min)
   if (now - lastWakeupCheck < 10 * 60 * 1000) return next();
   lastWakeupCheck = now;
 
-  try {
-    const db = await initializeFirebaseAdmin();
-    if (!db) return next();
+  // Run wakeup logic without blocking the main request flow
+  (async () => {
+    try {
+      const db = await initializeFirebaseAdmin();
+      if (!db) return;
 
-    const lastRunDoc = await db.collection("config").doc("lastCronRun").get();
-    const lastRun = lastRunDoc.data();
-    
-    const nowBr = new Date(now - (3 * 60 * 60 * 1000));
-    const todayStr = nowBr.toISOString().split('T')[0];
-    const hourBr = nowBr.getUTCHours();
+      // Timeout de 5s para evitar travar se o Firestore estiver instável
+      const lastRunDoc = await Promise.race([
+        db.collection("config").doc("lastCronRun").get(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 5000))
+      ]) as any;
 
-    let needsRun = false;
-    if (!lastRun || !lastRun.timestamp) {
-      needsRun = true;
-    } else {
-      const lastRunDate = lastRun.timestamp.toDate();
-      const lastRunBr = new Date(lastRunDate.getTime() - (3 * 60 * 60 * 1000));
-      const lastRunStr = lastRunBr.toISOString().split('T')[0];
+      const lastRun = lastRunDoc.data();
       
-      // Se a última execução não foi hoje e já passou das 08:00 Brasília
-      if (lastRunStr !== todayStr && hourBr >= 8) {
-        needsRun = true;
-      }
-    }
+      const nowBr = new Date(now - (3 * 60 * 60 * 1000));
+      const todayStr = nowBr.toISOString().split('T')[0];
+      const hourBr = nowBr.getUTCHours();
 
-    if (needsRun && hourBr >= 8 && hourBr <= 22) {
-      console.log(`>>> [ROBÔ] Despertando sistema! Verificado que hoje (${todayStr}) as notificações ainda não rodaram.`);
-      // Executa em background para não atrasar a resposta do usuário
-      runDailyNotifications().catch(e => console.error(">>> [ROBÔ] Erro na execução automática:", e));
+      let needsRun = false;
+      if (!lastRun || !lastRun.timestamp) {
+        needsRun = true;
+      } else {
+        const lastRunDate = lastRun.timestamp.toDate();
+        const lastRunBr = new Date(lastRunDate.getTime() - (3 * 60 * 60 * 1000));
+        const lastRunStr = lastRunBr.toISOString().split('T')[0];
+        
+        // Se a última execução não foi hoje e já passou das 08:00 Brasília
+        if (lastRunStr !== todayStr && hourBr >= 8) {
+          needsRun = true;
+        }
+      }
+
+      if (needsRun && hourBr >= 8 && hourBr <= 22) {
+        console.log(`>>> [ROBÔ] Despertando sistema! Verificado que hoje (${todayStr}) as notificações ainda não rodaram.`);
+        await runDailyNotifications();
+      }
+    } catch (e: any) {
+      console.warn(">>> [ROBÔ] Aviso na verificação automática:", e.message);
     }
-  } catch (e) {
-    console.error(">>> [ROBÔ] Erro ao verificar agendamento:", e);
-  }
+  })();
+
   next();
 });
 

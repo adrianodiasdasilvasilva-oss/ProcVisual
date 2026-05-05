@@ -86,5 +86,11 @@ service cloud.firestore {
                     (request.auth == null && request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
+
+    // Config Collection (Last Cron Run monitoring)
+    match /config/{configId} {
+      allow read: if isAdmin();
+      allow write: if false; // Only backend (admin SDK) can write
+    }
   }
 }
