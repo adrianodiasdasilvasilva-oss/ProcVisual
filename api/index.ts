@@ -450,6 +450,50 @@ app.use((req, res, next) => {
   next();
 });
 
+// Novo: Robô de auto-despertar (Garante execução diária caso o cron interno falhe/durma)
+let lastWakeupCheck = 0;
+app.use(async (req, res, next) => {
+  const now = Date.now();
+  // Evitar checar o banco em cada requisição (limite de 1 check a cada 10 min)
+  if (now - lastWakeupCheck < 10 * 60 * 1000) return next();
+  lastWakeupCheck = now;
+
+  try {
+    const db = await initializeFirebaseAdmin();
+    if (!db) return next();
+
+    const lastRunDoc = await db.collection("config").doc("lastCronRun").get();
+    const lastRun = lastRunDoc.data();
+    
+    const nowBr = new Date(now - (3 * 60 * 60 * 1000));
+    const todayStr = nowBr.toISOString().split('T')[0];
+    const hourBr = nowBr.getUTCHours();
+
+    let needsRun = false;
+    if (!lastRun || !lastRun.timestamp) {
+      needsRun = true;
+    } else {
+      const lastRunDate = lastRun.timestamp.toDate();
+      const lastRunBr = new Date(lastRunDate.getTime() - (3 * 60 * 60 * 1000));
+      const lastRunStr = lastRunBr.toISOString().split('T')[0];
+      
+      // Se a última execução não foi hoje e já passou das 08:00 Brasília
+      if (lastRunStr !== todayStr && hourBr >= 8) {
+        needsRun = true;
+      }
+    }
+
+    if (needsRun && hourBr >= 8 && hourBr <= 22) {
+      console.log(`>>> [ROBÔ] Despertando sistema! Verificado que hoje (${todayStr}) as notificações ainda não rodaram.`);
+      // Executa em background para não atrasar a resposta do usuário
+      runDailyNotifications().catch(e => console.error(">>> [ROBÔ] Erro na execução automática:", e));
+    }
+  } catch (e) {
+    console.error(">>> [ROBÔ] Erro ao verificar agendamento:", e);
+  }
+  next();
+});
+
 // 4. Lazy Firebase Init for API routes
 app.use("/api", async (req, res, next) => {
   if (!admin.apps.length && !["/health", "/debug-vars"].includes(req.path)) {
@@ -807,10 +851,18 @@ async function runDailyNotifications(targetUserId?: string) {
         if (bDay === tDay && bMonth === tMonth) {
           diffDays = 0;
         } else {
-          const tomorrow = new Date(today);
-          tomorrow.setUTCDate(today.getUTCDate() + 1);
-          if (bDay === tomorrow.getUTCDate() && bMonth === tomorrow.getUTCMonth()) {
+          // Checar 1 dia antes
+          const d1 = new Date(today);
+          d1.setUTCDate(today.getUTCDate() + 1);
+          if (bDay === d1.getUTCDate() && bMonth === d1.getUTCMonth()) {
             diffDays = 1;
+          } else {
+            // Checar 5 dias antes
+            const d5 = new Date(today);
+            d5.setUTCDate(today.getUTCDate() + 5);
+            if (bDay === d5.getUTCDate() && bMonth === d5.getUTCMonth()) {
+              diffDays = 5;
+            }
           }
         }
       } else {
@@ -830,6 +882,14 @@ async function runDailyNotifications(targetUserId?: string) {
       }
 
       if (data.tipo === 'birthday') {
+        if (diffDays === 5 && !data.notificado5dias) {
+          const msg = `🎉 *LEMBRETE DE ANIVERSÁRIO*\n👋🏻 Oi, ${userName}! \n\nEm 5 dias será o aniversário de ${data.descricao || data.estabelecimento}! 🎂 Que tal já preparar uma surpresa?`;
+          const res = await sendWhatsApp(telefone, msg);
+          if (res.success) {
+            await docSnap.ref.update({ notificado5dias: true });
+            notified++;
+          }
+        }
         if (diffDays === 1 && !data.notificadoAmanha) {
           const msg = `Olá, ${userName}! Amanhã é aniversário do(a) ${data.descricao || data.estabelecimento}. Não esqueça de enviar seus parabéns! 🎂🥳`;
           const res = await sendWhatsApp(telefone, msg);
@@ -849,16 +909,6 @@ async function runDailyNotifications(targetUserId?: string) {
       } else {
         // Apenas despesas não pagas
         if (data.pago === true) continue;
-
-        // Notificação de atraso (1 dia após o vencimento)
-        if (diffDays === -1 && !data.notificadoAtrasada) {
-          const msg = `⚠️ *CONTA ATRASADA*\n👋🏻 Oi, ${userName}! \n\nIdentificamos que sua despesa no valor de R$ ${valorFormatado} venceu ONTEM (${dataLancamento}).\nCaso já tenha pago, ignore este aviso.\n\nNome: ${data.descricao || data.estabelecimento}`;
-          const res = await sendWhatsApp(telefone, msg);
-          if (res.success) {
-            await docSnap.ref.update({ notificadoAtrasada: true });
-            notified++;
-          }
-        }
 
         if (diffDays === 5 && !data.notificado5dias) {
           const msg = `👋🏻 Oi, ${userName}! Só um lembrete importante:\n\nSua despesa no valor de R$ ${valorFormatado} vence em 5 dias.\nCategoria: ${data.categoria}\nNome: ${data.descricao || data.estabelecimento}`;

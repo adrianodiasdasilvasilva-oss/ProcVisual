@@ -43,6 +43,16 @@ export default function AdminTab() {
   const [selectedUserForMessage, setSelectedUserForMessage] = useState('');
   const [customMessage, setCustomMessage] = useState('');
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [lastCronStatus, setLastCronStatus] = useState<any>(null);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'config', 'lastCronRun'), (snapshot) => {
+      if (snapshot.exists()) {
+        setLastCronStatus(snapshot.data());
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const path = 'usuarios';
@@ -376,7 +386,15 @@ export default function AdminTab() {
       <div className="bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
         <div className="p-6 border-b border-white/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
-            <h3 className="text-xl font-bold text-proc-text-main">Gestão de Usuários</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-xl font-bold text-proc-text-main">Gestão de Usuários</h3>
+              {lastCronStatus && (
+                <div className={`text-[10px] flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${lastCronStatus.status === 'success' ? 'bg-proc-green/10 border-proc-green/30 text-proc-green' : 'bg-proc-cyan/10 border-proc-cyan/30 text-proc-cyan'}`}>
+                  <div className={`w-1.5 h-1.5 rounded-full ${lastCronStatus.status === 'success' ? 'bg-proc-green animate-pulse' : 'bg-proc-cyan animate-pulse'}`} />
+                  Último Envio: {lastCronStatus.timestamp?.toDate().toLocaleString('pt-BR')} | Notificados: {lastCronStatus.results?.notified || 0}
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2 mt-2">
               <input 
                 type="text"
