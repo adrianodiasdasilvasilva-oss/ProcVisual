@@ -37,7 +37,22 @@ export function isPhoneException(phone?: string) {
 }
 
 // Global Cache for Firebase Admin
-let dbAdmin: any = null; // We keep it local to index.ts for the middleware check if needed, but it will be set by the new initializeFirebaseAdmin
+let dbAdmin: any = null; 
+
+async function logCronExecution(status: string, results?: any) {
+  try {
+    const db = await initializeFirebaseAdmin();
+    if (!db) return;
+    await db.collection("config").doc("lastCronRun").set({
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      status,
+      results: results || {},
+      environment: process.env.NODE_ENV || 'unknown'
+    }, { merge: true });
+  } catch (e) {
+    console.error(">>> [CRON] Erro ao logar execução:", e);
+  }
+}
 
 const app = express();
 const WHAPI_BASE_URL = "https://gate.whapi.cloud";
@@ -702,20 +717,29 @@ async function runDailyNotifications(targetUserId?: string) {
     
     console.log(`>>> [JOB] Ativado em: ${now.toISOString()} | Brasília: ${todayStr} | Target: ${targetUserId || 'Todos'}`);
     
+    // Log de início no Firestore para monitoramento
+    if (!targetUserId) await logCronExecution("started");
+
     step = "query_lancamentos";
     let query: admin.firestore.Query;
     if (targetUserId) {
       query = db.collection("lancamentos")
         .where("userId", "==", targetUserId)
         .where("tipo", "in", ["expense", "birthday", "despesa"])
-        .limit(500);
+        .where("pago", "==", false);
     } else {
+      // Para todos, focamos nos não pagos
+      // E podemos filtrar por data para não pegar lixo antigo (ex: data >= hoje - 5 dias)
+      const fiveDaysAgo = new Date(today.getTime() - (5 * 24 * 60 * 60 * 1000));
+      const fiveDaysAgoStr = fiveDaysAgo.toISOString().split('T')[0];
+      
       query = db.collection("lancamentos")
         .where("tipo", "in", ["expense", "birthday", "despesa"])
-        .limit(500);
+        .where("pago", "==", false)
+        .where("data", ">=", fiveDaysAgoStr);
     }
     
-    const snapshot = await query.get();
+    const snapshot = await query.limit(500).get();
     console.log(`>>> [JOB] Localizados ${snapshot.size} lançamentos para análise.`);
 
     if (snapshot.empty) {
@@ -751,11 +775,15 @@ async function runDailyNotifications(targetUserId?: string) {
 
       // Se o usuário estiver inativo e não for admin/exceção, pula
       if (userData.isActive === false && !isAdmin && !isException) {
+        console.log(`>>> [JOB] Ignorado: Usuário ${userId} (${userData.email}) inativo e sem privilégios.`);
         continue; 
       }
 
       const telefone = userData.telefone || data.telefone;
-      if (!telefone) continue;
+      if (!telefone) {
+        console.log(`>>> [JOB] Ignorado: Telefone não encontrado para despesa ${docSnap.id} do usuário ${userId}.`);
+        continue;
+      }
 
       // Sanitização e parsing da data do lançamento
       let dataLancamento = data.data;
@@ -860,9 +888,11 @@ async function runDailyNotifications(targetUserId?: string) {
     }
 
     console.log(`>>> [JOB] Finalizado. Processados: ${processed}, Notificados: ${notified}`);
+    if (!targetUserId) await logCronExecution("success", { processed, notified });
     return { processed, notified };
   } catch (e: any) {
     console.error(`>>> [JOB] Erro no passo ${step}:`, e.message);
+    if (!targetUserId) await logCronExecution("error", { step, error: e.message });
     throw new Error(`[Step: ${step}] ${e.message}`);
   }
 }
@@ -918,13 +948,23 @@ if (!process.env.VERCEL) {
     });
     
     // Cron Job (Local only)
-    cron.schedule("0 11 * * *", async () => {
-      console.log(">>> [CRON] [LOG] Despertando às 11:00 UTC (08:00 Brasília) para notificações...");
-      try {
-        const result = await runDailyNotifications();
-        console.log(`>>> [CRON] Suceso: ${result.notified} notificações enviadas.`);
-      } catch (err) {
-        console.error(">>> [CRON] Erro ao rodar notificações:", err);
+    // Roda de hora em hora para garantir que se o servidor dormir às 8h, ele tente novamente
+    cron.schedule("0 * * * *", async () => {
+      const now = new Date();
+      const brHour = new Date(now.getTime() - (3 * 60 * 60 * 1000)).getUTCHours();
+      
+      console.log(`>>> [CRON] Check de hora em hora: UTC ${now.getUTCHours()}h | Brasília ${brHour}h`);
+      
+      // Permitir execução automática apenas entre 08h e 22h Brasília
+      if (brHour >= 8 && brHour <= 22) {
+        try {
+          const result = await runDailyNotifications();
+          console.log(`>>> [CRON] Sucesso: ${result.notified} notificações enviadas.`);
+        } catch (err) {
+          console.error(">>> [CRON] Erro ao rodar notificações:", err);
+        }
+      } else {
+        console.log(">>> [CRON] Fora do horário permitido (08h às 22h). Pulando.");
       }
     });
   };
