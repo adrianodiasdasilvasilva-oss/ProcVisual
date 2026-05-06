@@ -11,9 +11,9 @@ export default async function handler(req: any, res: any) {
   try {
     const data = req.body;
     
-    // Log do evento se não houver mensagens diretas
     if (!data?.messages) {
-      console.log(">>> [WH-WA] Payload sem mensagens detectado. Eventos:", Object.keys(data || {}));
+      console.log(">>> [WH-WA] Payload sem mensagens detectado.");
+      return res.status(200).json({ ok: true });
     }
 
     const message = data?.messages?.[0];
@@ -24,8 +24,6 @@ export default async function handler(req: any, res: any) {
 
     const numero = message.from; 
     const type = message.type;
-    console.log(`>>> [WH-WA] Mensagem de ${numero} tipo ${type}`);
-
     const db = await initializeFirebaseAdmin();
 
     if (!db) {
@@ -33,142 +31,98 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
-    console.log(">>> [WH-WA] Buscando usuário...");
     // Normalize incoming number
     const rawNumero = String(numero || "").split('@')[0];
     const cleanIncoming = rawNumero.replace(/\D/g, "");
     
-    // Brazilian normalization: handling 55 and the 9th digit
+    // Brazilian normalization
     let shortIncoming = cleanIncoming;
     if (cleanIncoming.startsWith('55')) {
       shortIncoming = cleanIncoming.substring(2);
     }
     
-    // Normalize further: if starts with 1-9 (DDD), it could be a Brazilian number without 55
-    console.log(`>>> [WH-WA] Raw: ${numero} -> Clean: ${cleanIncoming} (Short: ${shortIncoming})`);
+    console.log(`>>> [WH-WA] Raw: ${numero} -> Clean: ${cleanIncoming}`);
 
     // Search for user
     let userDoc: any = null;
-    let userData: any = null;
-
-    // 1. Try exact matches in sequence
     const possibleMatches = [cleanIncoming, shortIncoming];
     
-    // If it has 11 digits and starts with a DDD >= 11, try the 10-digit version (no 9th digit)
     if (shortIncoming.length === 11 && parseInt(shortIncoming.substring(0, 2)) >= 11) {
-      const noNinth = shortIncoming.substring(0, 2) + shortIncoming.substring(3);
-      possibleMatches.push(noNinth);
-      console.log(`>>> [WH-WA] Digit 9 treatment (11->10): Adding ${noNinth} to search`);
-    } 
-    // If it has 10 digits, try adding the 9th digit (only if DDD >= 11)
-    else if (shortIncoming.length === 10 && parseInt(shortIncoming.substring(0, 2)) >= 11) {
-      const withNinth = shortIncoming.substring(0, 2) + "9" + shortIncoming.substring(2);
-      possibleMatches.push(withNinth);
-      console.log(`>>> [WH-WA] Digit 9 treatment (10->11): Adding ${withNinth} to search`);
+      possibleMatches.push(shortIncoming.substring(0, 2) + shortIncoming.substring(3));
+    } else if (shortIncoming.length === 10 && parseInt(shortIncoming.substring(0, 2)) >= 11) {
+      possibleMatches.push(shortIncoming.substring(0, 2) + "9" + shortIncoming.substring(2));
     }
 
     for (const telToTry of possibleMatches) {
       if (!userDoc) {
         const snap = await db.collection("usuarios").where("telefone", "==", telToTry).get();
         if (!snap.empty) {
-          console.log(`>>> [WH-WA] Usuário encontrado via Query (${telToTry})`);
-          const activeUser = snap.docs.find(d => d.data().isActive === true);
-          userDoc = activeUser || snap.docs[0];
+          userDoc = snap.docs.find(d => d.data().isActive === true) || snap.docs[0];
         }
       }
     }
 
-    // 2. Fallback: scan with deep normalization
     if (!userDoc) {
-       console.log(">>> [WH-WA] Usuário não encontrado em queries diretas. Iniciando scan profundo...");
+       console.log(">>> [WH-WA] Scan profundo...");
        const snapAll = await db.collection("usuarios").limit(1000).get();
        userDoc = snapAll.docs.find(doc => {
          const d = doc.data();
          let tel = String(d.telefone || "").replace(/\D/g, "");
          if (!tel) return false;
-         
          const sTel = tel.startsWith('55') ? tel.substring(2) : tel;
-         
-         // Direct match
          if (tel === cleanIncoming || sTel === shortIncoming) return true;
-         
-         // 9th digit flexibility match
+         // 9th digit flexibility
          const isUserNinth = sTel.length === 11 && parseInt(sTel.substring(0, 2)) >= 11;
          const isIncomingNinth = shortIncoming.length === 11 && parseInt(shortIncoming.substring(0, 2)) >= 11;
-         
-         if (isUserNinth && !isIncomingNinth && shortIncoming.length === 10) {
-           const userNoNinth = sTel.substring(0, 2) + sTel.substring(3);
-           return userNoNinth === shortIncoming;
-         }
-         
-         if (!isUserNinth && isIncomingNinth && sTel.length === 10) {
-           const incomingNoNinth = shortIncoming.substring(0, 2) + shortIncoming.substring(3);
-           return incomingNoNinth === sTel;
-         }
-         
+         if (isUserNinth && !isIncomingNinth && shortIncoming.length === 10) return (sTel.substring(0, 2) + sTel.substring(3)) === shortIncoming;
+         if (!isUserNinth && isIncomingNinth && sTel.length === 10) return (shortIncoming.substring(0, 2) + shortIncoming.substring(3)) === sTel;
          return false;
        });
     }
 
-    userData = userDoc ? userDoc.data() : null;
+    let userData = userDoc ? userDoc.data() : null;
+    const userId = userDoc ? userDoc.id : "whatsapp_pending";
 
-    if (!userData) {
-      console.log(`>>> [WH-WA] Usuário NÃO cadastrado: ${cleanIncoming}. Salvando como pendente.`);
-      // Continuar processamento mas marcar como whatsapp_pending para ser resgatado depois
-      const userId = "whatsapp_pending";
-      
-      if (type === 'text') {
-        const texto = message.text?.body || message.body || "";
-        if (texto.toLowerCase().trim() === 'ajuda') {
-          const guide = '📖 *Guia de Uso - ProcVisual*\n\nVocê ainda não tem uma conta vinculada, mas pode registrar despesas!\n\nEnvie:\n1️⃣ *Texto:* "Almoço 35.00"\n2️⃣ *Áudio:* Fale o item e o valor.\n3️⃣ *Foto:* Envie o comprovante.\n\n*Depois, crie sua conta no site e vincule seu número para ver seus lançamentos!*';
-          await sendWhatsAppMessage(numero, guide);
-        } else {
-          await processText(db, userId, numero, texto, message.timestamp, null);
-        }
-      } else if (type === 'image') {
-        const imageUrl = message.image?.link;
-        if (imageUrl) await processImage(db, userId, numero, imageUrl, message.timestamp);
-      } else if (type === 'audio' || type === 'voice') {
-        const audioUrl = message.audio?.link || message.voice?.link;
-        if (audioUrl) await processAudio(db, userId, numero, audioUrl, message.timestamp);
-      }
-      
-      return res.status(200).json({ ok: true });
+    // Enviar guia automático para novos usuários (uma única vez)
+    if (userDoc && userData && !userData.whatsappGuideSent) {
+      const guide = '👋 *Olá! Bem-vindo ao ProcVisual no WhatsApp!*\n\nIdentificamos que esta é sua primeira interação. Veja como posso te ajudar:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Aluguel vencimento 10/05 valor 1200"\n2️⃣ *Áudio:* Fale o item e o valor (ex: "Posto de gasolina, cem reais").\n3️⃣ *Foto:* Envie uma foto legível do seu comprovante ou cupom fiscal.\n\n✅ *Dica:* Se faltar alguma informação (como o valor), eu te perguntarei em seguida!\n\n_Para ver este guia novamente, digite *ajuda*._';
+      await sendWhatsAppMessage(numero, guide);
+      await userDoc.ref.update({ whatsappGuideSent: true });
     }
 
-    const userId = userDoc!.id;
-    const isAdmin = isUserAdmin(userId, userData.email);
-    const isException = isPhoneException(cleanIncoming) || isPhoneException(userData.telefone);
+    // Buscar pendências associadas a este número
+    const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
+    const pendingSnap = await pendingRef.get();
+    const pendingExpense = pendingSnap.exists ? pendingSnap.data() : (userData?.pendingWhatsAppExpense || null);
 
-    console.log(`>>> [WH-WA] Verificando Acesso: ${userData.email} (Admin: ${isAdmin}, Exception: ${isException})`);
-
-    if (userData.isActive === false && !isAdmin && !isException) {
-      console.log(`>>> [WH-WA] Usuário INATIVO: ${userData.email}`);
-      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nSua conta na ProcVisual está inativa. Para continuar registrando despesas via WhatsApp, por favor regularize sua assinatura no dashboard do site.');
+    if (userData && userData.isActive === false && !isUserAdmin(userId, userData.email) && !isPhoneException(cleanIncoming)) {
+      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nPor favor regularize sua assinatura no site.');
       return res.status(200).json({ ok: true });
     }
-
-    console.log(`>>> [WH-WA] Usuário identificado: ${userId} (${userData.email})`);
 
     if (type === 'text') {
-      const texto = message.text?.body || message.body || "";
-      if (texto.toLowerCase().trim() === 'ajuda') {
-        const guide = '📖 *Guia de Uso - ProcVisual*\n\nVocê pode registrar despesas enviando:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Internet 120 amanhã"\n2️⃣ *Áudio:* Fale o que comprou e o valor.\n3️⃣ *Foto:* Envie uma foto do cupom fiscal ou comprovante.\n\n*Dica:* Para parcelas, diga algo como "Geladeira 2000 em 10x".';
+      const texto = (message.text?.body || message.body || "").trim();
+      if (texto.toLowerCase() === 'ajuda') {
+        const guide = '📖 *Guia ProcVisual*\n\nEnvie texto ("Almoço 35"), áudio ou foto do cupom.\n\n*Comandos:* "cancelar" (limpa pendência).';
         await sendWhatsAppMessage(numero, guide);
+      } else if (texto.toLowerCase() === 'cancelar' && pendingExpense) {
+        await pendingRef.delete();
+        if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
+        await sendWhatsAppMessage(numero, "❌ Cancelado. O que deseja registrar agora?");
       } else {
-        await processText(db, userId, numero, texto, message.timestamp, userData);
+        await processText(db, userId, numero, texto, message.timestamp, userData, pendingExpense);
       }
     } else if (type === 'image') {
       const imageUrl = message.image?.link;
-      if (imageUrl) await processImage(db, userId, numero, imageUrl, message.timestamp);
+      if (imageUrl) await processImage(db, userId, numero, imageUrl, message.timestamp, pendingExpense);
     } else if (type === 'audio' || type === 'voice') {
       const audioUrl = message.audio?.link || message.voice?.link;
-      if (audioUrl) await processAudio(db, userId, numero, audioUrl, message.timestamp);
+      if (audioUrl) await processAudio(db, userId, numero, audioUrl, message.timestamp, pendingExpense);
     }
 
     return res.status(200).json({ ok: true });
   } catch (error: any) {
-    console.error(">>> [WH-WA] Erro crítico:", error.message);
+    console.error(">>> [WH-WA] Erro:", error.message);
     return res.status(200).json({ ok: true });
   }
 }
@@ -176,31 +130,17 @@ export default async function handler(req: any, res: any) {
 async function sendWhatsAppMessage(to: string, body: string) {
   const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
   if (!WHAPI_TOKEN) return;
-  
-  // Clean number similar to robust sendWhatsApp in index.ts
   let cleanNumber = to.split('@')[0].replace(/\D/g, "");
-  if (cleanNumber.length === 10 || cleanNumber.length === 11) {
-    cleanNumber = "55" + cleanNumber;
-  }
+  if (cleanNumber.length === 10 || cleanNumber.length === 11) cleanNumber = "55" + cleanNumber;
   const recipient = `${cleanNumber}@s.whatsapp.net`;
-  
   try {
-    const response = await fetch('https://gate.whapi.cloud/messages/text', {
+    await fetch('https://gate.whapi.cloud/messages/text', {
       method: "POST",
       headers: { "Authorization": `Bearer ${WHAPI_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        to: recipient, 
-        body,
-        typing_delay: 2
-      }),
+      body: JSON.stringify({ to: recipient, body, typing_delay: 2 }),
     });
-    if (!response.ok) {
-      console.error(`>>> [WH-WA] Erro Whapi (${response.status}):`, await response.text());
-    } else {
-      console.log(`>>> [WH-WA] Mensagem enviada para ${recipient}`);
-    }
   } catch (e: any) {
-    console.error(">>> [WH-WA] Erro ao enviar mensagem:", e.message);
+    console.error(">>> [WH-WA] Erro envio:", e.message);
   }
 }
 
@@ -208,317 +148,153 @@ const EXPENSE_SCHEMA: any = {
   type: Type.OBJECT,
   properties: {
     descricao: { type: Type.STRING, description: "O que foi pago" },
-    valor: { type: Type.NUMBER, description: "Valor total ou da parcela" },
-    categoria: { type: Type.STRING, description: "Categoria: Alimentação, Transporte, Moradia, Assinaturas, Saúde, Lazer, Educação, Outros" },
-    parcela: { type: Type.INTEGER, description: "Parcela atual" },
-    totalParcelas: { type: Type.INTEGER, description: "Total de parcelas" },
-    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD" }
+    valor: { type: Type.NUMBER, description: "Valor numérico" },
+    categoria: { type: Type.STRING, description: "Categoria da despesa" },
+    parcela: { type: Type.INTEGER },
+    totalParcelas: { type: Type.INTEGER },
+    data: { type: Type.STRING }
   },
-  required: ["descricao", "categoria", "parcela", "totalParcelas"]
+  required: ["categoria", "parcela", "totalParcelas"]
 };
 
 function extractJSON(text: string) {
   try {
-    // Tenta extrair JSON de blocos de código markdown se existirem
-    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/);
-    const cleanText = match ? match[1] : text;
-    return JSON.parse(cleanText.trim());
-  } catch (e) {
-    console.error(">>> [WH-WA] Erro ao extrair JSON:", e);
-    // Tenta encontrar algo que pareça um objeto JSON { ... }
-    const fallbackMatch = text.match(/\{[\s\S]*\}/);
-    if (fallbackMatch) {
-      try {
-        return JSON.parse(fallbackMatch[0]);
-      } catch (e2) {
-        return null;
-      }
-    }
-    return null;
-  }
+    const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
+    return JSON.parse(match ? (match[1] || match[0]) : text);
+  } catch (e) { return null; }
 }
 
-async function generateWithFallback(ai: any, prompt: any, systemInstruction?: string) {
-  const modelName = "gemini-3-flash-preview";
-  
+async function generateWithFallback(ai: any, prompt: any, sysInst: string) {
   try {
-    console.log(`>>> [WH-WA] Tentando modelo: ${modelName}`);
-    
-    // Format contents correctly for the new SDK
-    let contents: any;
-    if (Array.isArray(prompt)) {
-      contents = { parts: prompt };
-    } else if (typeof prompt === 'string') {
-      contents = prompt;
-    } else {
-      contents = prompt;
-    }
-
     const response = await ai.models.generateContent({ 
-      model: modelName,
-      contents: contents,
-      config: {
-        systemInstruction: systemInstruction || "Você é um assistente financeiro preciso.",
-        responseMimeType: "application/json",
-        responseSchema: EXPENSE_SCHEMA
-      }
+      model: "gemini-3-flash-preview",
+      contents: Array.isArray(prompt) ? { parts: prompt } : prompt,
+      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: EXPENSE_SCHEMA }
     });
     return response;
-  } catch (e: any) {
-    console.error(`>>> [WH-WA] Erro no modelo ${modelName}:`, e.message);
-    
-    // Fallback to gemini-3.1-pro-preview if flash fails
-    try {
-      console.log(`>>> [WH-WA] Tentando fallback: gemini-3.1-pro-preview`);
-      const response = await ai.models.generateContent({ 
-        model: "gemini-3.1-pro-preview",
-        contents: typeof prompt === 'string' ? prompt : { parts: prompt },
-        config: {
-          systemInstruction: systemInstruction || "Você é um assistente financeiro preciso.",
-          responseMimeType: "application/json",
-          responseSchema: EXPENSE_SCHEMA
-        }
-      });
-      return response;
-    } catch (e2: any) {
-      console.error(`>>> [WH-WA] Erro no fallback:`, e2.message);
-      throw e;
-    }
+  } catch (e) {
+    return await ai.models.generateContent({ 
+      model: "gemini-3.1-pro-preview",
+      contents: Array.isArray(prompt) ? { parts: prompt } : prompt,
+      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: EXPENSE_SCHEMA }
+    });
   }
 }
 
-async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number, userData: any) {
-  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (!apiKey) {
-    console.error(">>> [WH-WA] GEMINI_API_KEY não configurada!");
-    return;
-  }
+async function processText(db: any, userId: string, numero: string, texto: string, timestamp: number, userData: any, pending: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return;
+  const ai = new GoogleGenAI({ apiKey });
+  const cleanIncoming = numero.split('@')[0].replace(/\D/g, "");
+  const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
 
-  // 1. Verificar se é apenas um número e se há despesa pendente
-  const cleanText = texto.trim().replace(',', '.');
-  const isJustNumberMatch = cleanText.match(/^\d+([.]\d+)?$/);
-  
-  if (isJustNumberMatch && userData?.pendingWhatsAppExpense) {
-    const valor = parseFloat(isJustNumberMatch[0]);
-    if (valor > 0) {
-      console.log(`>>> [WH-WA] Aplicando valor ${valor} à despesa pendente: ${userData.pendingWhatsAppExpense.descricao}`);
-      const dataToSave = {
-        ...userData.pendingWhatsAppExpense,
-        valor: valor
-      };
-      await saveAndConfirm(db, userId, numero, dataToSave, "whatsapp", timestamp);
-      
-      // Limpar pendência
-      await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: FieldValue.delete()
-      });
-      return;
-    }
-  }
-
-  console.log(">>> [WH-WA] Usando API Key (prefixo):", apiKey.substring(0, 4) + "...");
-
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const now = new Date();
-    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-    const todayStr = brazilTime.toISOString().split('T')[0];
-
-    const prompt = `Analise a mensagem do usuário: "${texto}". Hoje é ${todayStr}. 
-    Extraia os dados da despesa para o formato JSON. 
-    
-    ESTRITAMENTE OBRIGATÓRIO - REGRA DE OURO:
-    1. Se NÃO houver um valor numérico ou menção explícita a valor (ex: "50", "R$ 10", "vinte reais") na mensagem, o campo "valor" DEVE ser null.
-    2. NUNCA, SOB HIPÓTESE ALGUMA, INVENTE UM VALOR. Se o usuário disse "agua vence amanhã", o valor é NULL.
-    3. Não assuma valores padrão (como 0, 1 ou 100).
-    4. Se houver dúvida sobre o valor, retorne null no campo "valor".`;
-    
-    const sysInst = "Você é um extrator de dados financeiros ultra-preciso. Sua regra mais importante é: NUNCA invente valores. Se o usuário não informou um valor claramente na mensagem, o campo 'valor' no JSON deve ser null, sem exceções.";
-    const response = await generateWithFallback(ai, prompt, sysInst);
-    const result = extractJSON(response.text);
-    console.log(`>>> [WH-WA] Resultado IA para "${texto}":`, JSON.stringify(result));
-    
-    // Safety check: Se a mensagem não contém dígitos nem palavras de valor, anular o valor alucinado pela IA
-    const hasNumber = /\d/.test(texto) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|cem|mil|reais|real)/i.test(texto);
-    if (!hasNumber && result && result.valor !== null) {
-      console.log(`>>> [WH-WA] Alucinação detectada! IA inventou valor sem números na mensagem. Anulando valor.`);
-      result.valor = null;
-    }
-
-    // Tratar valor 0 como nulo para forçar a pergunta
-    if (result && (result.valor === 0 || result.valor === "0")) {
-      result.valor = null;
-    }
-
-    if (result && result.valor !== null && result.valor !== undefined) {
-      // Garantir que valor seja número
-      result.valor = parseFloat(String(result.valor).replace(',', '.'));
-      if (!isNaN(result.valor) && result.valor > 0) {
-        await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
-        // Limpar pendência se houver uma nova despesa completa
-        if (userData?.pendingWhatsAppExpense) {
-          await db.collection("usuarios").doc(userId).update({
-            pendingWhatsAppExpense: FieldValue.delete()
-          });
-        }
-      } else {
-        result.valor = null;
+  // 1. Checar se é resposta a uma pendência
+  if (pending) {
+    const input = texto.trim().replace(',', '.');
+    if (pending.needsField === 'valor') {
+      const match = input.match(/^\d+([.]\d+)?$/);
+      if (match) {
+        const val = parseFloat(match[0]);
+        await saveAndConfirm(db, userId, numero, { ...pending, valor: val }, "whatsapp", timestamp);
+        await pendingRef.delete();
+        if (userId !== "whatsapp_pending") await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
+        return;
       }
-    } 
-    
-    if (!result || result.valor === null || result.valor === undefined || result.valor <= 0) {
-      if (result && result.descricao) {
-        // Salvar pendência no usuário
-        await db.collection("usuarios").doc(userId).update({
-          pendingWhatsAppExpense: {
-            descricao: result.descricao,
-            categoria: result.categoria,
-            data: result.data || null,
-            parcela: result.parcela || 1,
-            totalParcelas: result.totalParcelas || 1
-          }
-        });
-
-        const msg = `📝 Identifiquei que você quer registrar *"${result.descricao}"*${result.data ? ` para o dia ${new Date(result.data).toLocaleDateString('pt-BR')}` : ''}, mas não encontrei o valor.\n\n*Qual o valor desta despesa?* (Ex: 50.00)`;
-        await sendWhatsAppMessage(numero, msg);
-      } else {
-        await sendWhatsAppMessage(numero, "🤔 Não consegui entender os detalhes da despesa. Pode repetir informando o item e o valor? (Ex: Almoço 35.00)");
+    } else if (pending.needsField === 'descricao') {
+      if (input.length > 2 && !input.match(/^\d+([.]\d+)?$/)) {
+        await saveAndConfirm(db, userId, numero, { ...pending, descricao: input }, "whatsapp", timestamp);
+        await pendingRef.delete();
+        if (userId !== "whatsapp_pending") await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
+        return;
       }
     }
-  } catch (err: any) {
-    console.error(">>> [WH-WA] Erro texto:", err.message);
   }
+
+  // 2. Extração normal
+  const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
+  const prompt = `Analise: "${texto}". Hoje: ${brazilTime}. Extraia JSON. Deixe null campos ausentes (valor ou descricao).`;
+  const sysInst = "Extraia dados de despesas. Se faltar valor ou descrição, retorne null.";
+  try {
+    const resp = await generateWithFallback(ai, prompt, sysInst);
+    const result = extractJSON(resp.text);
+    if (!result) return;
+
+    if (result.valor && result.descricao) {
+      await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
+      await pendingRef.delete();
+    } else if (result.valor || result.descricao) {
+      const needs = !result.valor ? 'valor' : 'descricao';
+      await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
+      const msg = needs === 'valor' 
+        ? `🔍 Recebi *"${result.descricao}"*, mas faltou o *valor*.\n\n👉 *Qual o valor?* (Ex: 50.00)`
+        : `🔍 Recebi o valor de *R$ ${result.valor}*, mas não entendi *o que foi pago*.\n\n👉 *O que é esta despesa?*`;
+      await sendWhatsAppMessage(numero, msg + '\n\n_(Envie "cancelar" para desistir)_');
+    } else {
+      await sendWhatsAppMessage(numero, "🤔 Não entendi. Informe o item e o valor (Ex: Almoço 35).");
+    }
+  } catch (e: any) { console.error(e.message); }
 }
 
-async function processImage(db: admin.firestore.Firestore, userId: string, numero: string, imageUrl: string, timestamp: number) {
-  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+async function processImage(db: any, userId: string, numero: string, url: string, ts: number, pending: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return;
-
+  const cleanIncoming = numero.split('@')[0].replace(/\D/g, "");
+  const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
   try {
-    await sendWhatsAppMessage(numero, '📸 *Processando imagem...* Aguarde um instante enquanto nossa IA analisa seu comprovante.');
-    const imgResponse = await fetch(imageUrl);
-    const buffer = await imgResponse.arrayBuffer();
-    const base64Image = Buffer.from(buffer).toString('base64');
-    const mimeType = imgResponse.headers.get('content-type') || 'image/jpeg';
-
+    await sendWhatsAppMessage(numero, '📸 Analisando imagem...');
+    const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = [
-      { text: "Extraia os dados deste comprovante." },
-      { inlineData: { data: base64Image, mimeType } }
-    ];
-
-    const sysInst = "Você é um extrator de dados de comprovantes fiscais. Extraia apenas o que for visível. Se o valor total não estiver claro ou visível, retorne null para o campo 'valor'. NUNCA invente valores.";
-    const response = await generateWithFallback(ai, prompt, sysInst);
-    const result = extractJSON(response.text);
-
-    // Tratar valor 0 como nulo para forçar a pergunta
-    if (result && (result.valor === 0 || result.valor === "0")) {
-      result.valor = null;
-    }
-
-    if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
-      result.valor = parseFloat(String(result.valor).replace(',', '.'));
-      await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", timestamp);
-      await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: FieldValue.delete()
-      });
-    } else if (result && result.descricao) {
-      await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: {
-          descricao: result.descricao,
-          categoria: result.categoria,
-          data: result.data || null,
-          parcela: result.parcela || 1,
-          totalParcelas: result.totalParcelas || 1
-        }
-      });
-      await sendWhatsAppMessage(numero, `📝 Identifiquei a despesa *"${result.descricao}"* na imagem, mas o valor não ficou claro. Poderia me informar o valor?`);
+    const resp = await generateWithFallback(ai, [{ text: "Extraia dados" }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], "Extraia descrição e valor. Se faltar valor, retorne null.");
+    const result = extractJSON(resp.text);
+    if (result?.valor && result?.descricao) {
+      await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", ts);
+      await pendingRef.delete();
+    } else if (result?.valor || result?.descricao) {
+      const needs = !result.valor ? 'valor' : 'descricao';
+      await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
+      await sendWhatsAppMessage(numero, `📝 Identifiquei ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
     } else {
-      await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados deste comprovante. Pode tentar tirar uma foto mais nítida ou digitar o valor?");
+      await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados. Tente digitar?");
     }
-  } catch (err: any) {
-    console.error(">>> [WH-WA] Erro imagem:", err.message);
-  }
+  } catch (e) { console.error(e); }
 }
 
-async function processAudio(db: admin.firestore.Firestore, userId: string, numero: string, audioUrl: string, timestamp: number) {
-  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+async function processAudio(db: any, userId: string, numero: string, url: string, ts: number, pending: any) {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return;
-
+  const cleanIncoming = numero.split('@')[0].replace(/\D/g, "");
+  const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
   try {
-    await sendWhatsAppMessage(numero, '🎙️ *Processando áudio...* Aguarde um instante enquanto transcrevemos sua despesa.');
-    const audioResponse = await fetch(audioUrl);
-    const buffer = await audioResponse.arrayBuffer();
-    const base64Audio = Buffer.from(buffer).toString('base64');
-    const mimeType = audioResponse.headers.get('content-type') || 'audio/ogg';
-
+    await sendWhatsAppMessage(numero, '🎙️ Transcrevendo...');
+    const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = [
-      { text: "Transcreva e extraia os dados da despesa." },
-      { inlineData: { data: base64Audio, mimeType } }
-    ];
-
-    const sysInst = "Você é um assistente que transcreve áudios de despesas. Sua tarefa é extrair a descrição e o valor. Se o usuário não falar um valor numérico, o campo 'valor' DEVE ser null. NUNCA invente valores.";
-    const response = await generateWithFallback(ai, prompt, sysInst);
-    const result = extractJSON(response.text);
-
-    // Tratar valor 0 como nulo para forçar a pergunta
-    if (result && (result.valor === 0 || result.valor === "0")) {
-      result.valor = null;
-    }
-
-    if (result && result.valor !== null && result.valor !== undefined && result.valor > 0) {
-      result.valor = parseFloat(String(result.valor).replace(',', '.'));
-      await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", timestamp);
-      await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: FieldValue.delete()
-      });
-    } else if (result && result.descricao) {
-      await db.collection("usuarios").doc(userId).update({
-        pendingWhatsAppExpense: {
-          descricao: result.descricao,
-          categoria: result.categoria,
-          data: result.data || null,
-          parcela: result.parcela || 1,
-          totalParcelas: result.totalParcelas || 1
-        }
-      });
-      await sendWhatsAppMessage(numero, `📝 Entendi que você falou sobre *"${result.descricao}"*, mas não identifiquei o valor. Qual seria o valor?`);
+    const resp = await generateWithFallback(ai, [{ text: "Transcreva despesa" }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], "Extraia descrição e valor. Se faltar valor, retorne null.");
+    const result = extractJSON(resp.text);
+    if (result?.valor && result?.descricao) {
+      await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", ts);
+      await pendingRef.delete();
+    } else if (result?.valor || result?.descricao) {
+      const needs = !result.valor ? 'valor' : 'descricao';
+      await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
+      await sendWhatsAppMessage(numero, `🎙️ Entendi ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
     } else {
-      await sendWhatsAppMessage(numero, "🎙️ Não consegui entender o áudio. Pode repetir de forma mais clara ou digitar a despesa?");
+      await sendWhatsAppMessage(numero, "🎙️ Não entendi. Pode repetir?");
     }
-  } catch (err: any) {
-    console.error(">>> [WH-WA] Erro áudio:", err.message);
-  }
+  } catch (e) { console.error(e); }
 }
 
 async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, numero: string, data: any, origem: string, timestamp: number) {
   try {
-    console.log(`>>> [WH-WA] Iniciando salvamento para usuário ${userId}...`);
     let { descricao, valor, categoria, parcela, totalParcelas, data: customData } = data;
-    
     valor = parseFloat(String(valor).replace(',', '.'));
     parcela = parseInt(String(parcela || 1));
     totalParcelas = parseInt(String(totalParcelas || 1));
 
-    if (isNaN(valor)) throw new Error("Valor inválido após conversão.");
-
     if (categoria && userId !== "whatsapp_pending") {
       const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
       if (!predefined.includes(categoria)) {
-        const catSnap = await db.collection("categorias")
-          .where("userId", "==", userId)
-          .where("nome", "==", categoria)
-          .get();
-        
-        if (catSnap.empty) {
-          await db.collection("categorias").add({
-            userId,
-            nome: categoria,
-            origem: origem,
-            createdAt: FieldValue.serverTimestamp()
-          });
-        }
+        const snap = await db.collection("categorias").where("userId", "==", userId).where("nome", "==", categoria).get();
+        if (snap.empty) await db.collection("categorias").add({ userId, nome: categoria, origem, createdAt: FieldValue.serverTimestamp() });
       }
     }
 
@@ -529,47 +305,24 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     }
     baseDate.setHours(baseDate.getHours() - 3);
 
-    const groupId = totalParcelas > 1 ? `wa_${Date.now()}_${Math.random().toString(36).substr(2, 5)}` : null;
-    
+    const groupId = totalParcelas > 1 ? `wa_${Date.now()}` : null;
     const batch = db.batch();
     for (let i = parcela; i <= totalParcelas; i++) {
-      const installmentDate = new Date(baseDate);
-      installmentDate.setMonth(installmentDate.getMonth() + (i - parcela));
-      
-      const year = installmentDate.getFullYear();
-      const month = String(installmentDate.getMonth() + 1).padStart(2, '0');
-      const day = String(installmentDate.getDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
-
-      const ref = db.collection("lancamentos").doc();
-      batch.set(ref, {
-        userId,
-        tipo: 'expense',
-        valor,
-        categoria: categoria || 'Outros',
-        data: dateStr,
-        descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
-        estabelecimento: descricao,
-        origem,
-        telefone: numero.split('@')[0].replace(/\D/g, ""),
-        createdAt: FieldValue.serverTimestamp(),
-        pago: false,
-        parcela: i,
-        totalParcelas,
-        groupId,
-        notificado5dias: false,
-        notificadoNoDia: false,
-        notificadoAmanha: false
-      });
+        const d = new Date(baseDate);
+        d.setMonth(d.getMonth() + (i - parcela));
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const ref = db.collection("lancamentos").doc();
+        batch.set(ref, {
+            userId, tipo: 'expense', valor, categoria: categoria || 'Outros', data: dateStr,
+            descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
+            estabelecimento: descricao, origem, telefone: numero.split('@')[0].replace(/\D/g, ""),
+            createdAt: FieldValue.serverTimestamp(), pago: false, parcela: i, totalParcelas, groupId,
+            notificado5dias: false, notificadoNoDia: false, notificadoAmanha: false
+        });
     }
     await batch.commit();
-
-    const valorFormatado = valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-    const confirmacao = `✅ *Lançamento Confirmado!*\n\n*Item:* ${descricao}\n*Valor:* R$ ${valorFormatado}\n*Categoria:* ${categoria}\n*Data:* ${baseDate.toLocaleDateString('pt-BR')}${totalParcelas > 1 ? `\n*Parcelas:* ${parcela}/${totalParcelas}` : ''}\n\nSua despesa foi registrada com sucesso.`;
-    
-    await sendWhatsAppMessage(numero, confirmacao);
+    await sendWhatsAppMessage(numero, `✅ *Confirmado!*\n\n*Item:* ${descricao}\n*Valor:* R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}\n*Data:* ${baseDate.toLocaleDateString('pt-BR')}`);
   } catch (error: any) {
-    console.error(">>> [WH-WA] Erro ao salvar:", error.message);
-    await sendWhatsAppMessage(numero, '❌ *Erro ao processar*\n\nDesculpe, ocorreu um erro ao salvar sua despesa. Por favor, tente novamente em instantes.');
+    await sendWhatsAppMessage(numero, '❌ Erro ao salvar despesa.');
   }
 }
