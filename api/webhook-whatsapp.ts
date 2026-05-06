@@ -212,27 +212,50 @@ async function processText(db: any, userId: string, numero: string, texto: strin
 
   // 2. Extração normal
   const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
-  const prompt = `Analise: "${texto}". Hoje: ${brazilTime}. Extraia JSON. Deixe null campos ausentes (valor ou descricao).`;
-  const sysInst = "Extraia dados de despesas. Se faltar valor ou descrição, retorne null.";
+  const prompt = `Analise a mensagem: "${texto}". Hoje é ${brazilTime}. 
+  Extraia os dados para JSON. 
+  REGRAS: 
+  - Se não houver VALOR numérico claro na mensagem, deixe "valor" como null.
+  - Se não houver descrição, deixe "descricao" como null.
+  - "amanhã" ou datas não são valores.`;
+  
+  const sysInst = "Você é um assistente financeiro. Extraia descrição e valor. Se o valor não for mencionado explicitamente como um número, retorne null no campo 'valor'.";
   try {
     const resp = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(resp.text);
+    console.log(`>>> [WH-WA] IA Bruto para "${texto}":`, JSON.stringify(result));
+    
     if (!result) return;
 
-    if (result.valor && result.descricao) {
+    // Validação rigorosa do valor
+    const rawValor = result.valor;
+    const parsedValor = parseFloat(String(rawValor || "").replace(',', '.'));
+    const isValidValor = !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000; // Trava de 1 milhão
+    const hasDescricao = result.descricao && String(result.descricao).length > 2;
+
+    if (isValidValor && hasDescricao) {
+      result.valor = parsedValor;
       await saveAndConfirm(db, userId, numero, result, "whatsapp", timestamp);
       await pendingRef.delete();
-    } else if (result.valor || result.descricao) {
-      const needs = !result.valor ? 'valor' : 'descricao';
-      await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
+    } else if (hasDescricao || isValidValor) {
+      // Falta alguma info
+      const needs = !isValidValor ? 'valor' : 'descricao';
+      const pendingData = {
+        ...result,
+        valor: isValidValor ? parsedValor : null,
+        needsField: needs,
+        timestamp: Date.now()
+      };
+      await pendingRef.set(pendingData);
+      
       const msg = needs === 'valor' 
-        ? `🔍 Recebi *"${result.descricao}"*, mas faltou o *valor*.\n\n👉 *Qual o valor?* (Ex: 50.00)`
-        : `🔍 Recebi o valor de *R$ ${result.valor}*, mas não entendi *o que foi pago*.\n\n👉 *O que é esta despesa?*`;
-      await sendWhatsAppMessage(numero, msg + '\n\n_(Envie "cancelar" para desistir)_');
+        ? `🔍 Identifiquei *"${result.descricao}"*, mas faltou o *valor*.\n\n👉 *Qual o valor de hoje?* (Ex: 50.00)`
+        : `🔍 Identifiquei o valor de *R$ ${parsedValor}*, mas não entendi *o que foi pago*.\n\n👉 *Qual a descrição?*`;
+      await sendWhatsAppMessage(numero, msg + '\n\n_(Para cancelar, digite "cancelar")_');
     } else {
-      await sendWhatsAppMessage(numero, "🤔 Não entendi. Informe o item e o valor (Ex: Almoço 35).");
+      await sendWhatsAppMessage(numero, "🤔 Não consegui entender os detalhes. Pode repetir informando o item e o valor? (Ex: Almoço 35.00)");
     }
-  } catch (e: any) { console.error(e.message); }
+  } catch (e: any) { console.error(">>> [WH-WA] Erro extração:", e.message); }
 }
 
 async function processImage(db: any, userId: string, numero: string, url: string, ts: number, pending: any) {
