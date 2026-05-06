@@ -882,7 +882,7 @@ export default function App() {
       {user && (
         <InteractiveBalloon 
           userData={user} 
-          transactionsCount={transactions.length} 
+          transactions={transactions} 
         />
       )}
 
