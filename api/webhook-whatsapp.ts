@@ -230,7 +230,11 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     // Validação rigorosa do valor
     const rawValor = result.valor;
     const parsedValor = parseFloat(String(rawValor || "").replace(',', '.'));
-    const isValidValor = !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000; // Trava de 1 milhão
+    
+    // Safety: Se não há números nem palavras de valor no texto original, não aceitar valor da IA
+    const hasNumbers = /\d/.test(texto) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|cem|mil|reais|real)/i.test(texto);
+    
+    const isValidValor = hasNumbers && !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000;
     const hasDescricao = result.descricao && String(result.descricao).length > 2;
 
     if (isValidValor && hasDescricao) {
@@ -344,7 +348,17 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
         });
     }
     await batch.commit();
-    await sendWhatsAppMessage(numero, `✅ *Confirmado!*\n\n*Item:* ${descricao}\n*Valor:* R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}\n*Data:* ${baseDate.toLocaleDateString('pt-BR')}`);
+    
+    const confirmMsg = `✅ *Lançamento Confirmado!*
+
+*Item:* ${descricao}
+*Valor:* R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
+*Categoria:* ${categoria || 'Outros'}
+*Data:* ${baseDate.toLocaleDateString('pt-BR')}
+
+Sua despesa foi registrada com sucesso.`;
+
+    await sendWhatsAppMessage(numero, confirmMsg);
   } catch (error: any) {
     await sendWhatsAppMessage(numero, '❌ Erro ao salvar despesa.');
   }
