@@ -227,12 +227,13 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
   const prompt = `Analise a mensagem: "${texto}". Hoje é ${brazilTime}. 
   Extraia os dados para JSON. 
+  CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.
   REGRAS: 
   - Se não houver VALOR numérico claro na mensagem, deixe "valor" como null.
   - Se não houver descrição, deixe "descricao" como null.
-  - "amanhã" ou datas não são valores.`;
+  - Escolha a categoria mais adequada ao item identificado (ex: iFood -> Alimentação, Uber -> Transporte, Netflix -> Assinaturas).`;
   
-  const sysInst = "Você é um assistente financeiro. Extraia descrição e valor. Se o valor não for mencionado explicitamente como um número, retorne null no campo 'valor'.";
+  const sysInst = "Você é um assistente financeiro inteligente. Extraia descrição, valor e a categoria mais adequada ao contexto. Se o valor não for mencionado explicitamente como um número, retorne null no campo 'valor'.";
   try {
     const resp = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(resp.text);
@@ -284,7 +285,8 @@ async function processImage(db: any, userId: string, numero: string, url: string
     await sendWhatsAppMessage(numero, '📸 Analisando imagem...');
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const resp = await generateWithFallback(ai, [{ text: "Extraia dados" }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], "Extraia descrição e valor. Se faltar valor, retorne null.");
+    const prompt = "Extraia dados de despesas desta imagem. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros.";
+    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], "Extraia descrição, valor e a melhor categoria. Se faltar valor, retorne null.");
     const result = extractJSON(resp.text);
     if (result?.valor && result?.descricao) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", ts);
@@ -308,7 +310,8 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     await sendWhatsAppMessage(numero, '🎙️ Transcrevendo...');
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const resp = await generateWithFallback(ai, [{ text: "Transcreva despesa" }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], "Extraia descrição e valor. Se faltar valor, retorne null.");
+    const prompt = "Transcreva a despesa do áudio e extraia os dados. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros.";
+    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], "Extraia descrição, valor e a categoria mais adequada. Se faltar valor, retorne null.");
     const result = extractJSON(resp.text);
     if (result?.valor && result?.descricao) {
       await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", ts);
@@ -331,7 +334,12 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     totalParcelas = parseInt(String(totalParcelas || 1));
 
     if (categoria && userId !== "whatsapp_pending") {
-      const predefined = ['Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
+      const predefined = [
+        'Moradia', 'Alimentação', 'Transporte', 'Lazer & Entretenimento', 
+        'Saúde & Bem-estar', 'Educação', 'Vestuário & Compras', 
+        'Cuidados Pessoais', 'Assinaturas & Serviços', 
+        'Manutenção & Reparos', 'Presentes', 'Outros', 'Aniversário'
+      ];
       if (!predefined.includes(categoria)) {
         const snap = await db.collection("categorias").where("userId", "==", userId).where("nome", "==", categoria).get();
         if (snap.empty) await db.collection("categorias").add({ userId, nome: categoria, origem, createdAt: FieldValue.serverTimestamp() });
