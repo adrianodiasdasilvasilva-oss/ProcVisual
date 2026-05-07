@@ -95,6 +95,8 @@ Veja como posso te ajudar:
 
 *Comandos:*
 - "ajuda": Ver este guia.
+- "resumo": Ver visão geral das suas contas (Receitas, Despesas e Saldo).
+- "contato": Falar com nosso suporte.
 - "cancelar": Limpar uma despesa que ficou pendente de informação.`;
 
     // Enviar guia automático para novos usuários (uma única vez)
@@ -115,9 +117,14 @@ Veja como posso te ajudar:
 
     if (type === 'text') {
       const texto = (message.text?.body || message.body || "").trim();
-      const lowerText = texto.toLowerCase();
+      const lowerText = texto.toLowerCase().trim();
       if (lowerText === 'ajuda' || lowerText === 'me ajude' || lowerText === 'ajude me') {
         await sendWhatsAppMessage(numero, fullGuide);
+      } else if (lowerText === 'resumo' || lowerText.includes('visão geral') || lowerText.includes('como estão minhas contas')) {
+        await sendFinancialSummary(db, userId, numero);
+      } else if (lowerText === 'contato' || lowerText.includes('falar com a procvisual') || lowerText.includes('suporte') || lowerText.includes('atendimento')) {
+        const msg = `📧 *Atendimento ProcVisual*\n\nPara suporte, dúvidas ou sugestões, entre em contato através do nosso e-mail:\n\n👉 *procvisual.dashboard@gmail.com*\n\nNossa equipe terá prazer em te ajudar!`;
+        await sendWhatsAppMessage(numero, msg);
       } else if (lowerText === 'cancelar' && pendingExpense) {
         await pendingRef.delete();
         if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
@@ -382,5 +389,91 @@ Sua despesa foi registrada com sucesso.`;
     await sendWhatsAppMessage(numero, confirmMsg);
   } catch (error: any) {
     await sendWhatsAppMessage(numero, '❌ Erro ao salvar despesa.');
+  }
+}
+
+async function sendFinancialSummary(db: any, userId: string, numero: string) {
+  if (userId === "whatsapp_pending") {
+    await sendWhatsAppMessage(numero, "⚠️ Você precisa vincular seu número à sua conta no site para ver seu resumo financeiro.");
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
+    const year = brazilTime.getFullYear();
+    const month = String(brazilTime.getMonth() + 1).padStart(2, '0');
+    const periodStr = `${month}/${String(year).substring(2)}`;
+    const monthName = brazilTime.toLocaleString('pt-BR', { month: 'short' }).toUpperCase();
+
+    const startOfMonth = `${year}-${month}-01`;
+    const endOfMonth = `${year}-${month}-31`;
+
+    const snap = await db.collection("lancamentos")
+      .where("userId", "==", userId)
+      .where("data", ">=", startOfMonth)
+      .where("data", "<=", endOfMonth)
+      .get();
+
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let categoryMap: Record<string, number> = {};
+    let dayMap: Record<string, number> = {};
+
+    snap.forEach((doc: any) => {
+      const d = doc.data();
+      const val = parseFloat(String(d.valor || 0));
+      if (d.tipo === 'income') {
+        totalIncome += val;
+      } else {
+        totalExpense += val;
+        const cat = d.categoria || 'Outros';
+        categoryMap[cat] = (categoryMap[cat] || 0) + val;
+        
+        const date = d.data;
+        dayMap[date] = (dayMap[date] || 0) + val;
+      }
+    });
+
+    // Encontrar maior gasto
+    let majorCat = "Nenhum";
+    let majorCatVal = 0;
+    Object.entries(categoryMap).forEach(([cat, val]) => {
+      if (val > majorCatVal) {
+        majorCatVal = val;
+        majorCat = cat;
+      }
+    });
+
+    // Encontrar dia mais caro
+    let mostExpensiveDay = "Nenhum";
+    let mostExpensiveDayVal = 0;
+    Object.entries(dayMap).forEach(([day, val]) => {
+      if (val > mostExpensiveDayVal) {
+        mostExpensiveDayVal = val;
+        mostExpensiveDay = day;
+      }
+    });
+
+    if (mostExpensiveDay !== "Nenhum") {
+      const [y, m, d] = mostExpensiveDay.split('-');
+      mostExpensiveDay = `${d}/${m}/${y}`;
+    }
+
+    const summary = `*Resumo financeiro - ProcVisual*
+
+Período: ${monthName}_${String(year).substring(2)}
+
+Receitas: R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+Despesas: R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+Saldo: R$ ${(totalIncome - totalExpense).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+
+Maior gasto: ${majorCat}${majorCatVal > 0 ? ` (R$ ${majorCatVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})` : ''}
+Dia mais caro: ${mostExpensiveDay}`;
+
+    await sendWhatsAppMessage(numero, summary);
+  } catch (err: any) {
+    console.error(">>> [WH-WA] Erro resumo:", err.message);
+    await sendWhatsAppMessage(numero, "❌ Não consegui gerar seu resumo no momento.");
   }
 }
