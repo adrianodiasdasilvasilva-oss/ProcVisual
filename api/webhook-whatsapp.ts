@@ -172,7 +172,8 @@ const EXPENSE_SCHEMA: any = {
     categoria: { type: Type.STRING, description: "Categoria da despesa" },
     parcela: { type: Type.INTEGER },
     totalParcelas: { type: Type.INTEGER },
-    data: { type: Type.STRING }
+    data: { type: Type.STRING },
+    transcricao: { type: Type.STRING, description: "O que foi dito / lido exatamente" }
   },
   required: ["categoria", "parcela", "totalParcelas"]
 };
@@ -324,29 +325,52 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     await sendWhatsAppMessage(numero, '🎙️ Transcrevendo...');
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = "Transcreva a despesa do áudio e extraia os dados. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros.";
-    const sysInst = "Extraia descrição e valor. REGRA: Se o usuário não disse um valor numérico explicitamente de forma clara, o campo 'valor' DEVE ser null. NÃO invente valores de contexto (como 'água' não implica 60 reais).";
+    
+    const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
+    const prompt = `Transcreva a despesa do áudio e extraia os dados. Hoje é ${brazilTime}. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.`;
+    const sysInst = "Extraia descrição, valor e categoria. Retorne também o texto falado no campo 'transcricao'. REGRA: Se o usuário NÃO disse um valor numérico explicitamente, coloque 'valor' como null. NÃO invente valores baseado no item falado.";
+    
     const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst);
     const result = extractJSON(resp.text);
+    console.log(`>>> [WH-WA] Áudio Bruto:`, JSON.stringify(result));
 
-    if (result && result.valor && result.descricao) {
-      const val = parseFloat(String(result.valor).replace(',', '.'));
-      // Validar se o áudio tinha números (mesma lógica do texto)
-      if (!isNaN(val) && val > 0 && val < 50000) {
-        await saveAndConfirm(db, userId, numero, { ...result, valor: val }, "whatsapp_audio", ts);
-        await pendingRef.delete();
-        return;
-      }
+    if (!result) {
+      await sendWhatsAppMessage(numero, "🎙️ Não consegui processar seu áudio. Pode repetir?");
+      return;
     }
 
-    if (result && (result.valor || result.descricao)) {
-      const needs = !result.valor ? 'valor' : 'descricao';
-      await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
-      await sendWhatsAppMessage(numero, `🎙️ Entendi ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
+    const transcricao = result.transcricao || "";
+    // Mesma lógica de validação de números/palavras de valor do texto
+    const hasNumbers = /\d/.test(transcricao) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|reais|real)/i.test(transcricao);
+    
+    let currentValor = result.valor;
+    if (currentValor && !hasNumbers) {
+      console.log(">>> [WH-WA] Áudio: Valor detectado pela IA mas sem números na transcrição. Ignorando valor.");
+      currentValor = null;
+    }
+
+    const val = currentValor ? parseFloat(String(currentValor).replace(',', '.')) : null;
+    const isValidValor = val !== null && !isNaN(val) && val > 0 && val < 1000000;
+    const hasDescricao = result.descricao && String(result.descricao).length > 2;
+
+    if (isValidValor && hasDescricao) {
+      await saveAndConfirm(db, userId, numero, { ...result, valor: val }, "whatsapp_audio", ts);
+      await pendingRef.delete();
+    } else if (hasDescricao || isValidValor) {
+      const needs = !isValidValor ? 'valor' : 'descricao';
+      await pendingRef.set({ ...result, valor: isValidValor ? val : null, needsField: needs, timestamp: Date.now() });
+      
+      const msg = needs === 'valor'
+        ? `🎙️ Identifiquei *"${result.descricao}"*, mas não ouvi o *valor*.\n\n👉 *Qual o valor?* (Ex: 50.00)`
+        : `🎙️ Identifiquei o valor de *R$ ${val}*, mas não entendi *o que foi pago*.\n\n👉 *Qual a descrição?*`;
+      await sendWhatsAppMessage(numero, msg + '\n\n_(Para cancelar, digite "cancelar")_');
     } else {
-      await sendWhatsAppMessage(numero, "🎙️ Não consegui entender claramente o item e o valor no áudio. Pode repetir?");
+      await sendWhatsAppMessage(numero, "🎙️ Não entendi claramente o item e o valor. Pode falar novamente?");
     }
-  } catch (e) { console.error(e); }
+  } catch (e: any) { 
+    console.error(">>> [WH-WA] Erro Áudio:", e.message);
+    await sendWhatsAppMessage(numero, "❌ Erro ao processar áudio.");
+  }
 }
 
 async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, numero: string, data: any, origem: string, timestamp: number) {
@@ -370,16 +394,23 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     }
 
     let baseDate: Date;
-    if (customData && customData.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const safeTimestamp = parseInt(String(timestamp || ""));
+    const validTimestamp = !isNaN(safeTimestamp) && safeTimestamp > 0;
+
+    if (customData && typeof customData === 'string' && customData.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const [y, m, d] = customData.split('-');
       baseDate = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0));
+    } else if (validTimestamp) {
+      baseDate = new Date(safeTimestamp * 1000);
+      baseDate.setHours(baseDate.getHours() - 3);
     } else {
-      baseDate = new Date(timestamp * 1000);
+      baseDate = new Date();
       baseDate.setHours(baseDate.getHours() - 3);
     }
 
     if (isNaN(baseDate.getTime())) {
       baseDate = new Date();
+      baseDate.setHours(baseDate.getHours() - 3);
     }
 
     const groupId = totalParcelas > 1 ? `wa_${Date.now()}` : null;
