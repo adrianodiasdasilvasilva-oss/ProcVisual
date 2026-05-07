@@ -87,10 +87,10 @@ export default async function handler(req: any, res: any) {
     if (!userId) {
       const msg = `⚠️ *Conta não encontrada*
       
-Olá! Identificamos que este número ainda não está vinculado a uma conta ativa no *ProcVisual*.
+Olá! Identificamos que este número ainda não está vinculado a uma conta ativa na *ProcVisual*.
 
 Para começar a registrar suas despesas por aqui, você precisa:
-1️⃣ Acessar nosso site: *https://procvisual.com.br*
+1️⃣ Acessar nosso site: *https://procvisual.vercel.app*
 2️⃣ Criar sua conta e assinar um plano.
 3️⃣ Vincular seu número de WhatsApp no seu perfil.
 
