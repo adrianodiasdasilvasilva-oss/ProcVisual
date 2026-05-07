@@ -81,7 +81,29 @@ export default async function handler(req: any, res: any) {
     }
 
     let userData = userDoc ? userDoc.data() : null;
-    const userId = userDoc ? userDoc.id : "whatsapp_pending";
+    const userId = userDoc ? userDoc.id : null;
+
+    // 1. Bloqueio para usuários não identificados (SEM CONTA)
+    if (!userId) {
+      const msg = `⚠️ *Conta não encontrada*
+      
+Olá! Identificamos que este número ainda não está vinculado a uma conta ativa no *ProcVisual*.
+
+Para começar a registrar suas despesas por aqui, você precisa:
+1️⃣ Acessar nosso site: *https://procvisual.com.br*
+2️⃣ Criar sua conta e assinar um plano.
+3️⃣ Vincular seu número de WhatsApp no seu perfil.
+
+Esperamos por você! 🚀`;
+      await sendWhatsAppMessage(numero, msg);
+      return res.status(200).json({ ok: true });
+    }
+
+    // 2. Bloqueio para assinaturas inativas
+    if (userData && userData.isActive === false && !isUserAdmin(userId, userData.email) && !isPhoneException(cleanIncoming)) {
+      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nIdentificamos que sua assinatura não está ativa. Por favor, acesse o site para regularizar seu plano e continuar usando o registro via WhatsApp.');
+      return res.status(200).json({ ok: true });
+    }
 
     const fullGuide = `👋 *Olá! Este é o Guia ProcVisual no WhatsApp!*
 
@@ -108,12 +130,7 @@ Veja como posso te ajudar:
     // Buscar pendências associadas a este número
     const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
     const pendingSnap = await pendingRef.get();
-    const pendingExpense = pendingSnap.exists ? pendingSnap.get("needsField") !== undefined ? pendingSnap.data() : null : (userData?.pendingWhatsAppExpense || null);
-
-    if (userData && userData.isActive === false && !isUserAdmin(userId, userData.email) && !isPhoneException(cleanIncoming)) {
-      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nPor favor regularize sua assinatura no site.');
-      return res.status(200).json({ ok: true });
-    }
+    const pendingExpense = pendingSnap.exists ? (pendingSnap.get("needsField") !== undefined ? pendingSnap.data() : null) : (userData?.pendingWhatsAppExpense || null);
 
     if (type === 'text') {
       const texto = (message.text?.body || message.body || "").trim();
@@ -218,14 +235,14 @@ async function processText(db: any, userId: string, numero: string, texto: strin
         const val = parseFloat(match[0]);
         await saveAndConfirm(db, userId, numero, { ...pending, valor: val }, "whatsapp", timestamp);
         await pendingRef.delete();
-        if (userId !== "whatsapp_pending") await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
+        await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
         return;
       }
     } else if (pending.needsField === 'descricao') {
       if (input.length > 2 && !input.match(/^\d+([.]\d+)?$/)) {
         await saveAndConfirm(db, userId, numero, { ...pending, descricao: input }, "whatsapp", timestamp);
         await pendingRef.delete();
-        if (userId !== "whatsapp_pending") await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
+        await db.collection("usuarios").doc(userId).update({ pendingWhatsAppExpense: FieldValue.delete() });
         return;
       }
     }
@@ -380,7 +397,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     parcela = parseInt(String(parcela || 1));
     totalParcelas = parseInt(String(totalParcelas || 1));
 
-    if (categoria && userId !== "whatsapp_pending") {
+    if (categoria) {
       const predefined = [
         'Moradia', 'Alimentação', 'Transporte', 'Lazer & Entretenimento', 
         'Saúde & Bem-estar', 'Educação', 'Vestuário & Compras', 
@@ -446,11 +463,6 @@ Sua despesa foi registrada com sucesso.`;
 }
 
 async function sendFinancialSummary(db: any, userId: string, numero: string) {
-  if (userId === "whatsapp_pending") {
-    await sendWhatsAppMessage(numero, "⚠️ Você precisa vincular seu número à sua conta no site para ver seu resumo financeiro.");
-    return;
-  }
-
   try {
     const now = new Date();
     const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
