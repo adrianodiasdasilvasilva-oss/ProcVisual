@@ -83,17 +83,30 @@ export default async function handler(req: any, res: any) {
     let userData = userDoc ? userDoc.data() : null;
     const userId = userDoc ? userDoc.id : "whatsapp_pending";
 
+    const fullGuide = `👋 *Olá! Este é o Guia ProcVisual no WhatsApp!*
+
+Veja como posso te ajudar:
+
+1️⃣ *Texto:* "Almoço 35.00" ou "Aluguel vencimento 10/05 valor 1200"
+2️⃣ *Áudio:* Fale o item e o valor (ex: "Posto de gasolina, cem reais").
+3️⃣ *Foto:* Envie uma foto legível do seu comprovante ou cupom fiscal.
+
+✅ *Dica:* Se faltar alguma informação (como o valor ou o que foi pago), eu te perguntarei em seguida!
+
+*Comandos:*
+- "ajuda": Ver este guia.
+- "cancelar": Limpar uma despesa que ficou pendente de informação.`;
+
     // Enviar guia automático para novos usuários (uma única vez)
     if (userDoc && userData && !userData.whatsappGuideSent) {
-      const guide = '👋 *Olá! Bem-vindo ao ProcVisual no WhatsApp!*\n\nIdentificamos que esta é sua primeira interação. Veja como posso te ajudar:\n\n1️⃣ *Texto:* "Almoço 35.00" ou "Aluguel vencimento 10/05 valor 1200"\n2️⃣ *Áudio:* Fale o item e o valor (ex: "Posto de gasolina, cem reais").\n3️⃣ *Foto:* Envie uma foto legível do seu comprovante ou cupom fiscal.\n\n✅ *Dica:* Se faltar alguma informação (como o valor), eu te perguntarei em seguida!\n\n_Para ver este guia novamente, digite *ajuda*._';
-      await sendWhatsAppMessage(numero, guide);
+      await sendWhatsAppMessage(numero, fullGuide);
       await userDoc.ref.update({ whatsappGuideSent: true });
     }
 
     // Buscar pendências associadas a este número
     const pendingRef = db.collection("pendencias_whatsapp").doc(cleanIncoming);
     const pendingSnap = await pendingRef.get();
-    const pendingExpense = pendingSnap.exists ? pendingSnap.data() : (userData?.pendingWhatsAppExpense || null);
+    const pendingExpense = pendingSnap.exists ? pendingSnap.get("needsField") !== undefined ? pendingSnap.data() : null : (userData?.pendingWhatsAppExpense || null);
 
     if (userData && userData.isActive === false && !isUserAdmin(userId, userData.email) && !isPhoneException(cleanIncoming)) {
       await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nPor favor regularize sua assinatura no site.');
@@ -102,10 +115,10 @@ export default async function handler(req: any, res: any) {
 
     if (type === 'text') {
       const texto = (message.text?.body || message.body || "").trim();
-      if (texto.toLowerCase() === 'ajuda') {
-        const guide = '📖 *Guia ProcVisual*\n\nEnvie texto ("Almoço 35"), áudio ou foto do cupom.\n\n*Comandos:* "cancelar" (limpa pendência).';
-        await sendWhatsAppMessage(numero, guide);
-      } else if (texto.toLowerCase() === 'cancelar' && pendingExpense) {
+      const lowerText = texto.toLowerCase();
+      if (lowerText === 'ajuda' || lowerText === 'me ajude' || lowerText === 'ajude me') {
+        await sendWhatsAppMessage(numero, fullGuide);
+      } else if (lowerText === 'cancelar' && pendingExpense) {
         await pendingRef.delete();
         if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
         await sendWhatsAppMessage(numero, "❌ Cancelado. O que deseja registrar agora?");
