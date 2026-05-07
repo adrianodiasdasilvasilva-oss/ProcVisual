@@ -292,18 +292,25 @@ async function processImage(db: any, userId: string, numero: string, url: string
     await sendWhatsAppMessage(numero, '📸 Analisando imagem...');
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
-    const prompt = "Extraia dados de despesas desta imagem. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros.";
-    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], "Extraia descrição, valor e a melhor categoria. Se faltar valor, retorne null.");
+    const sysInst = "Extraia descrição, valor e melhor categoria desta imagem de despesa. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros. Se não houver valor claro, retorne null.";
+    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], sysInst);
     const result = extractJSON(resp.text);
-    if (result?.valor && result?.descricao) {
-      await saveAndConfirm(db, userId, numero, result, "whatsapp_imagem", ts);
-      await pendingRef.delete();
-    } else if (result?.valor || result?.descricao) {
+
+    if (result && result.valor && result.descricao) {
+      const val = parseFloat(String(result.valor).replace(',', '.'));
+      if (!isNaN(val) && val > 0 && val < 50000) {
+        await saveAndConfirm(db, userId, numero, { ...result, valor: val }, "whatsapp_imagem", ts);
+        await pendingRef.delete();
+        return;
+      }
+    }
+
+    if (result && (result.valor || result.descricao)) {
       const needs = !result.valor ? 'valor' : 'descricao';
       await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
-      await sendWhatsAppMessage(numero, `📝 Identifiquei ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
+      await sendWhatsAppMessage(numero, `📸 Identifiquei ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
     } else {
-      await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados. Tente digitar?");
+      await sendWhatsAppMessage(numero, "❌ Não consegui ler os dados desta imagem. Tente digitar o valor?");
     }
   } catch (e) { console.error(e); }
 }
@@ -318,17 +325,26 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
     const prompt = "Transcreva a despesa do áudio e extraia os dados. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros.";
-    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], "Extraia descrição, valor e a categoria mais adequada. Se faltar valor, retorne null.");
+    const sysInst = "Extraia descrição e valor. REGRA: Se o usuário não disse um valor numérico explicitamente de forma clara, o campo 'valor' DEVE ser null. NÃO invente valores de contexto (como 'água' não implica 60 reais).";
+    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst);
     const result = extractJSON(resp.text);
-    if (result?.valor && result?.descricao) {
-      await saveAndConfirm(db, userId, numero, result, "whatsapp_audio", ts);
-      await pendingRef.delete();
-    } else if (result?.valor || result?.descricao) {
+
+    if (result && result.valor && result.descricao) {
+      const val = parseFloat(String(result.valor).replace(',', '.'));
+      // Validar se o áudio tinha números (mesma lógica do texto)
+      if (!isNaN(val) && val > 0 && val < 50000) {
+        await saveAndConfirm(db, userId, numero, { ...result, valor: val }, "whatsapp_audio", ts);
+        await pendingRef.delete();
+        return;
+      }
+    }
+
+    if (result && (result.valor || result.descricao)) {
       const needs = !result.valor ? 'valor' : 'descricao';
       await pendingRef.set({ ...result, needsField: needs, timestamp: Date.now() });
       await sendWhatsAppMessage(numero, `🎙️ Entendi ${needs === 'valor' ? `*"${result.descricao}"*` : `R$ ${result.valor}`}, mas faltou o ${needs === 'valor' ? '*valor*' : '*item*'}. Qual seria?`);
     } else {
-      await sendWhatsAppMessage(numero, "🎙️ Não entendi. Pode repetir?");
+      await sendWhatsAppMessage(numero, "🎙️ Não consegui entender claramente o item e o valor no áudio. Pode repetir?");
     }
   } catch (e) { console.error(e); }
 }
@@ -353,12 +369,18 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
       }
     }
 
-    let baseDate = new Date(timestamp * 1000);
-    if (customData) {
+    let baseDate: Date;
+    if (customData && customData.match(/^\d{4}-\d{2}-\d{2}$/)) {
       const [y, m, d] = customData.split('-');
       baseDate = new Date(Date.UTC(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0));
+    } else {
+      baseDate = new Date(timestamp * 1000);
+      baseDate.setHours(baseDate.getHours() - 3);
     }
-    baseDate.setHours(baseDate.getHours() - 3);
+
+    if (isNaN(baseDate.getTime())) {
+      baseDate = new Date();
+    }
 
     const groupId = totalParcelas > 1 ? `wa_${Date.now()}` : null;
     const batch = db.batch();
