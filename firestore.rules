@@ -45,45 +45,32 @@ service cloud.firestore {
 
     // Users Collection
     match /usuarios/{userId} {
-      // Allow read for bot and owner/admin
-      allow get: if true; 
-      allow list: if true;
+      // ONLY owner or admin can see profile data
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
       
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
-      // Allow backend (Stripe/Bot) or owner/admin
-      allow update: if (isOwner(userId) || isAdmin()) || 
-                      (request.auth == null && 
-                       (request.resource.data.diff(resource.data).affectedKeys().hasAny(['isActive', 'plan', 'subscriptionId', 'valorAssinatura', 'nextPaymentDate', 'lastPayment', 'updatedAt', 'pendingWhatsAppExpense', 'telefone'])));
+      // Allow owner or admin to update
+      allow update: if isOwner(userId) || isAdmin();
       allow delete: if isAdmin();
     }
 
     // Lancamentos Collection
     match /lancamentos/{lancamentoId} {
-      // Allow read for users, admins and bot
-      allow read: if (isAuthenticated() && (
-                      resource == null || 
-                      resource.data.userId == request.auth.uid || 
-                      isAdmin() ||
-                      resource.data.userId == "whatsapp_pending"
-                    )) || 
-                    (request.auth == null); // Allow backend/bot to query
+      // ONLY owner or admin can see financial logs
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
       
-      allow create: if (isAuthenticated() && isValidLancamento(request.resource.data)) ||
-                    (request.auth == null && request.resource.data.origem.matches("whatsapp.*") && isValidLancamento(request.resource.data));
+      // Client can only create for themselves
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid && isValidLancamento(request.resource.data);
       
-      allow update: if (isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin())) ||
-                    (resource.data.userId == "whatsapp_pending" && request.resource.data.userId == request.auth.uid) ||
-                    // Allow server background job to update notification flags
-                    (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasAny(['notificadoAmanha', 'notificadoNoDia', 'notificado5dias', 'notificadoNoDiaAniversario', 'notificadoVesperaAniversario']));
-      
-      allow delete: if (isAuthenticated() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
     }
 
     // Categorias Collection
     match /categorias/{categoriaId} {
-      allow read: if true;
-      allow create: if (isAuthenticated() && request.resource.data.userId == request.auth.uid) ||
-                    (request.auth == null && request.resource.data.origem != null && request.resource.data.origem.matches("whatsapp.*"));
+      // ONLY owner can read/write their own categories
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
       allow update, delete: if isAuthenticated() && resource.data.userId == request.auth.uid;
     }
 

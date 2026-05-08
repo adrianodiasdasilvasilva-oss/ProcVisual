@@ -3,6 +3,25 @@ import { isUserAdmin, isPhoneException } from "./index.js";
 import { GoogleGenAI, Type } from "@google/genai";
 
 export default async function handler(req: any, res: any) {
+  // 1. WhatsApp Webhook Verification (GET handshake)
+  if (req.method === 'GET') {
+    const mode = req.query['hub.mode'];
+    const token = req.query['hub.verify_token'];
+    const challenge = req.query['hub.challenge'];
+
+    const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "procvisual_verify_secret";
+
+    if (mode && token) {
+      if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('>>> [WH-WA] Webhook Verificado!');
+        return res.status(200).send(challenge);
+      } else {
+        return res.status(403).end();
+      }
+    }
+    return res.status(404).end();
+  }
+
   const bodyString = JSON.stringify(req.body);
   console.log(`>>> [WH-WA] Request recebida: ${req.method} ${req.url} | BodyLength: ${bodyString.length}`);
   
