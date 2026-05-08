@@ -652,10 +652,26 @@ async function correctLastEntry(db: any, userId: string, numero: string, texto: 
 
     await lastDoc.ref.update(updateObj);
 
+    let antesStr = "";
+    let agoraStr = "";
+
+    if (field === "valor") {
+      antesStr = `R$ ${parseFloat(oldData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      agoraStr = `R$ ${newVal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+    } else if (field === "data") {
+      const [yA, mA, dA] = oldData.data.split('-');
+      const [yN, mN, dN] = newVal.split('-');
+      antesStr = `${dA}/${mA}/${yA}`;
+      agoraStr = `${dN}/${mN}/${yN}`;
+    } else {
+      antesStr = oldData.descricao;
+      agoraStr = newVal;
+    }
+
     const msg = `✏️ *Lançamento Corrigido!*
     
-*Antes:* ${field === 'valor' ? `R$ ${parseFloat(oldData.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}` : oldData.descricao}
-*Agora:* ${field === 'valor' ? `R$ ${newVal.toLocaleString('pt-BR', {minimumFractionDigits:2})}` : newVal}
+*Antes:* ${antesStr}
+*Agora:* ${agoraStr}
 
 Informação atualizada com sucesso.`;
     await sendWhatsAppMessage(numero, msg);
