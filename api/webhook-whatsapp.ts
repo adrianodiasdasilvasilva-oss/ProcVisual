@@ -281,11 +281,12 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   Extraia os dados para JSON. 
   CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.
   REGRAS: 
-  - Se não houver VALOR numérico claro na mensagem, deixe "valor" como null.
+  - Se não houver VALOR numérico claro na mensagem (um valor monetário), deixe "valor" como null. 
+  - NÃO confunda números de DATAS (ex: 15/05) com VALOR.
   - Se não houver descrição, deixe "descricao" como null.
-  - Escolha a categoria mais adequada ao item identificado (ex: iFood -> Alimentação, Uber -> Transporte, Netflix -> Assinaturas).`;
+  - Escolha a categoria mais adequada ao item identificado.`;
   
-  const sysInst = "Você é um assistente financeiro inteligente. Extraia descrição, valor e a categoria mais adequada ao contexto. Se o valor não for mencionado explicitamente como um número, retorne null no campo 'valor'.";
+  const sysInst = "Você é um assistente financeiro rigoroso. Só extraia o 'valor' se ele for explicitamente mencionado como um preço ou quantia. Se o usuário só disse uma data e um item, 'valor' DEVE ser null. Jamais invente valores.";
   try {
     const resp = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(resp.text);
@@ -297,10 +298,21 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     const rawValor = result.valor;
     const parsedValor = parseFloat(String(rawValor || "").replace(',', '.'));
     
-    // Safety: Se não há números nem palavras de valor no texto original, não aceitar valor da IA
-    const hasNumbers = /\d/.test(texto) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|cem|mil|reais|real)/i.test(texto);
+    // Safety: Tentar remover padrões de data para checar se sobra algum número
+    const textWithoutDates = texto.replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/, "").replace(/\d{1,2}-\d{1,2}(-\d{2,4})?/, "");
+    const hasClearNumbers = /\d/.test(textWithoutDates) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|cem|mil|reais|real)/i.test(texto);
     
-    const isValidValor = hasNumbers && !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000;
+    // Adicional: verificar se o valor retornado pela IA (ou parte dele) existe no texto original
+    const valorStr = String(rawValor || "");
+    const valorNumStr = String(parsedValor);
+    const valorCommaStr = valorNumStr.replace('.', ',');
+    const hasValorInText = texto.includes(valorStr) || 
+                          (parsedValor > 0 && (texto.includes(valorNumStr) || texto.includes(valorCommaStr) || texto.includes(String(Math.floor(parsedValor)))));
+    
+    // Se identificou palavras de valor (reais, cem, etc), damos um voto de confiança mesmo sem o número exato bater no texto (devido a escrita por extenso)
+    const hasValueWords = /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|mil|reais|real)/i.test(texto);
+
+    const isValidValor = (hasClearNumbers || hasValueWords) && (hasValorInText || hasValueWords) && !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000;
     const hasDescricao = result.descricao && String(result.descricao).length > 2;
 
     if (isValidValor && hasDescricao) {
