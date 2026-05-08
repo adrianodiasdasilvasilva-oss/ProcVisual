@@ -124,25 +124,40 @@ Esperamos por você! 🚀`;
       return res.status(200).json({ ok: true });
     }
 
-    const fullGuide = `👋 *Olá! Este é o Guia ProcVisual no WhatsApp!*
+    const fullGuide = `👋 Olá! Eu sou o Guia ProcVisual no WhatsApp.
 
-Veja como posso te ajudar:
+Estou aqui para te ajudar a registrar suas receitas, despesas e lembretes de forma rápida e prática 😊
 
-1️⃣ *Texto:* "Almoço 35.00" ou "Aluguel vencimento 10/05 valor 1200"
-2️⃣ *Áudio:* Fale o item e o valor (ex: "Posto de gasolina, cem reais").
-3️⃣ *Foto:* Envie uma foto legível do seu comprovante ou cupom fiscal.
+📌 Você pode enviar:
 
-✅ *Dica:* Se faltar alguma informação (como o valor ou o que foi pago), eu te perguntarei em seguida!
+1️⃣ Texto
+Exemplos:
+• "Almoço 35,00"
+• "Aluguel vencimento 10/05 valor 1200"
 
-*Comandos:*
-- "ajuda": Ver este guia.
-- "resumo": Ver visão geral das suas contas (Receitas, Despesas e Saldo).
-- "excluir": Apagar o último lançamento realizado.
-- "corrigir valor 50": Alterar o valor do último lançamento.
-- "corrigir item Descrição": Alterar a descrição do último lançamento.
-- "corrigir data 10/05": Alterar a data/vencimento do último lançamento.
-- "contato": Falar com nosso suporte.
-- "cancelar": Limpar uma despesa que ficou pendente de informação.`;
+2️⃣ Áudio
+Basta falar o item e o valor.
+Exemplo:
+🎤 “Posto de gasolina, cem reais.”
+
+3️⃣ Foto
+Envie uma foto legível do comprovante, boleto ou cupom fiscal 📸
+
+✅ Importante:
+Se faltar alguma informação (como valor, data ou descrição), eu vou te perguntar automaticamente.
+
+⚡ Comandos disponíveis:
+
+• "ajuda" → Exibe este guia
+• "resumo" → Mostra Receitas, Despesas e Saldo
+• "excluir" → Remove o último lançamento
+• "corrigir valor 50" → Altera o valor do último lançamento
+• "corrigir item Mercado" → Altera a descrição do último lançamento
+• "corrigir data 10/05" → Altera a data/vencimento do último lançamento
+• "contato" → Falar com o suporte
+• "cancelar" → Cancela um lançamento pendente
+
+🚀 ProcVisual — Sua gestão financeira de forma simples e inteligente.`;
 
     // Enviar guia automático para novos usuários (uma única vez)
     if (userDoc && userData && !userData.whatsappGuideSent) {
