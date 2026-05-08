@@ -137,6 +137,10 @@ Veja como posso te ajudar:
 *Comandos:*
 - "ajuda": Ver este guia.
 - "resumo": Ver visão geral das suas contas (Receitas, Despesas e Saldo).
+- "excluir": Apagar o último lançamento realizado.
+- "corrigir valor 50": Alterar o valor do último lançamento.
+- "corrigir item Descrição": Alterar a descrição do último lançamento.
+- "corrigir data 10/05": Alterar a data/vencimento do último lançamento.
 - "contato": Falar com nosso suporte.
 - "cancelar": Limpar uma despesa que ficou pendente de informação.`;
 
@@ -161,6 +165,10 @@ Veja como posso te ajudar:
       } else if (lowerText === 'contato' || lowerText.includes('falar com a procvisual') || lowerText.includes('suporte') || lowerText.includes('atendimento')) {
         const msg = `📧 *Atendimento ProcVisual*\n\nPara suporte, dúvidas ou sugestões, entre em contato através do nosso e-mail:\n\n👉 *procvisual.dashboard@gmail.com*\n\nNossa equipe terá prazer em te ajudar!`;
         await sendWhatsAppMessage(numero, msg);
+      } else if (lowerText === 'excluir' || lowerText === 'desfazer' || lowerText === 'apagar') {
+        await undoLastEntry(db, userId, numero);
+      } else if (lowerText.startsWith('corrigir')) {
+        await correctLastEntry(db, userId, numero, texto);
       } else if (lowerText === 'cancelar' && pendingExpense) {
         await pendingRef.delete();
         if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
@@ -559,5 +567,100 @@ Dia mais caro: ${mostExpensiveDay}`;
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro resumo:", err.message);
     await sendWhatsAppMessage(numero, "❌ Não consegui gerar seu resumo no momento.");
+  }
+}
+
+async function undoLastEntry(db: any, userId: string, numero: string) {
+  try {
+    const snap = await db.collection("lancamentos")
+      .where("userId", "==", userId)
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      await sendWhatsAppMessage(numero, "🔍 Não encontrei nenhum lançamento recente para excluir.");
+      return;
+    }
+
+    const lastDoc = snap.docs[0];
+    const data = lastDoc.data();
+    await lastDoc.ref.delete();
+
+    const msg = `🗑️ *Lançamento Excluído!*
+    
+*Item:* ${data.descricao}
+*Valor:* R$ ${parseFloat(data.valor).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+
+O último registro foi removido com sucesso.`;
+    await sendWhatsAppMessage(numero, msg);
+  } catch (err: any) {
+    console.error(">>> [WH-WA] Erro excluir:", err.message);
+    await sendWhatsAppMessage(numero, "❌ Erro ao tentar excluir o lançamento.");
+  }
+}
+
+async function correctLastEntry(db: any, userId: string, numero: string, texto: string) {
+  try {
+    const lower = texto.toLowerCase();
+    let field = "";
+    let newVal: any = null;
+
+    if (lower.includes("valor")) {
+      field = "valor";
+      const match = texto.match(/\d+([,.]\d+)?/);
+      if (match) newVal = parseFloat(match[0].replace(',', '.'));
+    } else if (lower.includes("item") || lower.includes("descrição") || lower.includes("descricao")) {
+      field = "descricao";
+      newVal = texto.replace(/corrigir (item|descrição|descricao) (para )?/i, "").trim();
+    } else if (lower.includes("data") || lower.includes("vencimento")) {
+      field = "data";
+      const dateMatch = texto.match(/(\d{1,2})\/(\d{1,2})(\/(\d{2,4}))?/);
+      if (dateMatch) {
+        const d = dateMatch[1].padStart(2, '0');
+        const m = dateMatch[2].padStart(2, '0');
+        let y = dateMatch[4] || new Date().getFullYear().toString();
+        if (y.length === 2) y = "20" + y;
+        newVal = `${y}-${m}-${d}`;
+      }
+    }
+
+    if (!field || newVal === null || newVal === "") {
+      await sendWhatsAppMessage(numero, "🤔 Não entendi o que você quer corrigir. Tente:\n- *corrigir valor 50.00*\n- *corrigir item Almoço*\n- *corrigir data 10/05*");
+      return;
+    }
+
+    const snap = await db.collection("lancamentos")
+      .where("userId", "==", userId)
+      .orderBy("createdAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snap.empty) {
+      await sendWhatsAppMessage(numero, "🔍 Não encontrei nenhum lançamento recente para corrigir.");
+      return;
+    }
+
+    const lastDoc = snap.docs[0];
+    const oldData = lastDoc.data();
+    
+    const updateObj: any = { 
+      [field]: newVal, 
+      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+    };
+    if (field === "descricao") updateObj.estabelecimento = newVal;
+
+    await lastDoc.ref.update(updateObj);
+
+    const msg = `✏️ *Lançamento Corrigido!*
+    
+*Antes:* ${field === 'valor' ? `R$ ${parseFloat(oldData.valor).toLocaleString('pt-BR', {minimumFractionDigits:2})}` : oldData.descricao}
+*Agora:* ${field === 'valor' ? `R$ ${newVal.toLocaleString('pt-BR', {minimumFractionDigits:2})}` : newVal}
+
+Informação atualizada com sucesso.`;
+    await sendWhatsAppMessage(numero, msg);
+  } catch (err: any) {
+    console.error(">>> [WH-WA] Erro corrigir:", err.message);
+    await sendWhatsAppMessage(numero, "❌ Erro ao tentar corrigir o lançamento.");
   }
 }
