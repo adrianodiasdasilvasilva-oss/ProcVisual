@@ -146,6 +146,12 @@ Envie uma foto legível do comprovante, boleto ou cupom fiscal 📸
 ✅ Importante:
 Se faltar alguma informação (como valor, data ou descrição), eu vou te perguntar automaticamente.
 
+💡 *Pergunte para mim:*
+Você também pode me perguntar sobre suas finanças! Exemplos:
+• "Quanto gastei com mercado este mês?"
+• "Qual foi meu maior gasto da semana?"
+• "Estou gastando muito com delivery?"
+
 ⚡ Comandos disponíveis:
 
 • "ajuda" → Exibe este guia
@@ -208,7 +214,15 @@ Se faltar alguma informação (como valor, data ou descrição), eu vou te pergu
         if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
         await sendWhatsAppMessage(numero, "❌ Cancelado. O que deseja registrar agora?");
       } else {
-        await processText(db, userId, numero, texto, message.timestamp, userData, pendingExpense);
+        // 4. Detecção de Pergunta para o Analista Financeiro IA
+        const isQuestion = lowerText.endsWith('?') || 
+                          /^(quanto|qual|quais|como|estou|cadê|mostra|me diga|onde|quem|gast|saldo|quanto|limite)/i.test(lowerText);
+        
+        if (isQuestion && lowerText.length > 5) {
+          await handleFinancialQuery(db, userId, numero, texto);
+        } else {
+          await processText(db, userId, numero, texto, message.timestamp, userData, pendingExpense);
+        }
       }
     } else if (type === 'image') {
       const imageUrl = message.image?.link;
@@ -724,6 +738,67 @@ O último registro foi removido com sucesso.`;
   } catch (err: any) {
     console.error(">>> [WH-WA] Erro excluir:", err.message);
     await sendWhatsAppMessage(numero, "❌ Erro ao tentar excluir o lançamento.");
+  }
+}
+
+async function handleFinancialQuery(db: any, userId: string, numero: string, query: string) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return;
+  const ai = new GoogleGenAI({ apiKey });
+
+  try {
+    // 1. Buscar lançamentos recentes (últimos 60 dias) para contexto
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    
+    const snap = await db.collection("lancamentos")
+      .where("userId", "==", userId)
+      .where("data", ">=", sixtyDaysAgo.toISOString().split('T')[0])
+      .get();
+
+    const transactions = snap.docs.map((d: any) => {
+      const data = d.data();
+      return {
+        data: data.data,
+        tipo: data.tipo,
+        valor: data.valor,
+        descricao: data.descricao,
+        categoria: data.categoria,
+        pago: data.pago
+      };
+    });
+
+    const now = new Date();
+    const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
+    const context = JSON.stringify(transactions);
+
+    const prompt = `O usuário perguntou no WhatsApp: "${query}". 
+    Hoje é ${brazilTime}. 
+    
+    Aqui está a lista de lançamentos dos últimos 60 dias dele em JSON:
+    ${context}
+    
+    INSTRUÇÕES PARA RESPONDER:
+    1. Seja um Analista Financeiro inteligente, amigável e conciso (Tom ProcVisual).
+    2. Use os dados acima para responder de forma precisa. Se perguntar "Quanto gastei com X", some os valores.
+    3. Se não houver dados sobre o que ele perguntou, diga educadamente.
+    4. Formate a resposta com Emojis e Negritos para facilitar a leitura no celular.
+    5. Se identificar uma tendência negativa (gastou mais que mês passado), dê uma dica construtiva curta.
+    6. Jamais invente dados que não estão no JSON de contexto acima.
+    7. Responda diretamente à pergunta.`;
+
+    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const result = await model.generateContent(prompt);
+    const answer = result.response.text().trim();
+
+    if (answer) {
+      await sendWhatsAppMessage(numero, answer);
+    } else {
+      await sendWhatsAppMessage(numero, "🤔 Desculpe, não consegui analisar suas informações agora.");
+    }
+  } catch (err: any) {
+    console.error(">>> [WH-WA] Erro handleFinancialQuery:", err.message);
+    await sendWhatsAppMessage(numero, "❌ Ocorreu um erro ao processar sua pergunta. Tente novamente mais tarde.");
   }
 }
 

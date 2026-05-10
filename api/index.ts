@@ -758,6 +758,120 @@ app.use((err: any, req: any, res: any, next: any) => {
   next(err);
 });
 
+async function generateIntelligentInsights(db: any, userId: string, userData: any) {
+  const phone = userData.telefone;
+  if (!phone) return;
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // 1. Buscar todos os lançamentos do usuário nos últimos 60 dias para análise
+  const sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
+  const snap = await db.collection("lancamentos")
+    .where("userId", "==", userId)
+    .where("data", ">=", sixtyDaysAgo.toISOString().split('T')[0])
+    .get();
+
+  if (snap.empty) return;
+
+  const lancamentos = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+
+  // Helper for amounts
+  const getVal = (l: any) => parseFloat(String(l.valor || 0).replace(',', '.'));
+
+  // --- INSIGHT 1: COMPARAÇÃO DE CATEGORIA (Gasto recorrente) ---
+  const currentMonthExpenses = lancamentos.filter((l: any) => {
+    const d = new Date(l.data + "T12:00:00Z");
+    return l.tipo === "expense" && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+
+  const lastMonthExpenses = lancamentos.filter((l: any) => {
+    const d = new Date(l.data + "T12:00:00Z");
+    let lm = currentMonth - 1;
+    let ly = currentYear;
+    if (lm < 0) { lm = 11; ly--; }
+    return l.tipo === "expense" && d.getMonth() === lm && d.getFullYear() === ly;
+  });
+
+  const aggregateByCat = (list: any[]) => {
+    const res: Record<string, number> = {};
+    list.forEach(l => {
+      const cat = l.categoria || "Outros";
+      res[cat] = (res[cat] || 0) + getVal(l);
+    });
+    return res;
+  };
+
+  const currentCats = aggregateByCat(currentMonthExpenses);
+  const lastCats = aggregateByCat(lastMonthExpenses);
+
+  const alerts: string[] = [];
+
+  for (const cat in currentCats) {
+    const currentVal = currentCats[cat];
+    const lastVal = lastCats[cat] || 0;
+    
+    // Se gastou mais de R$ 50 e aumentou mais de 30% em relação ao mês passado
+    if (lastVal > 0 && currentVal > 50 && currentVal > (lastVal * 1.3)) {
+      const percent = Math.round(((currentVal / lastVal) - 1) * 100);
+      alerts.push(`📉 *Alerta de Consumo:* Você gastou *${percent}% a mais* com *${cat}* este mês em comparação ao mês passado (R$ ${currentVal.toFixed(2)} vs R$ ${lastVal.toFixed(2)}).`);
+    }
+  }
+
+  // --- INSIGHT 2: PREVISÃO DE SALDO (Predictive) ---
+  // Precisamos do saldo atual. Como não temos um campo 'saldo' fixo, vamos estimar pelo mês atual.
+  let estimatedBalance = 0;
+  // Pegamos receitas e despesas PAGAS para ver o saldo real agora
+  const monthIncomes = lancamentos.filter((l: any) => {
+    const d = new Date(l.data + "T12:00:00Z");
+    return l.tipo === "income" && d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  });
+  
+  const monthPaidExpenses = currentMonthExpenses.filter((l: any) => l.pago === true);
+  estimatedBalance = monthIncomes.reduce((acc, l) => acc + getVal(l), 0) - monthPaidExpenses.reduce((acc, l) => acc + getVal(l), 0);
+
+  // Agora projetamos o futuro usando despesas NÃO PAGAS do mês
+  const unpaidExpenses = currentMonthExpenses.filter((l: any) => l.pago !== true).sort((a,b) => a.data.localeCompare(b.data));
+  
+  let projectedBalance = estimatedBalance;
+  let firstNegativeDay = "";
+
+  for (const exp of unpaidExpenses) {
+    projectedBalance -= getVal(exp);
+    if (projectedBalance < 0 && !firstNegativeDay) {
+      const d = new Date(exp.data + "T12:00:00Z");
+      firstNegativeDay = `${d.getDate()}/${d.getMonth()+1}`;
+    }
+  }
+
+  if (firstNegativeDay) {
+    alerts.push(`⚠️ *Previsão de Caixa:* Baseado nas suas contas a pagar, seu saldo previsto poderá ficar *negativo* por volta do dia *${firstNegativeDay}*.`);
+  }
+
+  // --- INSIGHT 3: LIMITE DE CATEGORIA (Simulado/Goal) ---
+  // Se gastou muito em uma categoria específica (Lazer/Delivery/Alimentação)
+  const deliveryOrLazer = currentCats["Alimentação"] || currentCats["Lazer & Entretenimento"] || 0;
+  if (deliveryOrLazer > 500) { // Um threshold arbitrário para exemplo
+     // alerts.push(`🎯 *Gestão:* Você já atingiu uma quantia considerável gastando com Lazer/Alimentação este mês.`);
+  }
+
+  // Enviar os alertas via WhatsApp (um por vez ou agrupados)
+  if (alerts.length > 0) {
+    // Para não ser spam, só enviamos se não enviamos insights hoje
+    const todayStr = now.toISOString().split('T')[0];
+    if (userData.lastInsightDate === todayStr) return;
+
+    console.log(`>>> [INSIGHTS] Enviando ${alerts.length} alertas para ${userId}`);
+    const header = `💡 *ProcVisual - Insights Financeiros*\n\n`;
+    await sendWhatsApp(phone, header + alerts.join("\n\n"));
+    
+    await db.collection("usuarios").doc(userId).update({
+      lastInsightDate: todayStr
+    });
+  }
+}
+
 async function runDailyNotifications(targetUserId?: string) {
   let step = "start";
   try {
@@ -774,6 +888,26 @@ async function runDailyNotifications(targetUserId?: string) {
     
     // Log de início no Firestore para monitoramento
     if (!targetUserId) await logCronExecution("started");
+
+    // --- NOVA FUNCIONALIDADE: INSIGHTS INTELIGENTES ---
+    // Se for um processo geral, vamos buscar usuários ativos para gerar insights
+    if (!targetUserId) {
+      const usersSnap = await db.collection("usuarios").where("isActive", "==", true).get();
+      for (const userDoc of usersSnap.docs) {
+        try {
+          await generateIntelligentInsights(db, userDoc.id, userDoc.data());
+        } catch (e: any) {
+          console.error(`>>> [JOB] Erro ao gerar insights para ${userDoc.id}:`, e.message);
+        }
+      }
+    } else {
+      // Se for um usuário específico (manual run)
+      const userDoc = await db.collection("usuarios").doc(targetUserId).get();
+      if (userDoc.exists) {
+        await generateIntelligentInsights(db, targetUserId, userDoc.data());
+      }
+    }
+    // --------------------------------------------------
 
     step = "query_lancamentos";
     let query: admin.firestore.Query;
