@@ -128,42 +128,35 @@ Esperamos por você! 🚀`;
 
 Estou aqui para te ajudar a registrar suas receitas, despesas e lembretes de forma rápida e prática 😊
 
-📌 Você pode enviar:
+📌 *Como registrar:*
 
-1️⃣ Texto
-Exemplos:
-• "Almoço 35,00"
-• "Aluguel vencimento 10/05 valor 1200"
+1️⃣ *Texto:* "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
+2️⃣ *Áudio:* 🎤 “Posto de gasolina, cem reais.”
+3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
 
-2️⃣ Áudio
-Basta falar o item e o valor.
-Exemplo:
-🎤 “Posto de gasolina, cem reais.”
+✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
 
-3️⃣ Foto
-Envie uma foto legível do comprovante, boleto ou cupom fiscal 📸
-
-✅ Importante:
-Se faltar alguma informação (como valor, data ou descrição), eu vou te perguntar automaticamente.
-
-💡 *Pergunte para mim:*
-Você também pode me perguntar sobre suas finanças! Exemplos:
+🧠 *Analista Pessoal IA:*
+Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
 • "Quanto gastei com mercado este mês?"
 • "Qual foi meu maior gasto da semana?"
 • "Estou gastando muito com delivery?"
+• "Meu saldo vai ficar negativo?"
 
-⚡ Comandos disponíveis:
+🔔 *Alertas Inteligentes:*
+Eu também te aviso automaticamente sobre vencimentos, gastos excessivos em categorias ou se seu saldo previsto estiver em risco.
 
-• "ajuda" → Exibe este guia
-• "resumo" → Mostra Receitas, Despesas e Saldo
-• "excluir" → Remove o último lançamento
-• "corrigir valor 50" → Altera o valor do último lançamento
-• "corrigir item Mercado" → Altera a descrição do último lançamento
-• "corrigir data 10/05" → Altera a data/vencimento do último lançamento
-• "contato" → Falar com o suporte
-• "cancelar" → Cancela um lançamento pendente
+⚡ *Comandos rápidos:*
+• "ajuda" → Este guia
+• "resumo" → Visão geral financeira
+• "excluir" → Apaga o último lançamento
+• "corrigir valor 50" → Altera o último valor
+• "corrigir item Mercado" → Altera a última descrição
+• "corrigir data 10/05" → Altera o último vencimento
+• "contato" → Falar com suporte
+• "cancelar" → Cancela pendência atual
 
-🚀 ProcVisual — Sua gestão financeira de forma simples e inteligente.`;
+🚀 *ProcVisual — Sua gestão financeira de forma simples e inteligente.*`;
 
     // Enviar guia automático para novos usuários (uma única vez)
     if (userDoc && userData && !userData.whatsappGuideSent) {
@@ -787,9 +780,11 @@ async function handleFinancialQuery(db: any, userId: string, numero: string, que
     6. Jamais invente dados que não estão no JSON de contexto acima.
     7. Responda diretamente à pergunta.`;
 
-    const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    const answer = result.response.text().trim();
+    const resp = await ai.models.generateContent({ 
+      model: "gemini-1.5-flash",
+      contents: [{ parts: [{ text: prompt }] }]
+    });
+    const answer = resp.text.trim();
 
     if (answer) {
       await sendWhatsAppMessage(numero, answer);
