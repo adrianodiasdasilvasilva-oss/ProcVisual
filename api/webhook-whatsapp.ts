@@ -170,9 +170,28 @@ Se faltar alguma informação (como valor, data ou descrição), eu vou te pergu
     const pendingSnap = await pendingRef.get();
     const pendingExpense = pendingSnap.exists ? (pendingSnap.get("needsField") !== undefined ? pendingSnap.data() : null) : (userData?.pendingWhatsAppExpense || null);
 
+    // 3. Checar se é resposta a uma pendência de recorrência
+    const pendingRecurrenceRef = db.collection("pendencias_recorrencia_whatsapp").doc(cleanIncoming);
+    const pendingRecurrenceSnap = await pendingRecurrenceRef.get();
+    const pendingRecurrence = pendingRecurrenceSnap.exists ? pendingRecurrenceSnap.data() : null;
+
     if (type === 'text') {
       const texto = (message.text?.body || message.body || "").trim();
       const lowerText = texto.toLowerCase().trim();
+      
+      if (pendingRecurrence && (lowerText === 'sim' || lowerText === 'pode ser' || lowerText === 'ok' || lowerText === 'quero' || lowerText === 's' || lowerText === 'ss')) {
+        await setupRecurrence(db, userId, numero, pendingRecurrence);
+        await pendingRecurrenceRef.delete();
+        return res.status(200).json({ ok: true });
+      } else if (pendingRecurrence) {
+        await pendingRecurrenceRef.delete();
+        if (lowerText === 'não' || lowerText === 'n' || lowerText === 'nao') {
+           await sendWhatsAppMessage(numero, "Entendido! Lançamento mantido como único. 👍");
+           return res.status(200).json({ ok: true });
+        }
+        // Se for outra coisa, ignora a recorrência e processa o texto normalmente
+      }
+
       if (lowerText === 'ajuda' || lowerText === 'me ajude' || lowerText === 'ajude me') {
         await sendWhatsAppMessage(numero, fullGuide);
       } else if (lowerText === 'resumo' || lowerText.includes('visão geral') || lowerText.includes('como estão minhas contas')) {
@@ -486,11 +505,13 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
 
     const groupId = totalParcelas > 1 ? `wa_${Date.now()}` : null;
     const batch = db.batch();
+    let firstDocId = "";
     for (let i = parcela; i <= totalParcelas; i++) {
         const d = new Date(baseDate);
         d.setMonth(d.getMonth() + (i - parcela));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         const ref = db.collection("lancamentos").doc();
+        if (i === parcela) firstDocId = ref.id;
         batch.set(ref, {
             userId, tipo: 'expense', valor, categoria: categoria || 'Outros', data: dateStr,
             descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
@@ -501,6 +522,43 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     }
     await batch.commit();
     
+    // Check for recurrence suggestion (if it's a new single expense)
+    if (totalParcelas === 1 && (origem === 'whatsapp' || origem === 'whatsapp_audio')) {
+      const lastMonth = new Date();
+      lastMonth.setMonth(lastMonth.getMonth() - 2);
+      
+      const historySnap = await db.collection("lancamentos")
+        .where("userId", "==", userId)
+        .where("descricao", "==", descricao)
+        .where("data", ">=", lastMonth.toISOString().split('T')[0])
+        .limit(5)
+        .get();
+
+      // Se já houver ao menos 1 registro com mesmo nome nos últimos 2 meses (além deste que acabamos de criar)
+      if (historySnap.size >= 2) {
+        const cleanIncoming = numero.split('@')[0].replace(/\D/g, "");
+        await db.collection("pendencias_recorrencia_whatsapp").doc(cleanIncoming).set({
+          lancamentoId: firstDocId,
+          descricao,
+          valor,
+          categoria: categoria || 'Outros',
+          data: baseDate.toISOString().split('T')[0],
+          timestamp: Date.now()
+        });
+
+        const confirmMsg = `✅ *Lançamento Confirmado!*
+  
+*Item:* ${descricao}
+*Valor:* R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
+*Data:* ${baseDate.toLocaleDateString('pt-BR')}
+
+💡 *Dica Inteligente:*
+Percebi que você lançou *"${descricao}"* novamente. Deseja transformar em uma despesa recorrente mensal? (Responda *"Sim"* para repetir por 12 meses)`;
+        await sendWhatsAppMessage(numero, confirmMsg);
+        return;
+      }
+    }
+
     const confirmMsg = `✅ *Lançamento Confirmado!*
 
 *Item:* ${descricao}
@@ -597,6 +655,48 @@ Dia mais caro: ${mostExpensiveDay}`;
   }
 }
 
+async function setupRecurrence(db: any, userId: string, numero: string, data: any) {
+  try {
+    const { descricao, valor, categoria, data: dateStr } = data;
+    const baseDate = new Date(dateStr + 'T12:00:00Z');
+    const groupId = `recur_${Date.now()}`;
+    const totalParcelas = 12;
+
+    const batch = db.batch();
+    // Já temos o primeiro (que foi o gatilho), vamos criar os outros 11
+    for (let i = 2; i <= totalParcelas; i++) {
+      const d = new Date(baseDate);
+      d.setMonth(d.getMonth() + (i - 1));
+      const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const ref = db.collection("lancamentos").doc();
+      batch.set(ref, {
+        userId, tipo: 'expense', valor, categoria, data: ds,
+        descricao: `${descricao} (${i}/${totalParcelas})`,
+        estabelecimento: descricao, origem: "whatsapp_recorrente", 
+        telefone: numero.split('@')[0].replace(/\D/g, ""),
+        createdAt: FieldValue.serverTimestamp(), pago: false, parcela: i, totalParcelas, groupId,
+        notificado5dias: false, notificadoNoDia: false, notificadoAmanha: false
+      });
+    }
+
+    // Atualizar o primeiro documento para refletir o grupo e as parcelas
+    const firstRef = db.collection("lancamentos").doc(data.lancamentoId);
+    batch.update(firstRef, { 
+      groupId, 
+      totalParcelas, 
+      parcela: 1, 
+      descricao: `${descricao} (1/${totalParcelas})` 
+    });
+
+    await batch.commit();
+
+    await sendWhatsAppMessage(numero, `🚀 Perfeito! Agendei as próximas 11 parcelas mensais de *"${descricao}"* para você. Totalizando 12 meses.`);
+  } catch (err: any) {
+    console.error(">>> [WH-WA] Erro setupRecurrence:", err.message);
+    await sendWhatsAppMessage(numero, "❌ Ocorreu um erro ao configurar a recorrência.");
+  }
+}
+
 async function undoLastEntry(db: any, userId: string, numero: string) {
   try {
     const snap = await db.collection("lancamentos")
@@ -673,7 +773,7 @@ async function correctLastEntry(db: any, userId: string, numero: string, texto: 
     
     const updateObj: any = { 
       [field]: newVal, 
-      updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      updatedAt: FieldValue.serverTimestamp() 
     };
     if (field === "descricao") updateObj.estabelecimento = newVal;
 
