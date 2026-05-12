@@ -1,9 +1,25 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Camera, LayoutDashboard, Wallet, BarChart3, MessageCircle, Cake, Mic } from 'lucide-react';
+import { Camera, LayoutDashboard, Wallet, BarChart3, MessageCircle, Cake, Mic, Brain, Zap } from 'lucide-react';
 
 export default function LandingFeatures() {
   const features = [
+    {
+      icon: Brain,
+      title: 'Analista Financeiro IA',
+      description: 'Converse com sua IA no WhatsApp. Pergunte sobre gastos, peça resumos ou dicas para economizar.',
+      color: 'text-proc-cyan',
+      bg: 'bg-proc-cyan/10',
+      glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
+    },
+    {
+      icon: Zap,
+      title: 'Recorrência Inteligente',
+      description: 'Nossa IA identifica padrões e sugere automatizar lançamentos frequentes para você.',
+      color: 'text-yellow-400',
+      bg: 'bg-yellow-400/10',
+      glow: 'shadow-[0_0_30px_rgba(250,204,21,0.15)]',
+    },
     {
       icon: Mic,
       title: 'Registro via WhatsApp',
@@ -13,17 +29,9 @@ export default function LandingFeatures() {
       glow: 'shadow-[0_0_30px_rgba(0,209,255,0.15)]',
     },
     {
-      icon: Cake,
-      title: 'Lembrete de Aniversários',
-      description: 'Crie lembretes personalizados e receba notificações para nunca mais esquecer uma data especial.',
-      color: 'text-proc-green',
-      bg: 'bg-proc-green/10',
-      glow: 'shadow-[0_0_30px_rgba(0,230,118,0.15)]',
-    },
-    {
       icon: MessageCircle,
-      title: 'Notificações Inteligentes',
-      description: 'Receba alertas de despesas e vencimentos direto no seu celular e evite juros.',
+      title: 'Lembretes & Notificações',
+      description: 'Receba alertas de vencimentos e lembretes de aniversários direto no WhatsApp.',
       color: 'text-[#25D366]',
       bg: 'bg-[#25D366]/10',
       glow: 'shadow-[0_0_30px_rgba(37,211,102,0.15)]',
@@ -44,14 +52,14 @@ export default function LandingFeatures() {
         <div className="text-center mb-20">
           <h2 className="text-[10px] font-bold text-proc-cyan uppercase tracking-[0.3em] mb-4">Diferenciais</h2>
           <h3 className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight">
-            Tudo o que você precisa para <br /> <span className="text-proc-cyan">dominar suas finanças</span>
+            Gestão financeira <br /> <span className="text-proc-cyan">turbinada por IA</span>
           </h3>
           <p className="text-proc-text-sec text-lg max-w-2xl mx-auto">
-            A ProcVisual combina tecnologia de ponta com design intuitivo para transformar sua relação com o dinheiro.
+            A ProcVisual combina inteligência artificial com a praticidade do WhatsApp para você nunca mais perder o controle do seu dinheiro.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <motion.div
               key={feature.title}

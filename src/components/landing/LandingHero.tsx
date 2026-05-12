@@ -21,11 +21,11 @@ export default function LandingHero({ onStart, onLogin }: LandingHeroProps) {
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
           <h1 className="text-5xl md:text-7xl font-bold text-white leading-[1.1] mb-8 tracking-tight">
-            Controle suas finanças com <span className="text-proc-cyan">inteligência</span>
+            Controle suas finanças com <span className="text-proc-cyan">IA e WhatsApp</span>
           </h1>
           
           <p className="text-lg md:text-xl text-proc-text-sec leading-relaxed mb-10 max-w-xl">
-            Registre despesas por áudio, texto ou imagem via WhatsApp e crie lembretes inteligentes para nunca mais esquecer um aniversário ou conta.
+            Converse com seu Analista Financeiro IA, registre despesas por áudio ou foto e controle seus gastos de forma simples direto no WhatsApp.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">

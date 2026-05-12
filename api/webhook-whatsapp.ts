@@ -143,9 +143,6 @@ Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
 • "Estou gastando muito com delivery?"
 • "Meu saldo vai ficar negativo?"
 
-🔔 *Alertas Inteligentes:*
-Eu também te aviso automaticamente sobre vencimentos, gastos excessivos em categorias ou se seu saldo previsto estiver em risco.
-
 ⚡ *Comandos rápidos:*
 • "ajuda" → Este guia
 • "resumo" → Visão geral financeira
