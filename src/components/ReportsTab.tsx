@@ -144,21 +144,41 @@ export default function ReportsTab({ transactions, userName, selectedYears, sele
     
     let text = `*Resumo financeiro - ProcVisual*\n\n`;
     text += `Período: ${getFormattedPeriod()}\n\n`;
-    text += `Receitas: R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-    text += `Despesas: R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-    text += `Saldo: R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
+
+    if (summaryType === 'short') {
+      text += `💰 Receitas: R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+      text += `💸 Despesas: R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+      text += `⚖️ Saldo: R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+      return text;
+    }
+
+    text += `📈 Receitas: R$ ${totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+    text += `📉 Despesas: R$ ${totalExpense.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+    text += `💰 Saldo: R$ ${balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
 
     if (summaryType !== 'numbers') {
-      text += `Maior gasto: ${topCategory}\n`;
+      text += `🏆 Maior categoria: ${topCategory}\n`;
       if (topDay) {
-        text += `Dia mais caro: ${new Date(topDay + 'T12:00:00').toLocaleDateString('pt-BR')}\n\n`;
+        text += `📅 Dia de maior gasto: ${new Date(topDay + 'T12:00:00').toLocaleDateString('pt-BR')}\n`;
+      }
+
+      const paidExpenses = filteredTransactions.filter(t => t.tipo === 'expense' && t.pago).length;
+      const pendingExpenses = filteredTransactions.filter(t => t.tipo === 'expense' && !t.pago).length;
+      
+      if (summaryType === 'detailed') {
+        text += `✅ Contas pagas: ${paidExpenses}\n`;
+        text += `⏳ Contas pendentes: ${pendingExpenses}\n`;
+        const avg = filteredTransactions.filter(t => t.tipo === 'expense').length > 0 
+          ? totalExpense / filteredTransactions.filter(t => t.tipo === 'expense').length 
+          : 0;
+        text += `📊 Gasto médio p/ item: R$ ${avg.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
       }
 
       if (summaryType === 'suggestions') {
         if (topCategory !== 'Nenhuma') {
-          text += `Sugestão: Analise seus gastos em "${topCategory}" para identificar possíveis economias.`;
+          text += `\n💡 Sugestão: Analise seus gastos em "${topCategory}" para identificar possíveis economias.`;
         } else {
-          text += `Sugestão: Continue mantendo o controle rigoroso dos seus lançamentos.`;
+          text += `\n💡 Sugestão: Continue mantendo o controle rigoroso dos seus lançamentos.`;
         }
       }
     }

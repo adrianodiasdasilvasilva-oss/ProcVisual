@@ -53,6 +53,12 @@ export default async function handler(req: any, res: any) {
     // Normalize incoming number
     const rawNumero = String(numero || "").split('@')[0];
     const cleanIncoming = rawNumero.replace(/\D/g, "");
+
+    // Ignore obviously invalid or short numbers (e.g. carrier shortcodes, automated bots, blank numbers)
+    if (cleanIncoming.length < 10) {
+      console.log(`>>> [WH-WA] Ignorando número curto/inválido: ${cleanIncoming}`);
+      return res.status(200).json({ ok: true });
+    }
     
     // Brazilian normalization
     let shortIncoming = cleanIncoming;
@@ -104,6 +110,20 @@ export default async function handler(req: any, res: any) {
 
     // 1. Bloqueio para usuários não identificados (SEM CONTA)
     if (!userId) {
+      // Cooldown de 24 horas por número não cadastrado para evitar loops infinitos de mensagens automáticas (ex: Claro, TIM, Vivo)
+      const cooldownRef = db.collection("unregistered_cooldown").doc(cleanIncoming);
+      const cooldownSnap = await cooldownRef.get();
+      if (cooldownSnap.exists) {
+        const lastSent = cooldownSnap.get("lastSent");
+        if (lastSent) {
+          const diffMs = Date.now() - new Date(lastSent).getTime();
+          if (diffMs < 86400000) { // 24 horas
+            console.log(`>>> [WH-WA] Ignorando envio de 'Conta não encontrada' para ${cleanIncoming} (cooldown ativo).`);
+            return res.status(200).json({ ok: true });
+          }
+        }
+      }
+
       const msg = `⚠️ *Conta não encontrada*
       
 Olá! Identificamos que este número ainda não está vinculado a uma conta ativa na *ProcVisual*.
@@ -115,6 +135,13 @@ Para começar a registrar suas despesas por aqui, você precisa:
 
 Esperamos por você! 🚀`;
       await sendWhatsAppMessage(numero, msg);
+
+      // Registrar data de envio no cooldown
+      await cooldownRef.set({
+        lastSent: new Date().toISOString(),
+        numero: numero
+      });
+
       return res.status(200).json({ ok: true });
     }
 
