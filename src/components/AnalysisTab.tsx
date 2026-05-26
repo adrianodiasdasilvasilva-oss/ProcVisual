@@ -43,6 +43,16 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
     'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
   };
 
+  React.useEffect(() => {
+    if (selectedYears.length === 1 && selectedMonths.length === 1) {
+      const year = parseInt(selectedYears[0]);
+      const monthIdx = monthMap[selectedMonths[0]];
+      if (!isNaN(year) && monthIdx !== undefined) {
+        setCurrentMonth(new Date(year, monthIdx, 1));
+      }
+    }
+  }, [selectedYears, selectedMonths]);
+
   // Helper to format date consistently
   const toDateStr = (date: Date) => {
     const year = date.getFullYear();
@@ -56,7 +66,7 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
     // We'll group by month for the comparative chart
     const monthlyData: { [key: string]: { month: string, year: number, income: number, expense: number, balance: number, sortKey: number } } = {};
 
-    const source = filteredTransactions.length > 0 ? filteredTransactions : transactions;
+    const source = filteredTransactions;
     
     source.forEach(t => {
       try {
@@ -162,7 +172,7 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
 
   const getEventsForDate = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0];
-    return transactions.filter(t => t.data === dateStr);
+    return filteredTransactions.filter(t => t.data === dateStr);
   };
 
   const handlePrevMonth = () => {
@@ -210,10 +220,10 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
   const selectedDayData = useMemo(() => {
     if (!selectedDay) return null;
     const dateStr = selectedDay.toISOString().split('T')[0];
-    const events = transactions.filter(t => t.data === dateStr);
+    const events = filteredTransactions.filter(t => t.data === dateStr);
     
     // Calculate balance before and after
-    const balanceBefore = transactions
+    const balanceBefore = filteredTransactions
       .filter(t => new Date(t.data) < selectedDay)
       .reduce((acc, t) => acc + (t.tipo === 'income' ? t.valor : -t.valor), 0);
       
@@ -228,7 +238,7 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
       totalIncome: dayIncome,
       totalExpense: dayExpense
     };
-  }, [selectedDay, transactions]);
+  }, [selectedDay, filteredTransactions]);
 
   return (
     <div className="space-y-8 pb-10">

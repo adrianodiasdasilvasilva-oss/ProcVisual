@@ -190,18 +190,18 @@ export default function App() {
   };
 
   const searchedTransactions = useMemo(() => {
-    if (!searchTerm.trim()) return transactions;
+    if (!searchTerm.trim()) return filteredTransactions;
     
     const normalize = (str: string) => 
       str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     
     const term = normalize(searchTerm);
     
-    return transactions.filter(t => 
+    return filteredTransactions.filter(t => 
       normalize(t.estabelecimento || '').includes(term) || 
       normalize(t.descricao || '').includes(term)
     );
-  }, [transactions, searchTerm]);
+  }, [filteredTransactions, searchTerm]);
 
   const handleSelectAll = () => {
     if (selectedIds.length === transactions.length && transactions.length > 0) {
