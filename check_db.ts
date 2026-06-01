@@ -1,48 +1,46 @@
-import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeFirebaseAdmin } from "./api/firebase-admin.js";
 import fs from "fs";
 import path from "path";
 
 async function checkNotifications() {
-  const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-  const firebaseConfig = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-  const projectId = firebaseConfig.projectId;
-  const dbId = firebaseConfig.firestoreDatabaseId;
-
-  if (admin.apps.length === 0) {
-    admin.initializeApp({ projectId });
-  }
-
-  const db = dbId && dbId !== '(default)' ? getFirestore(dbId) : getFirestore();
+  const db = await initializeFirebaseAdmin();
   
-  const email = "adrianodiasdasilva.silva@gmail.com";
-  const userSnap = await db.collection("usuarios").where("email", "==", email).get();
-  
+  console.log("--- USUÁRIOS ---");
+  const userSnap = await db.collection("usuarios").get();
   if (userSnap.empty) {
-    console.log("Usuário não encontrado.");
-    return;
+    console.log("Nenhum usuário cadastrado.");
+  } else {
+    userSnap.forEach(doc => {
+      const data = doc.data();
+      console.log(`ID: ${doc.id}, Nome: ${data.nome}, Email: ${data.email}, Ativo: ${data.isActive}, Telefone: ${data.telefone}`);
+    });
   }
 
-  const userDoc = userSnap.docs[0];
-  const userId = userDoc.id;
-  const userData = userDoc.data();
-  console.log(`Usuário: ${userId}, Ativo: ${userData.isActive}, Telefone: ${userData.telefone}`);
+  console.log("\n--- UNREGISTERED COOLDOWN ---");
+  const cooldownSnap = await db.collection("unregistered_cooldown").get();
+  if (cooldownSnap.empty) {
+    console.log("Nenhum cooldown ativo.");
+  } else {
+    cooldownSnap.forEach(doc => {
+      const data = doc.data();
+      console.log(`ID/Numero: ${doc.id} | LastSent: ${data.lastSent} | OriginalNumero: ${data.numero}`);
+    });
+  }
 
-  const now = new Date();
-  const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-  const todayStr = brazilTime.toISOString().split('T')[0];
-  console.log(`Data hoje (Brasil): ${todayStr}`);
-
-  const lancamentosSnap = await db.collection("lancamentos")
-    .where("userId", "==", userId)
+  console.log("\n--- ÚLTIMOS LANÇAMENTOS ---");
+  const lancSnap = await db.collection("lancamentos")
+    .orderBy("createdAt", "desc")
+    .limit(10)
     .get();
 
-  console.log(`Total de lançamentos: ${lancamentosSnap.size}`);
-
-  lancamentosSnap.forEach(doc => {
-    const data = doc.data();
-    console.log(`- ${data.descricao}: Data: ${data.data}, Pago: ${data.pago}, NotificadoHoje: ${data.notificadoNoDia}, Tipo: ${data.tipo}`);
-  });
+  if (lancSnap.empty) {
+    console.log("Nenhum lançamento encontrado.");
+  } else {
+    lancSnap.forEach(doc => {
+      const data = doc.data();
+      console.log(`ID: ${doc.id} | User: ${data.userId} | Desc: ${data.descricao} | Valor: ${data.valor} | Tipo: ${data.tipo} | Categoria: ${data.categoria} | Origem: ${data.origem} | Data: ${data.data}`);
+    });
+  }
 }
 
 checkNotifications().catch(console.error);
