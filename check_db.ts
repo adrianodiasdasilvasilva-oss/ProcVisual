@@ -27,6 +27,25 @@ async function checkNotifications() {
     });
   }
 
+  console.log("\n--- DEPENDÊNCIAS WHATSAPP ---");
+  const pendaSnap = await db.collection("pendencias_whatsapp").get();
+  if (pendaSnap.empty) {
+    console.log("Nenhuma pendência ativa em pendencias_whatsapp.");
+  } else {
+    pendaSnap.forEach(doc => {
+      console.log(`ID: ${doc.id} | Data:`, JSON.stringify(doc.data(), null, 2));
+    });
+  }
+
+  console.log("\n--- USER PENDING WHATSAPP EXPENSE ---");
+  const usersSnap = await db.collection("usuarios").get();
+  usersSnap.forEach(doc => {
+    const data = doc.data();
+    if (data.pendingWhatsAppExpense) {
+      console.log(`User ID: ${doc.id} | pendingWhatsAppExpense:`, JSON.stringify(data.pendingWhatsAppExpense, null, 2));
+    }
+  });
+
   console.log("\n--- ÚLTIMOS LANÇAMENTOS ---");
   const lancSnap = await db.collection("lancamentos")
     .orderBy("createdAt", "desc")

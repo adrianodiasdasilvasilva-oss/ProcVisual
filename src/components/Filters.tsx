@@ -23,7 +23,24 @@ export default function Filters({ theme, onToggleTheme, years: selectedYears, mo
     'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
     'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
   ];
-  const categories = availableCategories || ['Todas Categorias', 'Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação'];
+  const categories = availableCategories || [
+    'Todas Categorias', 
+    'Moradia', 
+    'Alimentação', 
+    'Transporte', 
+    'Lazer & Entretenimento', 
+    'Saúde & Bem-estar', 
+    'Educação', 
+    'Vestuário & Compras', 
+    'Cuidados Pessoais', 
+    'Assinaturas & Serviços', 
+    'Manutenção & Reparos', 
+    'Presentes', 
+    'Outros', 
+    'Aniversário',
+    'Lazer',
+    'Saúde'
+  ];
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {

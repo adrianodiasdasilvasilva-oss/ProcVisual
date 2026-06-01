@@ -150,7 +150,24 @@ export default function App() {
   }, [transactions]);
 
   const availableCategories = useMemo(() => {
-    const predefined = ['Todas Categorias', 'Moradia', 'Alimentação', 'Transporte', 'Lazer', 'Saúde', 'Educação', 'Outros', 'Aniversário'];
+    const predefined = [
+      'Todas Categorias', 
+      'Moradia', 
+      'Alimentação', 
+      'Transporte', 
+      'Lazer & Entretenimento', 
+      'Saúde & Bem-estar', 
+      'Educação', 
+      'Vestuário & Compras', 
+      'Cuidados Pessoais', 
+      'Assinaturas & Serviços', 
+      'Manutenção & Reparos', 
+      'Presentes', 
+      'Outros', 
+      'Aniversário',
+      'Lazer',
+      'Saúde'
+    ];
     // Merge with custom categories and remove duplicates
     const all = Array.from(new Set([...predefined, ...customCategories]));
     return all;

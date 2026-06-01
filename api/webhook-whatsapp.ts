@@ -231,9 +231,9 @@ Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
         if (userDoc) await userDoc.ref.update({ pendingWhatsAppExpense: FieldValue.delete() });
         await sendWhatsAppMessage(numero, "❌ Cancelado. O que deseja registrar agora?");
       } else {
-        // 4. Detecção de Pergunta para o Analista Financeiro IA
+        // 4. Detecção de Pergunta para o Analista Financeiro IA (Sufixos e Prefixos específicos para não confundir com registro que use a palavra "gastei" / "gasto de")
         const isQuestion = lowerText.endsWith('?') || 
-                          /^(quanto|qual|quais|como|estou|cadê|mostra|me diga|onde|quem|gast|saldo|quanto|limite)/i.test(lowerText);
+                          /^(quanto|qual|quais|como|estou|cadê|mostra|me diga|onde|quem|saldo|limite)/i.test(lowerText);
         
         if (isQuestion && lowerText.length > 5) {
           await handleFinancialQuery(db, userId, numero, texto);
@@ -415,7 +415,8 @@ async function processImage(db: any, userId: string, numero: string, url: string
     const buf = await (await fetch(url)).arrayBuffer();
     const ai = new GoogleGenAI({ apiKey });
     const sysInst = "Extraia descrição, valor e melhor categoria desta imagem de despesa. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Outros. Se não houver valor claro, retorne null.";
-    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], sysInst);
+    const imageTextPrompt = "Analise esta imagem de comprovante de despesa e extraia os dados.";
+    const resp = await generateWithFallback(ai, [{ text: imageTextPrompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'image/jpeg' } }], sysInst);
     const result = extractJSON(resp.text);
 
     if (result && result.valor && result.descricao) {
@@ -601,6 +602,7 @@ Sua despesa foi registrada com sucesso.`;
 
     await sendWhatsAppMessage(numero, confirmMsg);
   } catch (error: any) {
+    console.error(">>> [WH-WA] Erro ao salvar despesa em saveAndConfirm:", error.message, error.stack);
     await sendWhatsAppMessage(numero, '❌ Erro ao salvar despesa.');
   }
 }
