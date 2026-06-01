@@ -258,16 +258,26 @@ Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
 
 async function sendWhatsAppMessage(to: string, body: string) {
   const WHAPI_TOKEN = process.env.WHAPI_TOKEN;
-  if (!WHAPI_TOKEN) return;
+  if (!WHAPI_TOKEN) {
+    console.warn(">>> [WH-WA] Tentativa de envio rejeitada: WHAPI_TOKEN não configurado.");
+    return;
+  }
   let cleanNumber = to.split('@')[0].replace(/\D/g, "");
   if (cleanNumber.length === 10 || cleanNumber.length === 11) cleanNumber = "55" + cleanNumber;
   const recipient = `${cleanNumber}@s.whatsapp.net`;
   try {
-    await fetch('https://gate.whapi.cloud/messages/text', {
+    const response = await fetch('https://gate.whapi.cloud/messages/text', {
       method: "POST",
       headers: { "Authorization": `Bearer ${WHAPI_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify({ to: recipient, body, typing_delay: 2 }),
     });
+    
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error(`>>> [WH-WA] Erro ao enviar mensagem WhatsApp via Whapi (${response.status}):`, errText);
+    } else {
+      console.log(`>>> [WH-WA] Mensagem enviada com sucesso para ${recipient}`);
+    }
   } catch (e: any) {
     console.error(">>> [WH-WA] Erro envio:", e.message);
   }
