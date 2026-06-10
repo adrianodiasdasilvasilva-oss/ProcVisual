@@ -46,6 +46,9 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
   const [customCategory, setCustomCategory] = useState('');
   const [userCustomCategories, setUserCustomCategories] = useState<string[]>([]);
 
+  const [showEditScopePrompt, setShowEditScopePrompt] = useState(false);
+  const [scopeGroupCount, setScopeGroupCount] = useState<number>(0);
+
   const predefinedCategories = [
     'Outros',
     'Alimentação',
@@ -117,6 +120,22 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         description: transactionToEdit.descricao,
         establishment: transactionToEdit.estabelecimento
       });
+
+      // Check if it's a grouped installment/recurrence
+      if (transactionToEdit.groupId && auth.currentUser) {
+        const q = query(
+          collection(db, 'lancamentos'),
+          where('groupId', '==', transactionToEdit.groupId),
+          where('userId', '==', auth.currentUser.uid)
+        );
+        getDocs(q).then(snapshot => {
+          setScopeGroupCount(snapshot.size);
+        }).catch(err => {
+          console.error('Erro ao buscar quantidade de parcelas:', err);
+        });
+      } else {
+        setScopeGroupCount(0);
+      }
     } else if (isOpen && !transactionToEdit) {
       resetModal();
     }
@@ -132,6 +151,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setNotificationStatus(null);
     setIsCustomCategory(false);
     setCustomCategory('');
+    setShowEditScopePrompt(false);
+    setScopeGroupCount(0);
     setFormData({
       type: initialType,
       value: initialType === 'birthday' ? '0' : '',
@@ -445,8 +466,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
       return;
     }
 
+    // If editing a recurring/grouped transaction and there are multiple ones in group, ask scope first
+    if (transactionToEdit && transactionToEdit.groupId && scopeGroupCount > 1) {
+      setShowEditScopePrompt(true);
+      return;
+    }
+
+    await saveTransaction(false);
+  };
+
+  const saveTransaction = async (editAllInGroup: boolean) => {
     setIsSaving(true);
     setErrorMessage(null);
+    setShowEditScopePrompt(false);
     const path = 'lancamentos';
     try {
       const cleanValue = formData.value.replace(',', '.');
@@ -491,8 +523,8 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
         console.log('Atualizando lançamento no Firestore:', transactionToEdit.id, payload);
         await updateDoc(doc(db, path, transactionToEdit.id), payload);
 
-        // If it belongs to a group (installments), update other installments in the group
-        if (transactionToEdit.groupId) {
+        // If it belongs to a group (installments) and user wanted to edit all of them
+        if (transactionToEdit.groupId && editAllInGroup) {
           console.log('Atualizando outras parcelas do grupo:', transactionToEdit.groupId);
           const q = query(
             collection(db, path), 
@@ -606,6 +638,55 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             className="relative w-full max-w-md bg-proc-secondary border border-white/10 rounded-[2.5rem] shadow-[0_0_50px_rgba(0,209,255,0.15)] overflow-hidden"
           >
+            {/* Edit Scope Confirmation Overlay */}
+            <AnimatePresence>
+              {showEditScopePrompt && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 bg-proc-bg/95 backdrop-blur-md flex flex-col justify-center p-8 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-proc-cyan/10 text-proc-cyan flex items-center justify-center mx-auto mb-6">
+                    <Edit3 size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-proc-text-main mb-2">Corrigir Lançamento Recorrente?</h3>
+                  <p className="text-proc-text-sec text-xs mb-6">
+                    Este lançamento faz parte de uma despesa recorrente ou parcelada. Deseja corrigir apenas esta parcela selecionada ou aplicar as alterações a todas as parcelas recorrentes do grupo?
+                  </p>
+                  
+                  {transactionToEdit && (
+                    <div className="text-xs bg-proc-bg border border-white/5 rounded-xl p-4 mb-6 text-left space-y-1">
+                      <p className="text-proc-text-sec">Item atual: <span className="text-proc-text-main font-bold">{transactionToEdit.descricao}</span></p>
+                      <p className="text-proc-text-sec">Novo item: <span className="text-proc-cyan font-bold">{formData.description || formData.establishment || 'Sem descrição'}</span></p>
+                      <p className="text-proc-text-sec">Novo valor: <span className="text-proc-cyan font-bold">R$ {parseFloat(formData.value.replace(',', '.')).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={() => saveTransaction(false)}
+                      className="w-full py-4 rounded-2xl bg-proc-secondary border border-white/10 text-proc-text-main font-bold hover:bg-white/5 transition-all text-sm"
+                    >
+                      Alterar apenas esta parcela ({transactionToEdit?.parcela && transactionToEdit?.totalParcelas ? `${transactionToEdit.parcela}/${transactionToEdit.totalParcelas}` : 'Esta parcela'})
+                    </button>
+                    <button
+                      onClick={() => saveTransaction(true)}
+                      className="w-full py-4 rounded-2xl bg-proc-cyan text-proc-bg font-bold hover:shadow-[0_0_20px_rgba(0,209,255,0.4)] transition-all text-sm"
+                    >
+                      Alterar todas as parcelas recorrentes ({scopeGroupCount})
+                    </button>
+                    <button
+                      onClick={() => setShowEditScopePrompt(false)}
+                      className="w-full py-3 rounded-2xl bg-transparent text-proc-text-sec font-bold hover:text-white transition-all text-sm mt-2"
+                    >
+                      Voltar ao formulário
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Header */}
             <div className="p-6 flex justify-between items-center border-b border-white/5">
               <div className="flex items-center gap-3">
