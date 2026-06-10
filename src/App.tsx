@@ -188,6 +188,17 @@ export default function App() {
     });
   }, [transactions, filterYears, filterMonths, filterCategory]);
 
+  const selectedTxForDeletion = useMemo(() => {
+    if (!transactionToDelete) return null;
+    return transactions.find(t => t.id === transactionToDelete) || null;
+  }, [transactionToDelete, transactions]);
+
+  const hasMultipleInstallments = useMemo(() => {
+    if (!selectedTxForDeletion?.groupId) return false;
+    const sameGroupCount = transactions.filter(t => t.groupId === selectedTxForDeletion.groupId).length;
+    return sameGroupCount > 1;
+  }, [selectedTxForDeletion, transactions]);
+
   const confirmDelete = async () => {
     if (!transactionToDelete) return;
     
@@ -196,6 +207,22 @@ export default function App() {
       await deleteDoc(doc(db, path, transactionToDelete));
       setTransactionToDelete(null);
       setSelectedIds(prev => prev.filter(id => id !== transactionToDelete));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, path);
+    }
+  };
+
+  const confirmDeleteGroup = async () => {
+    if (!transactionToDelete || !selectedTxForDeletion?.groupId) return;
+    
+    const path = 'lancamentos';
+    try {
+      const groupTransactions = transactions.filter(t => t.groupId === selectedTxForDeletion.groupId);
+      const groupIds = groupTransactions.map(t => t.id);
+      
+      await Promise.all(groupIds.map(id => deleteDoc(doc(db, path, id))));
+      setTransactionToDelete(null);
+      setSelectedIds(prev => prev.filter(id => !groupIds.includes(id)));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, path);
     }
@@ -934,29 +961,65 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-proc-secondary border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full shadow-2xl"
+              className="relative bg-proc-secondary border border-white/10 p-8 rounded-[2.5rem] max-w-md w-full shadow-2xl"
             >
               <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6">
                 <Trash2 size={32} />
               </div>
-              <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir Lançamento?</h3>
-              <p className="text-proc-text-sec text-center mb-8">
-                Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setTransactionToDelete(null)}
-                  className="flex-1 py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmDelete}
-                  className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
-                >
-                  Excluir
-                </button>
-              </div>
+              
+              {hasMultipleInstallments ? (
+                <>
+                  <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir Lançamento Recorrente?</h3>
+                  <p className="text-proc-text-sec text-center mb-6 text-sm">
+                    Este lançamento faz parte de uma despesa parcelada ou recorrente.
+                    Deseja excluir apenas esta parcela selecionada ou todas as parcelas que se referem a esta recorrência?
+                  </p>
+                  <p className="text-proc-cyan/85 font-mono text-xs text-center mb-6 px-4 py-2 bg-proc-cyan/10 rounded-xl border border-proc-cyan/10">
+                    Descrição: <span className="text-proc-text-main font-sans font-bold">{selectedTxForDeletion?.descricao}</span>
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <button
+                      onClick={confirmDelete}
+                      className="w-full py-4 rounded-2xl bg-red-500/10 text-red-500 font-bold hover:bg-red-500/25 transition-all border border-red-500/20 text-sm"
+                    >
+                      Excluir somente este lançamento ({selectedTxForDeletion?.parcela ? `${selectedTxForDeletion.parcela}/${selectedTxForDeletion.totalParcelas}` : 'Esta Parcela'})
+                    </button>
+                    <button
+                      onClick={confirmDeleteGroup}
+                      className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20 text-sm"
+                    >
+                      Excluir todas as parcelas recorrentes ({transactions.filter(t => t.groupId === selectedTxForDeletion?.groupId).length})
+                    </button>
+                    <button
+                      onClick={() => setTransactionToDelete(null)}
+                      className="w-full py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10 text-sm"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-bold text-proc-text-main text-center mb-2">Excluir Lançamento?</h3>
+                  <p className="text-proc-text-sec text-center mb-8">
+                    Tem certeza que deseja excluir este lançamento? Esta ação não pode ser desfeita.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setTransactionToDelete(null)}
+                      className="flex-1 py-4 rounded-2xl bg-proc-secondary/50 text-proc-text-main font-bold hover:bg-proc-secondary/80 transition-all border border-white/10"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={confirmDelete}
+                      className="flex-1 py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </>
+              )}
             </motion.div>
           </div>
         )}
