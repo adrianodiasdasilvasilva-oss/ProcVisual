@@ -14,6 +14,7 @@ import ReportsTab from './components/ReportsTab';
 import AdminTab from './components/AdminTab';
 import InteractiveBalloon from './components/InteractiveBalloon';
 import SubscriptionPaywall from './components/SubscriptionPaywall';
+import PendingBalanceCard from './components/PendingBalanceCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -704,6 +705,9 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Pending Balance Card */}
+                    <PendingBalanceCard transactions={filteredTransactions} />
                     
                     {/* Search Bar */}
                     <div className="mb-6 relative group">
