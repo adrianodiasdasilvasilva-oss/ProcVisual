@@ -761,13 +761,13 @@ export default function App() {
                         .map((t) => (
                           <div 
                             key={t.id} 
-                            className={`flex items-center justify-between p-4 rounded-2xl transition-all border ${
+                            className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl transition-all border gap-4 ${
                             selectedIds.includes(t.id) 
                               ? 'bg-proc-cyan/5 border-proc-cyan/30' 
                               : 'bg-proc-secondary/30 hover:bg-proc-secondary/50 border-white/10'
                           }`}
                         >
-                          <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 w-full sm:w-auto">
                             <button 
                               onClick={() => handleToggleSelect(t.id)}
                               className={`p-2 rounded-lg transition-all ${
@@ -783,12 +783,12 @@ export default function App() {
                             }`}>
                               {t.tipo === 'birthday' ? '🎂' : <div className="w-2.5 h-2.5 rounded-full bg-current" />}
                             </div>
-                            <div>
-                              <p className="text-proc-text-main font-bold">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                              <p className="text-proc-text-sec text-xs">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-proc-text-main font-bold truncate text-sm md:text-base" title={t.estabelecimento || t.descricao}>{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
+                              <p className="text-proc-text-sec text-xs truncate">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
                             </div>
                           </div>
-                          <div className="flex items-center gap-6">
+                          <div className="flex items-center justify-between sm:justify-end gap-4 md:gap-6 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0 shrink-0">
                             <div className="text-right">
                               <p className={`font-bold ${
                                 t.tipo === 'income' ? 'text-proc-green' : 
@@ -798,19 +798,19 @@ export default function App() {
                                 {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
                               </p>
                               {t.tipo === 'expense' && (
-                                <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
+                                <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 sm:mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
                                   {t.pago ? 'Pago' : 'Pendente'}
                                 </p>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5 md:gap-2">
                               {t.tipo === 'expense' && (
                                 <button 
                                   onClick={() => handleTogglePaid(t)}
-                                  className={`p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
+                                  className={`p-2.5 md:p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
                                   title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
                                 >
-                                  <CheckCircle2 size={18} />
+                                  <CheckCircle2 size={16} className="md:w-[18px] md:h-[18px]" />
                                 </button>
                               )}
                               <button 
@@ -818,17 +818,17 @@ export default function App() {
                                   setEditingTransaction(t);
                                   setIsModalOpen(true);
                                 }}
-                                className="p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
+                                className="p-2.5 md:p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
                                 title="Editar"
                               >
-                                <Edit3 size={18} />
+                                <Edit3 size={16} className="md:w-[18px] md:h-[18px]" />
                               </button>
                               <button 
                                 onClick={() => handleDeleteTransaction(t.id)}
-                                className="p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                className="p-2.5 md:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
                                 title="Excluir"
                               >
-                                <Trash2 size={18} />
+                                <Trash2 size={16} className="md:w-[18px] md:h-[18px]" />
                               </button>
                             </div>
                           </div>
