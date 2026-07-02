@@ -123,16 +123,33 @@ export default function SubscriptionPaywall({ user, profile, onSignOut }: Subscr
 
           {/* Right Side: Action */}
           <div className="p-8 md:p-12 bg-proc-bg/40 flex flex-col justify-center items-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan mb-6">
+            <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 mb-6">
               <Sparkles size={32} />
             </div>
 
-            <div className="mb-8">
-              <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest mb-2">Plano Premium</p>
+            <div className="mb-8 w-full">
+              <span className="px-3 py-1 bg-gradient-to-r from-amber-500 to-red-500 text-white text-[9px] font-black rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(245,158,11,0.3)] inline-block mb-3 animate-pulse">
+                ⏳ Oferta por Tempo Limitado
+              </span>
+              <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest mb-1">Plano Premium</p>
+              
+              <div className="flex items-center justify-center gap-1.5 text-proc-text-sec text-xs mb-1">
+                <span>De</span>
+                <span className="line-through decoration-red-500/80 decoration-2 font-medium">R$ 49,90</span>
+                <span>por apenas:</span>
+              </div>
+
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-4xl font-bold text-white">R$ 29,90</span>
+                <span className="text-4xl font-black text-white">R$ 29,90</span>
                 <span className="text-proc-text-sec text-sm">/mês</span>
               </div>
+              
+              <div className="mt-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl inline-block max-w-[240px]">
+                <p className="text-amber-500 text-[10px] font-bold leading-tight">
+                  ⚡ Aproveite o preço promocional antes que mude!
+                </p>
+              </div>
+              
               <p className="text-[10px] text-proc-text-sec mt-2 italic">Cancele a qualquer momento</p>
             </div>
 

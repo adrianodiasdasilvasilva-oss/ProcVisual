@@ -38,20 +38,38 @@ export default function LandingPricing({ onSignUp }: LandingPricingProps) {
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="relative p-8 rounded-[2.5rem] bg-proc-secondary/20 border border-proc-green/30 backdrop-blur-xl shadow-[0_0_50px_rgba(0,230,118,0.1)]"
+            className="relative p-8 rounded-[2.5rem] bg-proc-secondary/20 border border-amber-500/30 backdrop-blur-xl shadow-[0_0_50px_rgba(245,158,11,0.1)]"
           >
-            {/* Popular Badge */}
-            <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-proc-green text-proc-bg text-xs font-bold rounded-full uppercase tracking-widest">
-              Plano Premium
+            {/* Promotion Badge */}
+            <div className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-red-500 text-white text-[10px] sm:text-xs font-black rounded-full uppercase tracking-widest shadow-[0_0_25px_rgba(245,158,11,0.5)] whitespace-nowrap flex items-center gap-1.5 animate-pulse">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-white animate-ping" />
+              Tempo Determinado
             </div>
 
             <div className="text-center mb-8">
+              <p className="text-amber-500 text-xs font-bold uppercase tracking-wider mb-2">
+                🔥 Promoção Especial de Lançamento
+              </p>
+              
+              <div className="flex items-center justify-center gap-1 text-proc-text-sec text-sm mb-1">
+                <span>De</span>
+                <span className="line-through decoration-red-500/80 decoration-2 font-medium">R$ 49,90</span>
+                <span>por apenas:</span>
+              </div>
+
               <div className="flex items-center justify-center gap-1 mb-2">
                 <span className="text-2xl font-bold text-proc-text-sec">R$</span>
                 <span className="text-6xl font-black text-white tracking-tighter">29,90</span>
                 <span className="text-proc-text-sec font-medium">/mês</span>
               </div>
-              <p className="text-proc-text-sec text-sm">Acesso total a todas as funcionalidades</p>
+              
+              <div className="mt-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl inline-block">
+                <p className="text-amber-500 text-[11px] font-bold">
+                  ⚡ Aproveite o preço promocional agora mesmo!
+                </p>
+              </div>
+              
+              <p className="text-proc-text-sec text-xs mt-3">Acesso total e ilimitado a todas as funcionalidades</p>
             </div>
 
             <ul className="space-y-4 mb-8">
