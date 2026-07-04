@@ -233,7 +233,11 @@ Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
       } else {
         // 4. Detecção de Pergunta para o Analista Financeiro IA (Sufixos e Prefixos específicos para não confundir com registro que use a palavra "gastei" / "gasto de")
         const isQuestion = lowerText.endsWith('?') || 
-                          /^(quanto|qual|quais|como|estou|cadê|mostra|me diga|onde|quem|saldo|limite)/i.test(lowerText);
+                          /^(quanto|qual|quais|como|estou|cadê|mostra|me diga|me fale|gostaria de|preciso de|me passa|relatório|resumo|onde|quem|saldo|limite)/i.test(lowerText) ||
+                          lowerText.includes('quanto gastei') ||
+                          lowerText.includes('meu saldo') ||
+                          lowerText.includes('minhas despesas') ||
+                          lowerText.includes('minhas contas');
         
         if (isQuestion && lowerText.length > 5) {
           await handleFinancialQuery(db, userId, numero, texto);
@@ -297,6 +301,24 @@ const EXPENSE_SCHEMA: any = {
   required: ["categoria", "parcela", "totalParcelas"]
 };
 
+const AUDIO_SCHEMA: any = {
+  type: Type.OBJECT,
+  properties: {
+    transcricao: { type: Type.STRING, description: "A transcrição completa, literal e exata do áudio falado pelo usuário" },
+    intent: { 
+      type: Type.STRING, 
+      description: "A intenção predominante do usuário: 'query' se ele estiver fazendo uma pergunta sobre gastos, saldo, extrato, faturas, dicas ou pedindo informações sobre suas finanças; ou 'register' se ele estiver informando uma despesa ou receita para ser registrada diretamente (ex: 'almoço 35 reais')" 
+    },
+    descricao: { type: Type.STRING, description: "O item pago ou recebido (apenas se intent for 'register', caso contrário retorne null)" },
+    valor: { type: Type.NUMBER, description: "Valor numérico da transação (apenas se intent for 'register', caso contrário retorne null)" },
+    categoria: { type: Type.STRING, description: "Categoria mais adequada da transação (apenas se intent for 'register', caso contrário retorne null)" },
+    parcela: { type: Type.INTEGER, description: "Número da parcela se for parcelado (apenas se intent for 'register')" },
+    totalParcelas: { type: Type.INTEGER, description: "Total de parcelas se for parcelado (apenas se intent for 'register')" },
+    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD se mencionada (apenas se intent for 'register')" }
+  },
+  required: ["transcricao", "intent"]
+};
+
 function extractJSON(text: string) {
   try {
     const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/```\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
@@ -304,19 +326,19 @@ function extractJSON(text: string) {
   } catch (e) { return null; }
 }
 
-async function generateWithFallback(ai: any, prompt: any, sysInst: string) {
+async function generateWithFallback(ai: any, prompt: any, sysInst: string, schema: any = EXPENSE_SCHEMA) {
   try {
     const response = await ai.models.generateContent({ 
       model: "gemini-3-flash-preview",
       contents: Array.isArray(prompt) ? { parts: prompt } : prompt,
-      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: EXPENSE_SCHEMA }
+      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: schema }
     });
     return response;
   } catch (e) {
     return await ai.models.generateContent({ 
       model: "gemini-3.1-pro-preview",
       contents: Array.isArray(prompt) ? { parts: prompt } : prompt,
-      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: EXPENSE_SCHEMA }
+      config: { systemInstruction: sysInst, responseMimeType: "application/json", responseSchema: schema }
     });
   }
 }
@@ -459,10 +481,21 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     const ai = new GoogleGenAI({ apiKey });
     
     const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
-    const prompt = `Transcreva a despesa do áudio e extraia os dados. Hoje é ${brazilTime}. CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.`;
-    const sysInst = "Extraia descrição, valor e categoria. Retorne também o texto falado no campo 'transcricao'. REGRA: Se o usuário NÃO disse um valor numérico explicitamente, coloque 'valor' como null. NÃO invente valores baseado no item falado.";
+    const prompt = `Transcreva o áudio e identifique a intenção do usuário. Hoje é ${brazilTime}. 
+    Se a intenção for registrar uma despesa ou receita ('register'), extraia também os dados correspondentes. 
+    CATEGORIAS de despesa: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.`;
     
-    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst);
+    const sysInst = `Você é um assistente financeiro inteligente e preciso. 
+    Sua primeira tarefa é transcrever o áudio completo no campo 'transcricao'. 
+    Sua segunda tarefa é determinar a intenção ('intent'): 
+    - Se o usuário estiver fazendo perguntas sobre gastos, saldo, relatórios, faturas, comparativos, pedindo conselhos ou solicitando qualquer informação do histórico financeiro dele (ex: "quanto gastei com mercado este mês", "qual o meu saldo", "estou gastando muito?"), defina o 'intent' como 'query'.
+    - Se o usuário estiver apenas ditando um lançamento de despesa ou receita para ser salvo (ex: "compras no mercado 150 reais", "almoço 32,50", "recebi 2000 de salário"), defina o 'intent' como 'register'.
+    
+    Se 'intent' for 'register':
+    - Extraia 'descricao', 'valor' (apenas se dito explicitamente), 'categoria' e informações de parcelas se houver.
+    - Se o usuário não disser um valor numérico explicitamente na intenção de registro, defina 'valor' como null. Nunca invente valores.`;
+    
+    const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst, AUDIO_SCHEMA);
     const result = extractJSON(resp.text);
     console.log(`>>> [WH-WA] Áudio Bruto:`, JSON.stringify(result));
 
@@ -472,7 +505,16 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     }
 
     const transcricao = result.transcricao || "";
-    // Mesma lógica de validação de números/palavras de valor do texto
+    const intent = result.intent || "register";
+
+    // Se for uma consulta/pergunta, redirecionar para handleFinancialQuery
+    if (intent === 'query' && transcricao.length > 2) {
+      console.log(`>>> [WH-WA] Áudio classificado como consulta financeira: "${transcricao}"`);
+      await handleFinancialQuery(db, userId, numero, transcricao);
+      return;
+    }
+
+    // Mesma lógica de validação de números/palavras de valor do texto para 'register'
     const hasNumbers = /\d/.test(transcricao) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|reais|real)/i.test(transcricao);
     
     let currentValor = result.valor;
