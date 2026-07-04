@@ -174,11 +174,11 @@ Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
 • "ajuda" → Este guia
 • "resumo" → Visão geral financeira
 • "excluir" → Apaga o último lançamento
-• "corrigir valor 50" → Altera o último valor
-• "corrigir item Mercado" → Altera a última descrição
-• "corrigir data 10/05" → Altera o último vencimento
+• "corrigir valor" → Altera o último valor
+• "corrigir item" → Altera a última descrição
+• "corrigir data" → Altera o último vencimento
 • "contato" → Falar com suporte
-• "cancelar" → Cancela pendência atual
+• "cancelar" → Cancela o lançamento atual
 
 🚀 *ProcVisual — Sua gestão financeira de forma simples e inteligente.*`;
 
