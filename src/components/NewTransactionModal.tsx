@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { createWorker } from 'tesseract.js';
-import { collection, addDoc, updateDoc, doc, serverTimestamp, query, where, onSnapshot, getDocs } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, query, where, onSnapshot, getDocs } from 'firebase/firestore';
 import { db, auth, handleFirestoreError, OperationType } from '../firebase';
 import { Transaction } from '../App';
 import { 
@@ -18,7 +18,9 @@ import {
   Store,
   Calendar,
   DollarSign,
-  Tag
+  Tag,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 
 interface NewTransactionModalProps {
@@ -26,11 +28,12 @@ interface NewTransactionModalProps {
   onClose: () => void;
   transactionToEdit?: Transaction | null;
   initialType?: 'income' | 'expense' | 'birthday';
+  transactions?: Transaction[];
 }
 
 type ModalView = 'selection' | 'manual' | 'receipt' | 'processing' | 'success';
 
-export default function NewTransactionModal({ isOpen, onClose, transactionToEdit, initialType = 'expense' }: NewTransactionModalProps) {
+export default function NewTransactionModal({ isOpen, onClose, transactionToEdit, initialType = 'expense', transactions = [] }: NewTransactionModalProps) {
   const [view, setView] = useState<ModalView>('selection');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
@@ -48,6 +51,12 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
 
   const [showEditScopePrompt, setShowEditScopePrompt] = useState(false);
   const [scopeGroupCount, setScopeGroupCount] = useState<number>(0);
+
+  // States for deleting the previously registered expense
+  const [showCancelConfirmPrompt, setShowCancelConfirmPrompt] = useState(false);
+  const [isDeletingPrevious, setIsDeletingPrevious] = useState(false);
+  const [previousExpenseToDelete, setPreviousExpenseToDelete] = useState<Transaction | null>(null);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
 
   const predefinedCategories = [
     'Outros',
@@ -153,6 +162,10 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     setCustomCategory('');
     setShowEditScopePrompt(false);
     setScopeGroupCount(0);
+    setShowCancelConfirmPrompt(false);
+    setIsDeletingPrevious(false);
+    setPreviousExpenseToDelete(null);
+    setCancelSuccess(false);
     setFormData({
       type: initialType,
       value: initialType === 'birthday' ? '0' : '',
@@ -451,12 +464,78 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
     };
   };
 
+  const getMostRecentExpense = (): Transaction | null => {
+    if (!transactions || transactions.length === 0) return null;
+    
+    // Filter for expenses (despesas)
+    const expenses = transactions.filter(t => t.tipo === 'expense');
+    if (expenses.length === 0) return null;
+    
+    // Sort by createdAt descending
+    return [...expenses].sort((a, b) => {
+      const getTime = (t: any) => {
+        if (!t.createdAt) return Date.now();
+        if (typeof t.createdAt.toMillis === 'function') return t.createdAt.toMillis();
+        if (t.createdAt.seconds) return t.createdAt.seconds * 1000;
+        if (t.createdAt instanceof Date) return t.createdAt.getTime();
+        return 0;
+      };
+      return getTime(b) - getTime(a);
+    })[0];
+  };
+
+  const handleDeletePreviousExpense = async () => {
+    if (!previousExpenseToDelete || !auth.currentUser) return;
+    setIsDeletingPrevious(true);
+    setErrorMessage(null);
+    const path = 'lancamentos';
+    try {
+      await deleteDoc(doc(db, path, previousExpenseToDelete.id));
+      
+      // Close prompt
+      setShowCancelConfirmPrompt(false);
+      setPreviousExpenseToDelete(null);
+      setIsDeletingPrevious(false);
+      setCancelSuccess(true);
+      
+      // Show success screen
+      setView('success');
+      
+      // Close modal after 2.5s
+      setTimeout(() => {
+        handleClose();
+      }, 2500);
+    } catch (error) {
+      console.error('Erro ao excluir lançamento anterior:', error);
+      setIsDeletingPrevious(false);
+      setErrorMessage('Erro ao excluir o lançamento anterior. Por favor, tente novamente.');
+      setShowCancelConfirmPrompt(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     console.log('Tentando salvar lançamento...', formData);
     
     if (!auth.currentUser) {
       console.error('Usuário não autenticado');
+      return;
+    }
+
+    // Intercept "cancelar lançamento" keyword in description or establishment during expense registration
+    const isCancelCommand = 
+      formData.type === 'expense' && 
+      (formData.establishment.toLowerCase().includes('cancelar lançamento') || 
+       formData.description.toLowerCase().includes('cancelar lançamento'));
+
+    if (isCancelCommand) {
+      const lastExpense = getMostRecentExpense();
+      if (lastExpense) {
+        setPreviousExpenseToDelete(lastExpense);
+        setShowCancelConfirmPrompt(true);
+      } else {
+        setErrorMessage('Nenhum lançamento anterior de despesa encontrado para excluir.');
+      }
       return;
     }
 
@@ -687,6 +766,63 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
               )}
             </AnimatePresence>
 
+            {/* Cancel/Delete Previous Expense Confirmation Overlay */}
+            <AnimatePresence>
+              {showCancelConfirmPrompt && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 bg-proc-bg/95 backdrop-blur-md flex flex-col justify-center p-8 text-center"
+                >
+                  <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center mx-auto mb-6 shadow-[0_0_20px_rgba(239,68,68,0.2)]">
+                    <AlertTriangle size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-2">Excluir Lançamento Anterior?</h3>
+                  <p className="text-proc-text-sec text-xs mb-6 leading-relaxed">
+                    Você digitou o comando <span className="text-red-400 font-semibold font-mono">"cancelar lançamento"</span>. Deseja mesmo excluir permanentemente a despesa registrada anteriormente abaixo?
+                  </p>
+                  
+                  {previousExpenseToDelete && (
+                    <div className="text-xs bg-proc-secondary/50 border border-white/10 rounded-2xl p-4 mb-6 text-left space-y-1.5 shadow-inner">
+                      <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest mb-1 border-b border-white/5 pb-1">Despesa Detectada</p>
+                      <p className="text-proc-text-sec">Descrição/Estabelecimento: <span className="text-proc-text-main font-bold truncate block">{previousExpenseToDelete.establishment || previousExpenseToDelete.descricao}</span></p>
+                      <p className="text-proc-text-sec">Categoria: <span className="text-proc-text-main font-semibold">{previousExpenseToDelete.categoria}</span></p>
+                      <p className="text-proc-text-sec">Data: <span className="text-proc-text-main font-semibold">{new Date(previousExpenseToDelete.data + 'T12:00:00').toLocaleDateString('pt-BR')}</span></p>
+                      <p className="text-proc-text-sec">Valor: <span className="text-red-400 font-extrabold text-sm">R$ {previousExpenseToDelete.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span></p>
+                    </div>
+                  )}
+
+                  <div className="flex flex-col gap-3">
+                    <button
+                      type="button"
+                      disabled={isDeletingPrevious}
+                      onClick={handleDeletePreviousExpense}
+                      className="w-full py-4 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition-all text-sm flex items-center justify-center gap-2 shadow-[0_0_25px_rgba(239,68,68,0.4)] disabled:opacity-50"
+                    >
+                      {isDeletingPrevious ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={16} />
+                      )}
+                      {isDeletingPrevious ? 'Excluindo...' : 'Sim, Excluir Despesa'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingPrevious}
+                      onClick={() => {
+                        setShowCancelConfirmPrompt(false);
+                        setFormData(prev => ({ ...prev, establishment: '' }));
+                      }}
+                      className="w-full py-3.5 rounded-2xl bg-white/5 border border-white/10 text-proc-text-sec font-bold hover:bg-white/10 transition-all text-sm"
+                    >
+                      Não, Voltar ao Lançamento
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {/* Header */}
             <div className="p-6 flex justify-between items-center border-b border-white/5">
               <div className="flex items-center gap-3">
@@ -825,6 +961,19 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
                       placeholder={formData.type === 'birthday' ? "Ex: Maria" : "Nome da loja ou local"}
                       className="w-full bg-proc-bg/50 border border-white/10 rounded-xl py-3 px-4 text-proc-text-main text-sm focus:outline-none focus:border-proc-cyan/50 transition-colors"
                     />
+                    {formData.type === 'expense' && formData.establishment.toLowerCase().includes('cancelar lançamento') && (
+                      <motion.div 
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2 leading-relaxed shadow-sm"
+                      >
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">Comando de Cancelamento Detectado!</p>
+                          <p className="opacity-90">Ao clicar em "Confirmar", você iniciará a exclusão do lançamento de despesa registrado anteriormente.</p>
+                        </div>
+                      </motion.div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -1063,54 +1212,72 @@ export default function NewTransactionModal({ isOpen, onClose, transactionToEdit
               {/* VIEW: SUCCESS */}
               {view === 'success' && (
                 <div className="py-12 flex flex-col items-center justify-center gap-6">
-                  <motion.div 
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    className="w-24 h-24 rounded-full bg-proc-green/20 flex items-center justify-center text-proc-green shadow-[0_0_30px_rgba(0,230,118,0.2)]"
-                  >
-                    <CheckCircle2 size={48} />
-                  </motion.div>
-                  <div className="text-center">
-                    <p className="text-xl font-bold text-white">Lançamento Salvo!</p>
-                    <p className="text-sm text-proc-text-sec mt-1">Seu saldo foi atualizado com sucesso.</p>
-                  </div>
+                  {cancelSuccess ? (
+                    <>
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="w-24 h-24 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 shadow-[0_0_30px_rgba(239,68,68,0.2)]"
+                      >
+                        <Trash2 size={48} />
+                      </motion.div>
+                      <div className="text-center">
+                        <p className="text-xl font-bold text-white">Lançamento Excluído!</p>
+                        <p className="text-sm text-proc-text-sec mt-1">O lançamento anterior foi removido do seu extrato com sucesso.</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <motion.div 
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="w-24 h-24 rounded-full bg-proc-green/20 flex items-center justify-center text-proc-green shadow-[0_0_30px_rgba(0,230,118,0.2)]"
+                      >
+                        <CheckCircle2 size={48} />
+                      </motion.div>
+                      <div className="text-center">
+                        <p className="text-xl font-bold text-white">Lançamento Salvo!</p>
+                        <p className="text-sm text-proc-text-sec mt-1">Seu saldo foi atualizado com sucesso.</p>
+                      </div>
 
-                  {/* Notification Status Box */}
-                  <div className={`w-full p-4 rounded-2xl border ${
-                    notificationStatus?.success 
-                      ? 'bg-proc-green/10 border-proc-green/20 text-proc-green' 
-                      : notificationStatus === null 
-                        ? 'bg-proc-cyan/10 border-proc-cyan/20 text-proc-cyan'
-                        : 'bg-amber-500/10 border-amber-500/20 text-amber-500'
-                  }`}>
-                    <div className="flex items-center gap-3">
-                      {notificationStatus === null ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : notificationStatus.success ? (
-                        <CheckCircle2 size={18} />
-                      ) : (
-                        <X size={18} />
+                      {/* Notification Status Box */}
+                      <div className={`w-full p-4 rounded-2xl border ${
+                        notificationStatus?.success 
+                          ? 'bg-proc-green/10 border-proc-green/20 text-proc-green' 
+                          : notificationStatus === null 
+                            ? 'bg-proc-cyan/10 border-proc-cyan/20 text-proc-cyan'
+                            : 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+                      }`}>
+                        <div className="flex items-center gap-3">
+                          {notificationStatus === null ? (
+                            <Loader2 size={18} className="animate-spin" />
+                          ) : notificationStatus.success ? (
+                            <CheckCircle2 size={18} />
+                          ) : (
+                            <X size={18} />
+                          )}
+                          <p className="text-[10px] font-bold uppercase tracking-widest">
+                            {notificationStatus === null && 'Enviando Notificação...'}
+                            {notificationStatus?.success && 'WhatsApp Enviado!'}
+                            {notificationStatus?.success === false && 'Erro na Notificação'}
+                          </p>
+                        </div>
+                        {notificationStatus?.success === false && (
+                          <p className="text-[10px] mt-2 opacity-80 leading-relaxed">
+                            {notificationStatus.message}
+                          </p>
+                        )}
+                      </div>
+
+                      {!notificationStatus?.success && notificationStatus !== null && (
+                        <button 
+                          onClick={handleClose}
+                          className="mt-2 w-full py-4 rounded-2xl bg-proc-secondary text-proc-text-main font-bold border border-white/10 hover:bg-proc-secondary/80 transition-all"
+                        >
+                          Fechar
+                        </button>
                       )}
-                      <p className="text-[10px] font-bold uppercase tracking-widest">
-                        {notificationStatus === null && 'Enviando Notificação...'}
-                        {notificationStatus?.success && 'WhatsApp Enviado!'}
-                        {notificationStatus?.success === false && 'Erro na Notificação'}
-                      </p>
-                    </div>
-                    {notificationStatus?.success === false && (
-                      <p className="text-[10px] mt-2 opacity-80 leading-relaxed">
-                        {notificationStatus.message}
-                      </p>
-                    )}
-                  </div>
-
-                  {!notificationStatus?.success && notificationStatus !== null && (
-                    <button 
-                      onClick={handleClose}
-                      className="mt-2 w-full py-4 rounded-2xl bg-proc-secondary text-proc-text-main font-bold border border-white/10 hover:bg-proc-secondary/80 transition-all"
-                    >
-                      Fechar
-                    </button>
+                    </>
                   )}
                 </div>
               )}

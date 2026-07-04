@@ -944,6 +944,7 @@ export default function App() {
         }} 
         transactionToEdit={editingTransaction}
         initialType={modalInitialType}
+        transactions={transactions}
       />
 
       {/* Delete Confirmation Modal */}
