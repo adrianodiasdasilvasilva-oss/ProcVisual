@@ -612,37 +612,32 @@ app.post("/api/send-welcome", async (req, res) => {
     
     console.log(`>>> [WELCOME-WA] Enviando boas-vindas para: ${cleanPhone} (${name || "Usuário"})`);
     
-    const welcomeMsg = `👋 Olá, *${name || "seja muito bem-vindo(a)"}*! Seja muito bem-vindo(a) à *ProcVisual*! 🚀
+    const welcomeMsg = `👋 Olá, *${name || "seja muito bem-vindo(a)"}*! Eu sou o Guia ProcVisual no WhatsApp.
 
-É um prazer ter você aqui conosco! Criamos o Guia ProcVisual no WhatsApp para te ajudar a registrar suas receitas, despesas e lembretes de forma super rápida e prática 😊
+Estou aqui para te ajudar a registrar suas receitas, despesas e lembretes de forma rápida e prática 😊
 
 📌 *Como registrar:*
 
-1️⃣ *Texto:* Digite por exemplo "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
-2️⃣ *Áudio:* Fale por exemplo 🎤 “Posto de gasolina, cem reais.”
-3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
-4️⃣ *Aniversários:* Digite ou fale "Amanhã é aniversário da Heloisa" ou "10/05 é aniversário da Gleize" 🎂
-
-✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
+1️⃣  📄*Texto:* Digite por exemplo "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
+2️⃣ 🎤*Áudio:* Fale por exemplo  “Posto de gasolina, cem reais.”
+3️⃣ 📸*Foto:* Envie foto de comprovante do supermercado ou qualquer outro estabelecimento.
+4️⃣ 🎂*Aniversários:* Digite ou fale "Amanhã é aniversário da Maria" ou "10/05 é aniversário do José"
 
 🧠 *Analista Pessoal IA:*
-Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
+Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como por exemplo:
+
 • "Quanto gastei com mercado este mês?"
 • "Qual foi meu maior gasto da semana?"
 • "Estou gastando muito com delivery?"
 • "Meu saldo vai ficar negativo?"
 
 ⚡ *Comandos rápidos:*
-• "ajuda" → Este guia
-• "resumo" → Visão geral financeira
-• "excluir" → Apaga o último lançamento
-• "corrigir valor" → Altera o último valor
-• "corrigir item" → Altera a última descrição
-• "corrigir data" → Altera o último vencimento
-• "contato" → Falar com suporte
-• "cancelar" → Cancela o lançamento atual
 
-⚠️ *Nota:* Lembre-se de concluir a ativação de sua assinatura no site para começar a salvar os seus registros via WhatsApp! 😉
+❔ "Ajuda" → Este guia
+🧾 "Resumo" → Visão geral financeira
+❌ "excluir" → Apaga o último lançamento
+✉️ "contato" → Falar com suporte
+
 
 🚀 *ProcVisual — Sua gestão financeira de forma simples e inteligente.*`;
 
