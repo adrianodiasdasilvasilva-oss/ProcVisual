@@ -598,6 +598,70 @@ app.post("/api/test-whatsapp", async (req, res) => {
   res.json(result);
 });
 
+app.post("/api/send-welcome", async (req, res) => {
+  const { phone, name, userId } = req.body;
+  if (!phone) {
+    return res.status(400).json({ error: "Telefone é obrigatório" });
+  }
+
+  try {
+    const db = await initializeFirebaseAdmin();
+    
+    // Clean up phone number
+    let cleanPhone = phone.replace(/\D/g, "");
+    
+    console.log(`>>> [WELCOME-WA] Enviando boas-vindas para: ${cleanPhone} (${name || "Usuário"})`);
+    
+    const welcomeMsg = `👋 Olá, *${name || "seja muito bem-vindo(a)"}*! Seja muito bem-vindo(a) à *ProcVisual*! 🚀
+
+É um prazer ter você aqui conosco! Criamos o Guia ProcVisual no WhatsApp para te ajudar a registrar suas receitas, despesas e lembretes de forma super rápida e prática 😊
+
+📌 *Como registrar:*
+
+1️⃣ *Texto:* "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
+2️⃣ *Áudio:* 🎤 “Posto de gasolina, cem reais.”
+3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
+
+✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
+
+🧠 *Analista Pessoal IA:*
+Agora você pode conversar comigo sobre suas finanças! Pergunte coisas como:
+• "Quanto gastei com mercado este mês?"
+• "Qual foi meu maior gasto da semana?"
+• "Estou gastando muito com delivery?"
+• "Meu saldo vai ficar negativo?"
+
+⚡ *Comandos rápidos:*
+• "ajuda" → Este guia
+• "resumo" → Visão geral financeira
+• "excluir" → Apaga o último lançamento
+• "corrigir valor" → Altera o último valor
+• "corrigir item" → Altera a última descrição
+• "corrigir data" → Altera o último vencimento
+• "contato" → Falar com suporte
+• "cancelar" → Cancela o lançamento atual
+
+⚠️ *Nota:* Lembre-se de concluir a ativação de sua assinatura no site para começar a salvar os seus registros via WhatsApp! 😉
+
+🚀 *ProcVisual — Sua gestão financeira de forma simples e inteligente.*`;
+
+    const result = await sendWhatsApp(cleanPhone, welcomeMsg);
+
+    // If userId is provided, mark whatsappGuideSent as true so we don't send it again
+    if (userId && db) {
+      await db.collection("usuarios").doc(userId).set({
+        whatsappGuideSent: true
+      }, { merge: true });
+      console.log(`>>> [WELCOME-WA] Marcado whatsappGuideSent como true para o usuário ${userId}`);
+    }
+
+    res.json({ success: true, result });
+  } catch (err: any) {
+    console.error(">>> [WELCOME-WA] Erro ao enviar mensagem de boas-vindas:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/webhook-whatsapp", async (req, res) => {
   try {
     console.log(">>> [WHATSAPP] Webhook atingido!");

@@ -486,6 +486,30 @@ export default function App() {
 
     // Enviar e-mail de boas-vindas
     enviarEmailBoasVindas(name, email, phone, pass);
+
+    // Enviar whatsapp de boas-vindas com ajuda
+    enviarWhatsBoasVindas(name, phone, newUser.uid);
+  };
+
+  const enviarWhatsBoasVindas = async (name: string, phone: string, userId: string) => {
+    try {
+      console.log('>>> [WHATSAPP] Enviando boas-vindas para:', phone);
+      const response = await fetch('/api/send-welcome', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          phone,
+          name,
+          userId
+        })
+      });
+      const data = await response.json();
+      console.log('>>> [WHATSAPP] Resultado do envio de boas-vindas:', data);
+    } catch (error) {
+      console.error('>>> [WHATSAPP] Erro ao enviar boas-vindas:', error);
+    }
   };
 
   const enviarEmailBoasVindas = async (name: string, email: string, phone: string, pass: string) => {
