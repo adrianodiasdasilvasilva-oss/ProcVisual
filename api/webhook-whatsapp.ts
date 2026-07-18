@@ -157,8 +157,8 @@ Estou aqui para te ajudar a registrar suas receitas, despesas e lembretes de for
 
 📌 *Como registrar:*
 
-1️⃣ *Texto:* "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
-2️⃣ *Áudio:* 🎤 “Posto de gasolina, cem reais.”
+1️⃣ *Texto:* Digite por exemplo "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
+2️⃣ *Áudio:* Fale por exemplo 🎤 “Posto de gasolina, cem reais.”
 3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
 
 ✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
