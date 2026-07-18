@@ -160,6 +160,7 @@ Estou aqui para te ajudar a registrar suas receitas, despesas e lembretes de for
 1️⃣ *Texto:* Digite por exemplo "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
 2️⃣ *Áudio:* Fale por exemplo 🎤 “Posto de gasolina, cem reais.”
 3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
+4️⃣ *Aniversários:* Digite ou fale "Amanhã é aniversário da Heloisa" ou "10/05 é aniversário da Gleize" 🎂
 
 ✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
 
@@ -290,13 +291,14 @@ async function sendWhatsAppMessage(to: string, body: string) {
 const EXPENSE_SCHEMA: any = {
   type: Type.OBJECT,
   properties: {
-    descricao: { type: Type.STRING, description: "O que foi pago" },
-    valor: { type: Type.NUMBER, description: "Valor numérico" },
-    categoria: { type: Type.STRING, description: "Categoria da despesa" },
+    descricao: { type: Type.STRING, description: "O que foi pago, ou nome do aniversariante se for aniversário" },
+    valor: { type: Type.NUMBER, description: "Valor numérico (0 para aniversários)" },
+    categoria: { type: Type.STRING, description: "Categoria da despesa (ex: 'Aniversário' para aniversários)" },
     parcela: { type: Type.INTEGER },
     totalParcelas: { type: Type.INTEGER },
     data: { type: Type.STRING },
-    transcricao: { type: Type.STRING, description: "O que foi dito / lido exatamente" }
+    transcricao: { type: Type.STRING, description: "O que foi dito / lido exatamente" },
+    tipo: { type: Type.STRING, description: "Tipo de lançamento: 'expense' (despesa), 'income' (receita) ou 'birthday' (aniversário)" }
   },
   required: ["categoria", "parcela", "totalParcelas"]
 };
@@ -307,14 +309,15 @@ const AUDIO_SCHEMA: any = {
     transcricao: { type: Type.STRING, description: "A transcrição completa, literal e exata do áudio falado pelo usuário" },
     intent: { 
       type: Type.STRING, 
-      description: "A intenção predominante do usuário: 'query' se ele estiver fazendo uma pergunta sobre gastos, saldo, extrato, faturas, dicas ou pedindo informações sobre suas finanças; ou 'register' se ele estiver informando uma despesa ou receita para ser registrada diretamente (ex: 'almoço 35 reais')" 
+      description: "A intenção predominante do usuário: 'query' se ele estiver fazendo uma pergunta sobre gastos, saldo, extrato, faturas, dicas ou pedindo informações sobre suas finanças; ou 'register' se ele estiver informando uma despesa, receita ou aniversário para ser registrado diretamente (ex: 'almoço 35 reais', 'amanhã é aniversário da Heloísa')" 
     },
-    descricao: { type: Type.STRING, description: "O item pago ou recebido (apenas se intent for 'register', caso contrário retorne null)" },
-    valor: { type: Type.NUMBER, description: "Valor numérico da transação (apenas se intent for 'register', caso contrário retorne null)" },
-    categoria: { type: Type.STRING, description: "Categoria mais adequada da transação (apenas se intent for 'register', caso contrário retorne null)" },
+    descricao: { type: Type.STRING, description: "O item pago ou recebido ou nome do aniversariante (apenas se intent for 'register', caso contrário retorne null)" },
+    valor: { type: Type.NUMBER, description: "Valor numérico da transação (apenas se intent for 'register', para aniversários use 0, caso contrário retorne null)" },
+    categoria: { type: Type.STRING, description: "Categoria mais adequada da transação (apenas se intent for 'register', ex: 'Aniversário' para aniversários, caso contrário retorne null)" },
     parcela: { type: Type.INTEGER, description: "Número da parcela se for parcelado (apenas se intent for 'register')" },
     totalParcelas: { type: Type.INTEGER, description: "Total de parcelas se for parcelado (apenas se intent for 'register')" },
-    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD se mencionada (apenas se intent for 'register')" }
+    data: { type: Type.STRING, description: "Data no formato YYYY-MM-DD se mencionada (apenas se intent for 'register')" },
+    tipo: { type: Type.STRING, description: "Tipo de lançamento: 'expense' (despesa), 'income' (receita) ou 'birthday' (aniversário)" }
   },
   required: ["transcricao", "intent"]
 };
@@ -376,14 +379,15 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
   const prompt = `Analise a mensagem: "${texto}". Hoje é ${brazilTime}. 
   Extraia os dados para JSON. 
-  CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.
+  CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros, Aniversário.
   REGRAS: 
-  - Se não houver VALOR numérico claro na mensagem (um valor monetário), deixe "valor" como null. 
+  - Se for um lembrete de aniversário (ex: "amanhã é aniversário da Heloísa", "dia 15 é aniversário da Gleize"): defina "tipo" como "birthday", "categoria" como "Aniversário", "valor" como 0, "descricao" como o nome do aniversariante (ex: "Heloísa" ou "Gleize"), e tente calcular a "data" correta baseado em hoje (${brazilTime}).
+  - Se não houver VALOR numérico claro na mensagem (um valor monetário) e não for um aniversário, deixe "valor" como null. 
   - NÃO confunda números de DATAS (ex: 15/05) com VALOR.
   - Se não houver descrição, deixe "descricao" como null.
   - Escolha a categoria mais adequada ao item identificado.`;
   
-  const sysInst = "Você é um assistente financeiro rigoroso. Só extraia o 'valor' se ele for explicitamente mencionado como um preço ou quantia. Se o usuário só disse uma data e um item, 'valor' DEVE ser null. Jamais invente valores.";
+  const sysInst = "Você é um assistente financeiro rigoroso. Só extraia o 'valor' se ele for explicitamente mencionado como um preço ou quantia (exceto para lembretes de aniversário, onde o valor é sempre 0). Se o usuário só disse uma data e um item de despesa, 'valor' DEVE ser null. Jamais invente valores.";
   try {
     const resp = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(resp.text);
@@ -391,9 +395,16 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     
     if (!result) return;
 
+    const isBirthday = result.tipo === 'birthday' || result.categoria === 'Aniversário' || (texto && /aniversário/i.test(texto));
+    if (isBirthday) {
+      result.tipo = 'birthday';
+      result.categoria = 'Aniversário';
+      result.valor = 0;
+    }
+
     // Validação rigorosa do valor
     const rawValor = result.valor;
-    const parsedValor = parseFloat(String(rawValor || "").replace(',', '.'));
+    const parsedValor = isBirthday ? 0 : parseFloat(String(rawValor || "").replace(',', '.'));
     
     // Safety: Tentar remover padrões de data para checar se sobra algum número
     const textWithoutDates = texto.replace(/\d{1,2}\/\d{1,2}(\/\d{2,4})?/, "").replace(/\d{1,2}-\d{1,2}(-\d{2,4})?/, "");
@@ -409,7 +420,7 @@ async function processText(db: any, userId: string, numero: string, texto: strin
     // Se identificou palavras de valor (reais, cem, etc), damos um voto de confiança mesmo sem o número exato bater no texto (devido a escrita por extenso)
     const hasValueWords = /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|mil|reais|real)/i.test(texto);
 
-    const isValidValor = (hasClearNumbers || hasValueWords) && (hasValorInText || hasValueWords) && !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000;
+    const isValidValor = isBirthday ? true : ((hasClearNumbers || hasValueWords) && (hasValorInText || hasValueWords) && !isNaN(parsedValor) && parsedValor > 0 && parsedValor < 1000000);
     const hasDescricao = result.descricao && String(result.descricao).length > 2;
 
     if (isValidValor && hasDescricao) {
@@ -482,18 +493,18 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     
     const brazilTime = new Date(new Date().getTime() - (3 * 60 * 60 * 1000)).toISOString().split('T')[0];
     const prompt = `Transcreva o áudio e identifique a intenção do usuário. Hoje é ${brazilTime}. 
-    Se a intenção for registrar uma despesa ou receita ('register'), extraia também os dados correspondentes. 
-    CATEGORIAS de despesa: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros.`;
+    Se a intenção for registrar uma despesa, receita ('register') ou um lembrete de aniversário ('register' com tipo 'birthday'), extraia também os dados correspondentes. 
+    CATEGORIAS de despesa: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros, Aniversário.`;
     
     const sysInst = `Você é um assistente financeiro inteligente e preciso. 
     Sua primeira tarefa é transcrever o áudio completo no campo 'transcricao'. 
     Sua segunda tarefa é determinar a intenção ('intent'): 
     - Se o usuário estiver fazendo perguntas sobre gastos, saldo, relatórios, faturas, comparativos, pedindo conselhos ou solicitando qualquer informação do histórico financeiro dele (ex: "quanto gastei com mercado este mês", "qual o meu saldo", "estou gastando muito?"), defina o 'intent' como 'query'.
-    - Se o usuário estiver apenas ditando um lançamento de despesa ou receita para ser salvo (ex: "compras no mercado 150 reais", "almoço 32,50", "recebi 2000 de salário"), defina o 'intent' como 'register'.
+    - Se o usuário estiver apenas ditando um lançamento de despesa, receita ou lembrete de aniversário para ser salvo (ex: "compras no mercado 150 reais", "almoço 32,50", "recebi 2000 de salário", "amanhã é aniversário da Heloísa"), defina o 'intent' como 'register'.
     
     Se 'intent' for 'register':
-    - Extraia 'descricao', 'valor' (apenas se dito explicitamente), 'categoria' e informações de parcelas se houver.
-    - Se o usuário não disser um valor numérico explicitamente na intenção de registro, defina 'valor' como null. Nunca invente valores.`;
+    - Se for um lembrete de aniversário (ex: "amanhã é aniversário da Heloísa", "dia 10 é aniversário da Gleize"): defina 'tipo' como 'birthday', 'categoria' como 'Aniversário', 'valor' como 0, 'descricao' como o nome do aniversariante (ex: "Heloísa" ou "Gleize"), e preencha a data correspondente (se for amanhã, calcule com base em hoje ${brazilTime}).
+    - Se for uma transação financeira regular: extraia 'descricao', 'valor' (apenas se dito explicitamente), 'categoria' e informações de parcelas se houver, e defina 'tipo' como 'expense' ou 'income'. Se o usuário não disser um valor numérico explicitamente, defina 'valor' como null. Nunca invente valores.`;
     
     const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst, AUDIO_SCHEMA);
     const result = extractJSON(resp.text);
@@ -514,17 +525,24 @@ async function processAudio(db: any, userId: string, numero: string, url: string
       return;
     }
 
+    const isBirthday = result.tipo === 'birthday' || result.categoria === 'Aniversário' || (transcricao && /aniversário/i.test(transcricao));
+    if (isBirthday) {
+      result.tipo = 'birthday';
+      result.categoria = 'Aniversário';
+      result.valor = 0;
+    }
+
     // Mesma lógica de validação de números/palavras de valor do texto para 'register'
     const hasNumbers = /\d/.test(transcricao) || /(um|dois|três|quatro|cinco|seis|sete|oito|nove|dez|vinte|trinta|quarenta|cinquenta|sessenta|setenta|oitenta|noventa|cem|reais|real)/i.test(transcricao);
     
     let currentValor = result.valor;
-    if (currentValor && !hasNumbers) {
+    if (!isBirthday && currentValor && !hasNumbers) {
       console.log(">>> [WH-WA] Áudio: Valor detectado pela IA mas sem números na transcrição. Ignorando valor.");
       currentValor = null;
     }
 
-    const val = currentValor ? parseFloat(String(currentValor).replace(',', '.')) : null;
-    const isValidValor = val !== null && !isNaN(val) && val > 0 && val < 1000000;
+    const val = isBirthday ? 0 : (currentValor ? parseFloat(String(currentValor).replace(',', '.')) : null);
+    const isValidValor = isBirthday ? true : (val !== null && !isNaN(val) && val > 0 && val < 1000000);
     const hasDescricao = result.descricao && String(result.descricao).length > 2;
 
     if (isValidValor && hasDescricao) {
@@ -549,8 +567,10 @@ async function processAudio(db: any, userId: string, numero: string, url: string
 
 async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, numero: string, data: any, origem: string, timestamp: number) {
   try {
-    let { descricao, valor, categoria, parcela, totalParcelas, data: customData } = data;
-    valor = parseFloat(String(valor).replace(',', '.'));
+    let { descricao, valor, categoria, parcela, totalParcelas, data: customData, tipo } = data;
+    const isBirthday = tipo === 'birthday' || categoria === 'Aniversário';
+
+    valor = isBirthday ? 0 : parseFloat(String(valor || 0).replace(',', '.'));
     parcela = parseInt(String(parcela || 1));
     totalParcelas = parseInt(String(totalParcelas || 1));
 
@@ -597,7 +617,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
         const ref = db.collection("lancamentos").doc();
         if (i === parcela) firstDocId = ref.id;
         batch.set(ref, {
-            userId, tipo: 'expense', valor, categoria: categoria || 'Outros', data: dateStr,
+            userId, tipo: isBirthday ? 'birthday' : (tipo || 'expense'), valor, categoria: isBirthday ? 'Aniversário' : (categoria || 'Outros'), data: dateStr,
             descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
             estabelecimento: descricao, origem, telefone: numero.split('@')[0].replace(/\D/g, ""),
             createdAt: FieldValue.serverTimestamp(), pago: false, parcela: i, totalParcelas, groupId,
@@ -607,7 +627,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     await batch.commit();
     
     // Check for recurrence suggestion (if it's a new single expense)
-    if (totalParcelas === 1 && (origem === 'whatsapp' || origem === 'whatsapp_audio')) {
+    if (!isBirthday && totalParcelas === 1 && (origem === 'whatsapp' || origem === 'whatsapp_audio')) {
       const lastMonth = new Date();
       lastMonth.setMonth(lastMonth.getMonth() - 2);
       
@@ -643,7 +663,16 @@ Percebi que você lançou *"${descricao}"* novamente. Deseja transformar em uma 
       }
     }
 
-    const confirmMsg = `✅ *Lançamento Confirmado!*
+    let confirmMsg = "";
+    if (isBirthday) {
+      confirmMsg = `✅ *Lembrete de Aniversário Confirmado!*
+
+🎂 *Aniversariante:* ${descricao}
+📅 *Data:* ${baseDate.toLocaleDateString('pt-BR')}
+
+Eu irei te lembrar automaticamente desta data especial! 🥳🎈`;
+    } else {
+      confirmMsg = `✅ *Lançamento Confirmado!*
 
 *Item:* ${descricao}
 *Valor:* R$ ${valor.toLocaleString('pt-BR', {minimumFractionDigits:2})}
@@ -651,11 +680,12 @@ Percebi que você lançou *"${descricao}"* novamente. Deseja transformar em uma 
 *Data:* ${baseDate.toLocaleDateString('pt-BR')}
 
 Sua despesa foi registrada com sucesso.`;
+    }
 
     await sendWhatsAppMessage(numero, confirmMsg);
   } catch (error: any) {
     console.error(">>> [WH-WA] Erro ao salvar despesa em saveAndConfirm:", error.message, error.stack);
-    await sendWhatsAppMessage(numero, '❌ Erro ao salvar despesa.');
+    await sendWhatsAppMessage(numero, '❌ Erro ao salvar lançamento.');
   }
 }
 

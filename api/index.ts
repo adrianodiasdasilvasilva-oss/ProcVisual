@@ -621,6 +621,7 @@ app.post("/api/send-welcome", async (req, res) => {
 1️⃣ *Texto:* Digite por exemplo "Almoço 35,00" ou "Aluguel vencimento 10/05 valor 1200"
 2️⃣ *Áudio:* Fale por exemplo 🎤 “Posto de gasolina, cem reais.”
 3️⃣ *Foto:* Envie foto de comprovante ou boleto 📸
+4️⃣ *Aniversários:* Digite ou fale "Amanhã é aniversário da Heloisa" ou "10/05 é aniversário da Gleize" 🎂
 
 ✅ *Importante:* Se faltar informação, eu te pergunto automaticamente!
 
