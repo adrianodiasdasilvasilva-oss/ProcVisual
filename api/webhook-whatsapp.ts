@@ -378,13 +378,16 @@ async function processText(db: any, userId: string, numero: string, texto: strin
   Extraia os dados para JSON. 
   CATEGORIAS: Alimentação, Moradia, Transporte, Lazer & Entretenimento, Saúde & Bem-estar, Educação, Vestuário & Compras, Cuidados Pessoais, Assinaturas & Serviços, Manutenção & Reparos, Presentes, Outros, Aniversário.
   REGRAS: 
-  - Se for um lembrete de aniversário (ex: "amanhã é aniversário da Heloísa", "dia 15 é aniversário da Gleize"): defina "tipo" como "birthday", "categoria" como "Aniversário", "valor" como 0, "descricao" como o nome do aniversariante (ex: "Heloísa" ou "Gleize"), e tente calcular a "data" correta baseado em hoje (${brazilTime}).
+  - Classifique o "tipo" do lançamento:
+    * Se o usuário mencionar termos de ganho, recebimento, salário ou entradas de dinheiro (ex: "receber", "recebi", "salário", "hora extra", "renda extra", "ganho", "ganhei", "PIX recebido", "depósito", "comissão", "rendimento", "provento", "faturamento"), defina "tipo" como "income" (receita).
+    * Se for um lembrete de aniversário (ex: "amanhã é aniversário da Heloísa", "dia 15 é aniversário da Gleize"): defina "tipo" as "birthday", "categoria" como "Aniversário", "valor" como 0, "descricao" como o nome do aniversariante (ex: "Heloísa" ou "Gleize"), e tente calcular a "data" correta baseado em hoje (${brazilTime}).
+    * Para despesas normais (pagamentos, compras, saídas, boletos, contas), defina "tipo" como "expense" (despesa).
   - Se não houver VALOR numérico claro na mensagem (um valor monetário) e não for um aniversário, deixe "valor" como null. 
   - NÃO confunda números de DATAS (ex: 15/05) com VALOR.
   - Se não houver descrição, deixe "descricao" como null.
   - Escolha a categoria mais adequada ao item identificado.`;
   
-  const sysInst = "Você é um assistente financeiro rigoroso. Só extraia o 'valor' se ele for explicitamente mencionado como um preço ou quantia (exceto para lembretes de aniversário, onde o valor é sempre 0). Se o usuário só disse uma data e um item de despesa, 'valor' DEVE ser null. Jamais invente valores.";
+  const sysInst = "Você é um assistente financeiro rigoroso. Classifique corretamente se é despesa ('expense'), receita ('income', para salários, horas extras, rendas extras, pix recebido, etc) ou aniversário ('birthday'). Só extraia o 'valor' se ele for explicitamente mencionado como um preço ou quantia (exceto para lembretes de aniversário, onde o valor é sempre 0). Se o usuário só disse uma data e um item de despesa, 'valor' DEVE ser null. Jamais invente valores.";
   try {
     const resp = await generateWithFallback(ai, prompt, sysInst);
     const result = extractJSON(resp.text);
@@ -501,7 +504,9 @@ async function processAudio(db: any, userId: string, numero: string, url: string
     
     Se 'intent' for 'register':
     - Se for um lembrete de aniversário (ex: "amanhã é aniversário da Heloísa", "dia 10 é aniversário da Gleize"): defina 'tipo' como 'birthday', 'categoria' como 'Aniversário', 'valor' como 0, 'descricao' como o nome do aniversariante (ex: "Heloísa" ou "Gleize"), e preencha a data correspondente (se for amanhã, calcule com base em hoje ${brazilTime}).
-    - Se for uma transação financeira regular: extraia 'descricao', 'valor' (apenas se dito explicitamente), 'categoria' e informações de parcelas se houver, e defina 'tipo' como 'expense' ou 'income'. Se o usuário não disser um valor numérico explicitamente, defina 'valor' como null. Nunca invente valores.`;
+    - Se o usuário mencionar termos de ganho, recebimento, salário ou entradas de dinheiro (ex: "receber", "recebi", "salário", "hora extra", "renda extra", "ganho", "ganhei", "PIX recebido", "depósito", "comissão", "rendimento", "provento", "faturamento"): defina 'tipo' como 'income' (receita).
+    - Para despesas normais (pagamentos, compras, saídas, boletos, contas), defina 'tipo' como 'expense' (despesa).
+    - Extraia 'descricao', 'valor' (apenas se dito explicitamente), 'categoria' e informações de parcelas se houver. Se o usuário não disser um valor numérico explicitamente, defina 'valor' como null. Nunca invente valores.`;
     
     const resp = await generateWithFallback(ai, [{ text: prompt }, { inlineData: { data: Buffer.from(buf).toString('base64'), mimeType: 'audio/ogg' } }], sysInst, AUDIO_SCHEMA);
     const result = extractJSON(resp.text);
@@ -624,7 +629,7 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
     await batch.commit();
     
     // Check for recurrence suggestion (if it's a new single expense)
-    if (!isBirthday && totalParcelas === 1 && (origem === 'whatsapp' || origem === 'whatsapp_audio')) {
+    if (!isBirthday && tipo !== 'income' && totalParcelas === 1 && (origem === 'whatsapp' || origem === 'whatsapp_audio')) {
       const lastMonth = new Date();
       lastMonth.setMonth(lastMonth.getMonth() - 2);
       
@@ -669,6 +674,7 @@ Percebi que você lançou *"${descricao}"* novamente. Deseja transformar em uma 
 
 Eu irei te lembrar automaticamente desta data especial! 🥳🎈`;
     } else {
+      const isIncome = tipo === 'income';
       confirmMsg = `✅ *Lançamento Confirmado!*
 
 *Item:* ${descricao}
@@ -676,7 +682,7 @@ Eu irei te lembrar automaticamente desta data especial! 🥳🎈`;
 *Categoria:* ${categoria || 'Outros'}
 *Data:* ${baseDate.toLocaleDateString('pt-BR')}
 
-Sua despesa foi registrada com sucesso.`;
+Sua ${isIncome ? 'receita' : 'despesa'} foi registrada com sucesso.`;
     }
 
     await sendWhatsAppMessage(numero, confirmMsg);
