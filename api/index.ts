@@ -36,6 +36,27 @@ export function isPhoneException(phone?: string) {
   return phone.replace(/\D/g, "").includes("19994792245");
 }
 
+export function isUserActiveOrTrial(userData: any, userId: string): boolean {
+  if (!userData) return false;
+  if (isUserAdmin(userId, userData.email) || isPhoneException(userData.telefone)) return true;
+  if (userData.isActive === true) return true;
+  if (userData.trialBlockedReason === 'telefone_ja_cadastrado') return false;
+
+  const now = new Date();
+  let endsAt: Date | null = null;
+  if (userData.trialEndsAt) {
+    endsAt = new Date(userData.trialEndsAt);
+  } else if (userData.dataCriacao) {
+    const created = userData.dataCriacao.toDate ? userData.dataCriacao.toDate() : new Date(userData.dataCriacao);
+    endsAt = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+  }
+
+  if (endsAt && !isNaN(endsAt.getTime())) {
+    return endsAt.getTime() > now.getTime();
+  }
+  return false;
+}
+
 // Global Cache for Firebase Admin
 let dbAdmin: any = null; 
 
@@ -888,9 +909,9 @@ async function runDailyNotifications(targetUserId?: string) {
       const isAdmin = isUserAdmin(userId, userData?.email);
       const isException = isPhoneException(userData?.telefone || data.telefone);
 
-      // Se o usuário estiver inativo e não for admin/exceção, pula
-      if (userData.isActive === false && !isAdmin && !isException) {
-        console.log(`>>> [JOB] Ignorado: Usuário ${userId} (${userData.email}) inativo e sem privilégios.`);
+      // Se o usuário não tiver assinatura nem teste grátis ativo, pula
+      if (!isUserActiveOrTrial(userData, userId)) {
+        console.log(`>>> [JOB] Ignorado: Usuário ${userId} (${userData.email}) sem acesso ativo (teste expirado ou inativo).`);
         continue; 
       }
 

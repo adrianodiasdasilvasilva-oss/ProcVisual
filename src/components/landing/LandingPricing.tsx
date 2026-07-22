@@ -20,7 +20,7 @@ export default function LandingPricing({ onSignUp }: LandingPricingProps) {
             viewport={{ once: true }}
             className="text-4xl md:text-5xl font-bold tracking-tighter mb-4"
           >
-            Preço <span className="text-proc-green">Transparente</span>
+            Preço Transparente — <span className="text-proc-green">Com 7 Dias Grátis</span>
           </motion.h2>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
@@ -29,7 +29,7 @@ export default function LandingPricing({ onSignUp }: LandingPricingProps) {
             transition={{ delay: 0.1 }}
             className="text-proc-text-sec text-lg max-w-2xl mx-auto"
           >
-            Tudo o que você precisa para dominar suas finanças em um único plano simples.
+            Aproveite 7 dias de teste gratuito com acesso total a todas as ferramentas. Só pague R$ 29,90/mês se aprovar!
           </motion.p>
         </div>
 
@@ -63,23 +63,27 @@ export default function LandingPricing({ onSignUp }: LandingPricingProps) {
                 <span className="text-proc-text-sec font-medium">/mês</span>
               </div>
               
-              <div className="mt-3 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl inline-block">
-                <p className="text-amber-500 text-[11px] font-bold">
-                  ⚡ Aproveite o preço promocional agora mesmo!
+              <div className="mt-3 p-3 bg-gradient-to-r from-proc-cyan/10 to-proc-green/10 border border-proc-cyan/30 rounded-xl text-left">
+                <p className="text-proc-cyan text-xs font-bold flex items-center gap-1.5 mb-1">
+                  🎁 7 Dias de Teste Grátis Inclusos
+                </p>
+                <p className="text-proc-text-sec text-[11px] leading-tight">
+                  Cadastre-se agora e use todas as funções no WhatsApp e Web gratuitamente por 7 dias sem compromisso.
                 </p>
               </div>
               
-              <p className="text-proc-text-sec text-xs mt-3">Acesso total e ilimitado a todas as funcionalidades</p>
+              <p className="text-proc-text-sec text-xs mt-3">Acesso total e ilimitado durante e após o teste</p>
             </div>
 
             <ul className="space-y-4 mb-8">
               {[
+                '🎁 7 Dias Grátis com Acesso Total',
                 'Lançamentos ilimitados via WhatsApp',
                 'Processamento de Áudio e Fotos com IA',
+                'Analista Pessoal Financeiro via Chat IA',
                 'Gráficos e Análises Avançadas',
                 'Calendário Financeiro Interativo',
-                'Notificações de Vencimento',
-                'Suporte Prioritário'
+                'Notificações e Lembretes de Vencimento'
               ].map((feature, i) => (
                 <li key={i} className="flex items-center gap-3 text-proc-text-main">
                   <div className="w-5 h-5 rounded-full bg-proc-green/20 flex items-center justify-center text-proc-green shrink-0">
@@ -95,7 +99,7 @@ export default function LandingPricing({ onSignUp }: LandingPricingProps) {
               className="w-full py-4 rounded-2xl bg-proc-green text-proc-bg font-bold text-lg shadow-[0_0_30px_rgba(0,230,118,0.3)] hover:shadow-[0_0_50px_rgba(0,230,118,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all flex items-center justify-center gap-2"
             >
               <Zap size={20} fill="currentColor" />
-              Começar Agora
+              Começar Meu Teste Grátis de 7 Dias
             </button>
           </motion.div>
         </div>

@@ -2,6 +2,46 @@ import { initializeFirebaseAdmin, admin, FieldValue } from "./firebase-admin.js"
 import { isUserAdmin, isPhoneException } from "./index.js";
 import { GoogleGenAI, Type } from "@google/genai";
 
+function evaluateUserAccess(userData: any, userId: string, cleanIncoming: string): { granted: boolean; reason: 'active' | 'trial_active' | 'trial_expired' | 'phone_blocked' | 'inactive' } {
+  if (!userData) return { granted: false, reason: 'inactive' };
+
+  if (isUserAdmin(userId, userData.email) || isPhoneException(cleanIncoming)) {
+    return { granted: true, reason: 'active' };
+  }
+
+  if (userData.isActive === true) {
+    return { granted: true, reason: 'active' };
+  }
+
+  if (userData.trialBlockedReason === 'telefone_ja_cadastrado') {
+    return { granted: false, reason: 'phone_blocked' };
+  }
+
+  // Check 7-day trial period
+  const now = new Date();
+  let endsAt: Date | null = null;
+
+  if (userData.trialEndsAt) {
+    endsAt = new Date(userData.trialEndsAt);
+  } else if (userData.dataCriacao) {
+    const created = userData.dataCriacao.toDate ? userData.dataCriacao.toDate() : new Date(userData.dataCriacao);
+    endsAt = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+  } else if (userData.createdAt) {
+    const created = userData.createdAt.toDate ? userData.createdAt.toDate() : new Date(userData.createdAt);
+    endsAt = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+  }
+
+  if (endsAt && !isNaN(endsAt.getTime())) {
+    if (endsAt.getTime() > now.getTime()) {
+      return { granted: true, reason: 'trial_active' };
+    } else {
+      return { granted: false, reason: 'trial_expired' };
+    }
+  }
+
+  return { granted: false, reason: 'inactive' };
+}
+
 export default async function handler(req: any, res: any) {
   // 1. WhatsApp Webhook Verification (GET handshake)
   if (req.method === 'GET') {
@@ -126,14 +166,16 @@ export default async function handler(req: any, res: any) {
 
       const msg = `⚠️ *Conta não encontrada*
       
-Olá! Identificamos que este número ainda não está vinculado a uma conta ativa na *ProcVisual*.
+Olá! Identificamos que este número ainda não está vinculado a uma conta na *ProcVisual*.
 
-Para começar a registrar suas despesas por aqui, você precisa:
-1️⃣ Acessar nosso site: *https://procvisual.vercel.app*
-2️⃣ Criar sua conta e assinar um plano.
-3️⃣ Vincular seu número de WhatsApp no seu perfil.
+Você possui *7 dias grátis* para testar todas as funcionalidades! 🎉
 
-Esperamos por você! 🚀`;
+Para começar:
+1️⃣ Acesse nosso site: *https://procvisual-dashboard.com*
+2️⃣ Crie sua conta gratuitamente em instantes.
+3️⃣ Vincule seu número de WhatsApp no seu perfil para liberar o registro por voz, fotos e conversa com a IA!
+
+Aproveite seu teste gratuito! 🚀`;
       await sendWhatsAppMessage(numero, msg);
 
       // Registrar data de envio no cooldown
@@ -145,9 +187,16 @@ Esperamos por você! 🚀`;
       return res.status(200).json({ ok: true });
     }
 
-    // 2. Bloqueio para assinaturas inativas
-    if (userData && userData.isActive === false && !isUserAdmin(userId, userData.email) && !isPhoneException(cleanIncoming)) {
-      await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nIdentificamos que sua assinatura não está ativa. Por favor, acesse o site para regularizar seu plano e continuar usando o registro via WhatsApp.');
+    // 2. Bloqueio por Teste Expirado, Telefone Reutilizado ou Assinatura Inativa
+    const userAccess = evaluateUserAccess(userData, userId, cleanIncoming);
+    if (!userAccess.granted) {
+      if (userAccess.reason === 'phone_blocked') {
+        await sendWhatsAppMessage(numero, '⚠️ *Número de Telefone em Uso*\n\nIdentificamos que este número de celular já utilizou o período de teste gratuito de 7 dias em outra conta. Para continuar usando o WhatsApp, efetue a assinatura no nosso site:\n👉 *https://procvisual-dashboard.com*');
+      } else if (userAccess.reason === 'trial_expired') {
+        await sendWhatsAppMessage(numero, '⏰ *Período de Teste Expirado*\n\nSeu teste gratuito de 7 dias chegou ao fim! Para continuar registrando receitas, despesas e conversando com seu Analista IA no WhatsApp, assine o plano Premium por apenas R$ 29,90/mês:\n👉 *https://procvisual-dashboard.com*');
+      } else {
+        await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nIdentificamos que sua assinatura não está ativa. Por favor, acesse o site para regularizar seu plano e continuar usando o registro via WhatsApp:\n👉 *https://procvisual-dashboard.com*');
+      }
       return res.status(200).json({ ok: true });
     }
 

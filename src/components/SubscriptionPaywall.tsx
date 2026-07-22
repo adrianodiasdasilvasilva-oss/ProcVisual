@@ -6,10 +6,15 @@ import Logo from './Logo';
 interface SubscriptionPaywallProps {
   user: any;
   profile: any;
+  accessStatus?: {
+    granted: boolean;
+    reason: 'active' | 'trial_active' | 'trial_expired' | 'phone_blocked' | 'inactive';
+    daysLeft?: number;
+  };
   onSignOut: () => void;
 }
 
-export default function SubscriptionPaywall({ user, profile, onSignOut }: SubscriptionPaywallProps) {
+export default function SubscriptionPaywall({ user, profile, accessStatus, onSignOut }: SubscriptionPaywallProps) {
   const [isLoading, setIsLoading] = useState(false);
 
   const assinarPlano = async () => {
@@ -102,9 +107,29 @@ export default function SubscriptionPaywall({ user, profile, onSignOut }: Subscr
               Desbloqueie seu <span className="text-proc-cyan">Potencial Financeiro</span>
             </h2>
             
-            <p className="text-proc-text-sec text-sm mb-8">
-              Sua conta está quase pronta. Assine o plano Premium para liberar o acesso total ao seu Dashboard e todas as ferramentas de IA.
-            </p>
+            {accessStatus?.reason === 'phone_blocked' ? (
+              <div className="mb-6 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-left space-y-1">
+                <p className="text-xs font-bold text-red-400 uppercase tracking-wider flex items-center gap-1.5">
+                  ⚠️ Telefone Já Cadastrado
+                </p>
+                <p className="text-xs text-red-200/90 leading-relaxed">
+                  O número de celular informado já utilizou o período de teste gratuito de 7 dias em outra conta. Para utilizar esta conta, efetue a assinatura do plano Premium abaixo.
+                </p>
+              </div>
+            ) : accessStatus?.reason === 'trial_expired' ? (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left space-y-1">
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  ⏰ Período de Teste de 7 Dias Expirado
+                </p>
+                <p className="text-xs text-amber-200/90 leading-relaxed">
+                  Seu teste gratuito de 7 dias chegou ao fim. Assine o plano Premium para liberar novamente seu painel e todas as funções no WhatsApp.
+                </p>
+              </div>
+            ) : (
+              <p className="text-proc-text-sec text-sm mb-8">
+                Sua conta está quase pronta. Assine o plano Premium para liberar o acesso total ao seu Dashboard e todas as ferramentas de IA.
+              </p>
+            )}
 
             <div className="space-y-4">
               {benefits.map((b, i) => (

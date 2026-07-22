@@ -17,6 +17,7 @@ import SubscriptionPaywall from './components/SubscriptionPaywall';
 import PendingBalanceCard from './components/PendingBalanceCard';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { checkUserAccess, checkAndRegisterPhoneTrial } from './lib/trial';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
 import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
@@ -336,15 +337,53 @@ export default function App() {
     const userRef = doc(db, 'usuarios', user.uid);
     const unsubscribeProfile = onSnapshot(userRef, async (snapshot) => {
       if (snapshot.exists()) {
-        setProfile(snapshot.data());
+        const data = snapshot.data();
+        // Initialize trial details if missing on existing user
+        if (data.isActive !== true && !data.trialEndsAt && !data.trialBlockedReason) {
+          const now = new Date();
+          const created = data.dataCriacao?.toDate ? data.dataCriacao.toDate() : (data.dataCriacao ? new Date(data.dataCriacao) : now);
+          const trialEndsAt = new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+          
+          let blockedReason: string | undefined = undefined;
+          if (data.telefone) {
+            const phoneCheck = await checkAndRegisterPhoneTrial(data.telefone, user.uid, user.email || '');
+            if (!phoneCheck.allowed) {
+              blockedReason = 'telefone_ja_cadastrado';
+            }
+          }
+
+          const updateData: any = {
+            trialStartDate: created.toISOString(),
+            trialEndsAt: blockedReason ? now.toISOString() : trialEndsAt,
+            isTrial: !blockedReason,
+          };
+          if (blockedReason) {
+            updateData.trialBlockedReason = blockedReason;
+          }
+
+          try {
+            await setDoc(userRef, updateData, { merge: true });
+          } catch (err) {
+            console.error("Error setting trial details:", err);
+          }
+          setProfile({ ...data, ...updateData });
+          return;
+        }
+
+        setProfile(data);
       } else {
-        // Create user if not exists
+        // Create user profile with 7 days trial
+        const now = new Date();
+        const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const userData = {
           nome: user.displayName || 'Usuário',
           email: user.email,
           dataCriacao: serverTimestamp(),
           fotoURL: user.photoURL || '',
-          isActive: false // Default to false for new users
+          trialStartDate: now.toISOString(),
+          trialEndsAt: trialEndsAt,
+          isTrial: true,
+          isActive: false
         };
         try {
           await setDoc(userRef, userData);
@@ -474,21 +513,45 @@ export default function App() {
 
   const handleEmailSignUp = async (email: string, pass: string, name: string, phone: string) => {
     const { user: newUser } = await createUserWithEmailAndPassword(auth, email, pass);
+    const cleanPhone = phone.replace(/\D/g, "");
     
-    // Save additional user info to Firestore
+    // Anti-fraud check for phone
+    const phoneCheck = await checkAndRegisterPhoneTrial(cleanPhone, newUser.uid, email);
+    
+    const now = new Date();
+    const trialEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    
     const userRef = doc(db, 'usuarios', newUser.uid);
-    await setDoc(userRef, {
-      nome: name,
-      email: email,
-      telefone: phone,
-      dataCriacao: serverTimestamp()
-    }, { merge: true });
+    if (!phoneCheck.allowed) {
+      await setDoc(userRef, {
+        nome: name,
+        email: email,
+        telefone: cleanPhone,
+        dataCriacao: serverTimestamp(),
+        trialStartDate: now.toISOString(),
+        trialEndsAt: now.toISOString(), // Expired immediately
+        isTrial: false,
+        trialBlockedReason: 'telefone_ja_cadastrado',
+        isActive: false
+      }, { merge: true });
+    } else {
+      await setDoc(userRef, {
+        nome: name,
+        email: email,
+        telefone: cleanPhone,
+        dataCriacao: serverTimestamp(),
+        trialStartDate: now.toISOString(),
+        trialEndsAt: trialEndsAt,
+        isTrial: true,
+        isActive: false
+      }, { merge: true });
+    }
 
     // Enviar e-mail de boas-vindas
-    enviarEmailBoasVindas(name, email, phone, pass);
+    enviarEmailBoasVindas(name, email, cleanPhone, pass);
 
     // Enviar whatsapp de boas-vindas com ajuda
-    enviarWhatsBoasVindas(name, phone, newUser.uid);
+    enviarWhatsBoasVindas(name, cleanPhone, newUser.uid);
   };
 
   const enviarWhatsBoasVindas = async (name: string, phone: string, userId: string) => {
@@ -581,8 +644,10 @@ export default function App() {
   const isSuperAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" ||
                        (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
 
-  if (profile.isActive !== true && !isAdmin) {
-    return <SubscriptionPaywall user={user} profile={profile} onSignOut={() => signOut(auth)} />;
+  const accessStatus = checkUserAccess(profile);
+
+  if (!accessStatus.granted && !isAdmin) {
+    return <SubscriptionPaywall user={user} profile={profile} accessStatus={accessStatus} onSignOut={() => signOut(auth)} />;
   }
 
   const totalIncome = filteredTransactions

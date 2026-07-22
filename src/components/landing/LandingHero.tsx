@@ -20,21 +20,26 @@ export default function LandingHero({ onStart, onLogin }: LandingHeroProps) {
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
         >
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-proc-cyan/20 to-proc-green/20 border border-proc-cyan/30 text-proc-cyan text-xs font-bold mb-6 shadow-lg shadow-proc-cyan/10">
+            <span className="text-base">🎁</span>
+            <span>7 DIAS GRÁTIS DE TESTE • ACESSO TOTAL ILIMITADO</span>
+          </div>
+
           <h1 className="text-5xl md:text-7xl font-bold text-white leading-[1.1] mb-8 tracking-tight">
             Controle suas finanças com <span className="text-proc-cyan">IA e WhatsApp</span>
           </h1>
           
-          <p className="text-lg md:text-xl text-proc-text-sec leading-relaxed mb-10 max-w-xl">
-            Converse com seu Analista Financeiro IA, registre despesas por áudio ou foto e controle seus gastos de forma simples direto no WhatsApp.
+          <p className="text-lg md:text-xl text-proc-text-sec leading-relaxed mb-8 max-w-xl">
+            Converse com seu Analista Financeiro IA, registre despesas por áudio ou foto e controle seus gastos de forma simples no WhatsApp. <strong className="text-white">Experimente gratuitamente por 7 dias!</strong>
           </p>
 
           <div className="flex flex-col sm:flex-row items-center gap-4">
             <div className="flex flex-col w-full sm:w-auto gap-3">
               <button 
                 onClick={onStart}
-                className="w-full px-8 py-4 rounded-2xl bg-proc-green text-proc-bg font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_40px_rgba(0,230,118,0.5)] hover:scale-105 transition-all"
+                className="w-full px-8 py-4 rounded-2xl bg-proc-green text-proc-bg font-bold flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_40px_rgba(0,230,118,0.5)] hover:scale-105 transition-all text-base"
               >
-                Registrar
+                Testar 7 Dias Grátis
                 <ArrowRight size={20} />
               </button>
               <button 
@@ -52,6 +57,10 @@ export default function LandingHero({ onStart, onLogin }: LandingHeroProps) {
               Ver como funciona
             </button>
           </div>
+
+          <p className="mt-4 text-xs text-proc-text-sec/80 flex items-center gap-2">
+            <span className="text-proc-green font-bold">✓</span> Teste todas as funções no WhatsApp e Web durante 7 dias sem compromisso.
+          </p>
         </motion.div>
 
         <motion.div

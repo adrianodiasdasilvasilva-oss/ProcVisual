@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, onSnapshot, updateDoc, setDoc, collection, query, where, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
+import { checkAndRegisterPhoneTrial } from '../lib/trial';
 import { 
   User, 
   Phone, 
@@ -114,6 +115,23 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
     const cleanPhone = phone.replace(/\D/g, "");
     try {
       const userRef = doc(db, path, auth.currentUser.uid);
+      
+      if (cleanPhone && cleanPhone !== (userData?.telefone || '')) {
+        const phoneCheck = await checkAndRegisterPhoneTrial(cleanPhone, auth.currentUser.uid, email);
+        if (!phoneCheck.allowed) {
+          await setDoc(userRef, {
+            nome: name,
+            email: email,
+            telefone: cleanPhone,
+            fotoURL: photo,
+            trialBlockedReason: 'telefone_ja_cadastrado',
+            updatedAt: serverTimestamp()
+          }, { merge: true });
+          setMessage({ type: 'error', text: 'Aviso: Este número de telefone já foi utilizado para teste em outra conta.' });
+          return;
+        }
+      }
+
       await setDoc(userRef, {
         nome: name,
         email: email,
@@ -538,16 +556,29 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
 
           <div className="p-6 rounded-2xl bg-proc-bg/50 border border-white/5 flex flex-col items-center text-center">
             <p className="text-sm text-proc-text-sec leading-relaxed">
-              Nossa equipe está pronta para te ajudar. Para entrar em contato com a ProcVisual, basta enviar um e-mail para o endereço abaixo:
+              Nossa equipe está pronta para te ajudar. Para entrar em contato com a ProcVisual, você pode nos mandar um e-mail ou falar diretamente por WhatsApp:
             </p>
-            <div className="mt-4 flex items-center justify-center gap-3 p-4 rounded-xl bg-proc-cyan/5 border border-proc-cyan/10 w-full">
-              <Mail size={18} className="text-proc-cyan" />
-              <a 
-                href="mailto:procvisual.dashboard@gmail.com" 
-                className="text-proc-text-main font-bold hover:text-proc-cyan transition-colors"
-              >
-                procvisual.dashboard@gmail.com
-              </a>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3 w-full">
+              <div className="flex items-center justify-center gap-3 p-4 rounded-xl bg-proc-cyan/5 border border-proc-cyan/10">
+                <Mail size={18} className="text-proc-cyan shrink-0" />
+                <a 
+                  href="mailto:procvisual.dashboard@gmail.com" 
+                  className="text-proc-text-main text-sm font-bold hover:text-proc-cyan transition-colors truncate"
+                >
+                  procvisual.dashboard@gmail.com
+                </a>
+              </div>
+              <div className="flex items-center justify-center gap-3 p-4 rounded-xl bg-proc-cyan/5 border border-proc-cyan/10">
+                <Phone size={18} className="text-proc-cyan shrink-0" />
+                <a 
+                  href="https://wa.me/5519991312218" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-proc-text-main text-sm font-bold hover:text-proc-cyan transition-colors"
+                >
+                  (19) 99131-2218
+                </a>
+              </div>
             </div>
           </div>
         </section>

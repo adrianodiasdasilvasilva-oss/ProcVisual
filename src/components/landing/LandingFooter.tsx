@@ -48,12 +48,23 @@ export default function LandingFooter({ onOpenLegal }: LandingFooterProps) {
             </div>
             <div className="flex flex-col gap-4">
               <h5 className="text-white font-bold text-sm uppercase tracking-widest">Suporte</h5>
-              <p className="text-proc-text-sec text-sm max-w-[200px] leading-relaxed">
-                Para entrar em contato com a ProcVisual, envie um e-mail para:
-                <a href="mailto:procvisual.dashboard@gmail.com" className="block text-proc-cyan mt-1 font-medium hover:underline">
-                  procvisual.dashboard@gmail.com
-                </a>
-              </p>
+              <div className="text-proc-text-sec text-sm max-w-[240px] flex flex-col gap-3">
+                <p className="leading-relaxed">
+                  Para entrar em contato com a ProcVisual:
+                </p>
+                <div>
+                  <span className="text-white font-medium block text-xs uppercase tracking-wider mb-1">E-mail</span>
+                  <a href="mailto:procvisual.dashboard@gmail.com" className="text-proc-cyan font-medium hover:underline block break-all">
+                    procvisual.dashboard@gmail.com
+                  </a>
+                </div>
+                <div>
+                  <span className="text-white font-medium block text-xs uppercase tracking-wider mb-1">WhatsApp</span>
+                  <a href="https://wa.me/5519991312218" target="_blank" rel="noopener noreferrer" className="text-proc-cyan font-medium hover:underline block">
+                    (19) 99131-2218
+                  </a>
+                </div>
+              </div>
             </div>
             <div className="flex flex-col gap-4">
               <h5 className="text-white font-bold text-sm uppercase tracking-widest">Social</h5>

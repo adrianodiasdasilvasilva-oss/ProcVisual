@@ -120,9 +120,17 @@ export default function LoginScreen({ onEmailLogin, onEmailSignUp, onBack, initi
           </h2>
           <p className="text-proc-text-sec text-sm">
             {isSignUp 
-              ? 'Preencha seus dados para começar.' 
+              ? 'Preencha seus dados para testar gratuitamente por 7 dias.' 
               : 'Acesse sua conta para gerenciar suas finanças.'}
           </p>
+          {isSignUp && (
+            <div className="mt-3 p-3 rounded-2xl bg-gradient-to-r from-proc-cyan/10 to-proc-green/10 border border-proc-cyan/20 flex items-center gap-2 text-left">
+              <span className="text-xl shrink-0">🎁</span>
+              <p className="text-xs text-white leading-tight font-medium">
+                <strong className="text-proc-cyan font-bold">7 Dias Grátis:</strong> Acesso total a todas as funções da plataforma e WhatsApp no período de teste.
+              </p>
+            </div>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

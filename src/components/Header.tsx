@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Search, User as UserIcon, LogOut, Sun, Moon } from 'lucide-react';
+import { Search, User as UserIcon, LogOut, Sun, Moon, Sparkles } from 'lucide-react';
 import { auth, db } from '../firebase';
 import Logo from './Logo';
 import { doc, onSnapshot } from 'firebase/firestore';
+import { checkUserAccess } from '../lib/trial';
 
 interface HeaderProps {
   balance: number;
@@ -12,15 +13,17 @@ export default function Header({ balance }: HeaderProps) {
   const user = auth.currentUser;
   const [photoURL, setPhotoURL] = useState<string | null>(user?.photoURL || null);
   const [displayName, setDisplayName] = useState<string | null>(user?.displayName || null);
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
     if (!user) return;
 
-    // Listen to user data in Firestore for the profile picture and name
+    // Listen to user data in Firestore for profile picture, name, and trial info
     const userRef = doc(db, 'usuarios', user.uid);
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
+        setProfile(data);
         if (data.fotoURL) {
           setPhotoURL(data.fotoURL);
         }
@@ -34,6 +37,8 @@ export default function Header({ balance }: HeaderProps) {
   }, [user]);
 
   const firstName = displayName ? displayName.split(' ')[0] : '';
+  const access = checkUserAccess(profile);
+  const isPaid = profile?.isActive === true;
 
   return (
     <header className="sticky top-0 z-40 bg-proc-bg/80 backdrop-blur-md px-6 md:px-8 py-4 flex justify-between items-center border-b border-proc-border">
@@ -91,7 +96,18 @@ export default function Header({ balance }: HeaderProps) {
           </div>
           <div className="hidden md:block text-left">
             <p className="text-sm font-bold text-proc-text-main leading-none">{displayName || user?.displayName || 'Usuário'}</p>
-            <p className="text-[10px] text-proc-text-sec mt-1">Premium Plan</p>
+            {isPaid ? (
+              <p className="text-[10px] font-semibold text-proc-cyan mt-1 flex items-center gap-1">
+                <Sparkles size={10} />
+                Plano Premium
+              </p>
+            ) : access.reason === 'trial_active' ? (
+              <span className="inline-block mt-1 px-2 py-0.5 bg-gradient-to-r from-proc-cyan/20 to-proc-green/20 border border-proc-cyan/30 rounded-md text-[9px] font-bold text-proc-cyan">
+                🎁 Teste Grátis: {access.daysLeft}d
+              </span>
+            ) : (
+              <p className="text-[10px] text-proc-text-sec mt-1">Acesso Bloqueado</p>
+            )}
           </div>
         </div>
 

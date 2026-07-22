@@ -49,9 +49,9 @@ export default function LandingHeader({ onLogin, onSignUp }: LandingHeaderProps)
           </button>
           <button 
             onClick={onSignUp}
-            className="px-6 py-2.5 rounded-xl bg-proc-green text-proc-bg font-bold shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_30px_rgba(0,230,118,0.5)] transition-all"
+            className="px-6 py-2.5 rounded-xl bg-proc-green text-proc-bg font-bold shadow-[0_0_20px_rgba(0,230,118,0.3)] hover:shadow-[0_0_30px_rgba(0,230,118,0.5)] transition-all flex items-center gap-1.5"
           >
-            Registrar
+            <span>🎁</span> Testar 7 Dias Grátis
           </button>
         </div>
 
