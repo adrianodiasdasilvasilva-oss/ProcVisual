@@ -20,6 +20,30 @@ export function normalizePhone(phone: string): string {
 }
 
 /**
+ * Gets the exact trial end Date for a user profile.
+ */
+export function getTrialEndDate(profile: any): Date | null {
+  if (!profile) return null;
+  if (profile.trialEndsAt) {
+    const d = new Date(profile.trialEndsAt);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (profile.dataCriacao) {
+    const created = profile.dataCriacao.toDate ? profile.dataCriacao.toDate() : new Date(profile.dataCriacao);
+    if (!isNaN(created.getTime())) {
+      return new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+  }
+  if (profile.createdAt) {
+    const created = profile.createdAt.toDate ? profile.createdAt.toDate() : new Date(profile.createdAt);
+    if (!isNaN(created.getTime())) {
+      return new Date(created.getTime() + 7 * 24 * 60 * 60 * 1000);
+    }
+  }
+  return null;
+}
+
+/**
  * Checks if a user profile currently has valid trial access or paid access.
  */
 export function checkUserAccess(profile: any): UserAccessStatus {

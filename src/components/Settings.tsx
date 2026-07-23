@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, onSnapshot, updateDoc, setDoc, collection, query, where, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { checkAndRegisterPhoneTrial, checkUserAccess } from '../lib/trial';
+import { checkAndRegisterPhoneTrial, checkUserAccess, getTrialEndDate } from '../lib/trial';
 import { 
   User, 
   Phone, 
@@ -19,13 +19,80 @@ import {
   Mail,
   CreditCard,
   Calendar,
-  RefreshCw
+  RefreshCw,
+  Timer
 } from 'lucide-react';
 import CropImageModal from './CropImageModal';
 
 interface SettingsProps {
   theme: 'dark' | 'light';
   onToggleTheme: () => void;
+}
+
+function TrialCountdownClock({ targetDate }: { targetDate: Date }) {
+  const [timeLeft, setTimeLeft] = useState<{ days: number; hours: number; minutes: number; seconds: number } | null>(null);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const now = new Date();
+      const diff = targetDate.getTime() - now.getTime();
+      if (diff <= 0) {
+        setTimeLeft({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+        return;
+      }
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+      setTimeLeft({ days, hours, minutes, seconds });
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, [targetDate]);
+
+  if (!timeLeft) return null;
+
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  return (
+    <div className="mt-4 p-4 rounded-2xl bg-gradient-to-br from-proc-cyan/15 via-proc-green/10 to-proc-bg border border-proc-cyan/30 shadow-lg shadow-proc-cyan/5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-proc-cyan/20 flex items-center justify-center text-proc-cyan shrink-0 animate-pulse">
+            <Timer size={16} />
+          </div>
+          <div className="text-left">
+            <p className="text-xs font-bold text-white leading-none">Contagem Regressiva do Teste Grátis</p>
+            <p className="text-[10px] text-proc-text-sec mt-0.5">Aproveite seus 7 dias com acesso ilimitado</p>
+          </div>
+        </div>
+        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-proc-cyan/20 text-proc-cyan border border-proc-cyan/30 uppercase tracking-wider">
+          Ao Vivo
+        </span>
+      </div>
+
+      <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="bg-proc-bg/80 border border-proc-cyan/20 rounded-xl p-2 flex flex-col items-center justify-center">
+          <span className="text-lg md:text-xl font-extrabold text-proc-cyan font-mono leading-tight">{pad(timeLeft.days)}</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-proc-text-sec mt-0.5">Dias</span>
+        </div>
+        <div className="bg-proc-bg/80 border border-proc-cyan/20 rounded-xl p-2 flex flex-col items-center justify-center">
+          <span className="text-lg md:text-xl font-extrabold text-white font-mono leading-tight">{pad(timeLeft.hours)}</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-proc-text-sec mt-0.5">Horas</span>
+        </div>
+        <div className="bg-proc-bg/80 border border-proc-cyan/20 rounded-xl p-2 flex flex-col items-center justify-center">
+          <span className="text-lg md:text-xl font-extrabold text-white font-mono leading-tight">{pad(timeLeft.minutes)}</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-proc-text-sec mt-0.5">Min</span>
+        </div>
+        <div className="bg-proc-bg/80 border border-proc-cyan/20 rounded-xl p-2 flex flex-col items-center justify-center">
+          <span className="text-lg md:text-xl font-extrabold text-proc-green font-mono leading-tight">{pad(timeLeft.seconds)}</span>
+          <span className="text-[9px] font-bold uppercase tracking-wider text-proc-text-sec mt-0.5">Seg</span>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Settings({ theme, onToggleTheme }: SettingsProps) {
@@ -523,20 +590,19 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
                   {!isPaid && (
                     <div>
                       {access.reason === 'trial_active' ? (
-                        <div className="p-4 rounded-2xl bg-gradient-to-r from-proc-cyan/10 to-proc-green/10 border border-proc-cyan/20 text-center space-y-1.5">
-                          <p className="text-xs font-bold text-proc-cyan flex items-center justify-center gap-1.5 uppercase tracking-wider">
-                            <span>🎁</span> Período de Teste Gratuito Ativo
-                          </p>
-                          <p className="text-xs text-proc-text-sec leading-relaxed">
-                            Você está utilizando o seu período de 7 dias de teste gratuito com acesso ilimitado a todas as funcionalidades do painel e do WhatsApp.
-                          </p>
-                          {access.daysLeft !== undefined && (
-                            <div className="mt-2 inline-block px-3 py-1 bg-proc-cyan/20 border border-proc-cyan/30 rounded-full">
-                              <span className="text-xs font-bold text-proc-cyan">
-                                Restam {access.daysLeft} {access.daysLeft === 1 ? 'dia' : 'dias'} de teste grátis
-                              </span>
-                            </div>
-                          )}
+                        <div className="space-y-3">
+                          <div className="p-4 rounded-2xl bg-gradient-to-r from-proc-cyan/10 to-proc-green/10 border border-proc-cyan/20 text-center space-y-1.5">
+                            <p className="text-xs font-bold text-proc-cyan flex items-center justify-center gap-1.5 uppercase tracking-wider">
+                              <span>🎁</span> Período de Teste Gratuito Ativo
+                            </p>
+                            <p className="text-xs text-proc-text-sec leading-relaxed">
+                              Você está utilizando o seu período de 7 dias de teste gratuito com acesso ilimitado a todas as funcionalidades do painel e do WhatsApp.
+                            </p>
+                          </div>
+                          {(() => {
+                            const trialEndDate = getTrialEndDate(userData);
+                            return trialEndDate ? <TrialCountdownClock targetDate={trialEndDate} /> : null;
+                          })()}
                         </div>
                       ) : access.reason === 'trial_expired' ? (
                         <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center space-y-1">
