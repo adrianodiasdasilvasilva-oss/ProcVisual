@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { auth, db, handleFirestoreError, OperationType } from '../firebase';
 import { doc, onSnapshot, updateDoc, setDoc, collection, query, where, deleteDoc, getDocs, serverTimestamp } from 'firebase/firestore';
-import { checkAndRegisterPhoneTrial } from '../lib/trial';
+import { checkAndRegisterPhoneTrial, checkUserAccess } from '../lib/trial';
 import { 
   User, 
   Phone, 
@@ -424,74 +424,148 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
           </div>
 
           <div className="space-y-6">
-            <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-bg/50 border border-white/5">
-              <div>
-                <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Status</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className={`w-2 h-2 rounded-full ${userData?.isActive ? 'bg-proc-green animate-pulse' : 'bg-red-500'}`} />
-                  <p className={`text-sm font-bold ${userData?.isActive ? 'text-proc-green' : 'text-red-500'}`}>
-                    {userData?.isActive ? 'Premium Ativo' : 'Inativo'}
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Plano</p>
-                <p className="text-sm font-bold text-proc-text-main mt-1">
-                  {userData?.plan === 'premium' ? 'Mensal Premium' : 'Nenhum'}
-                </p>
-              </div>
-            </div>
+            {(() => {
+              const access = checkUserAccess(userData);
+              const isPaid = userData?.isActive === true;
+              
+              let statusLabel = 'Inativo';
+              let statusColor = 'text-red-500';
+              let dotColor = 'bg-red-500';
+              let planLabel = 'Nenhum';
 
-            {userData?.isActive && (
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10 group">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-                    <Calendar size={20} />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
-                    <p className="text-sm font-bold text-proc-text-main mt-0.5">
-                      {(() => {
-                        if (userData?.nextPaymentDate) {
-                          return new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric'
-                          });
-                        }
-                        if (userData?.lastPayment) {
-                          const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
-                          const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
-                          return nextDate.toLocaleDateString('pt-BR', {
-                            day: '2-digit',
-                            month: 'long',
-                            year: 'numeric'
-                          });
-                        }
-                        return isCheckingSub ? "Consultando data..." : "Data não localizada";
-                      })()}
-                    </p>
-                  </div>
-                </div>
-                <button 
-                  onClick={(e) => {
-                    e.preventDefault();
-                    fetchSubDetails();
-                  }}
-                  disabled={isCheckingSub}
-                  className={`p-2 rounded-xl transition-all ${isCheckingSub ? 'animate-spin text-proc-cyan' : 'text-proc-cyan/40 hover:text-proc-cyan hover:bg-proc-cyan/10 opacity-0 group-hover:opacity-100'}`}
-                  title="Atualizar dados da assinatura"
-                >
-                  <RefreshCw size={16} />
-                </button>
-              </div>
-            )}
+              if (isPaid) {
+                statusLabel = 'Premium Ativo';
+                statusColor = 'text-proc-green';
+                dotColor = 'bg-proc-green animate-pulse';
+                planLabel = userData?.plan === 'premium' ? 'Mensal Premium' : 'Mensal Premium';
+              } else if (access.reason === 'trial_active') {
+                statusLabel = 'Teste Grátis Ativo';
+                statusColor = 'text-proc-cyan';
+                dotColor = 'bg-proc-cyan animate-pulse';
+                planLabel = '7 Dias Grátis';
+              } else if (access.reason === 'trial_expired') {
+                statusLabel = 'Teste Expirado';
+                statusColor = 'text-amber-500';
+                dotColor = 'bg-amber-500';
+                planLabel = 'Teste Finalizado';
+              } else if (access.reason === 'phone_blocked') {
+                statusLabel = 'Telefone em Uso';
+                statusColor = 'text-red-400';
+                dotColor = 'bg-red-500';
+                planLabel = 'Nenhum';
+              }
 
-            {!userData?.isActive && (
-              <p className="text-xs text-proc-text-sec italic text-center">
-                Sua assinatura não está ativa. Regularize seu pagamento para acessar todas as funcionalidades.
-              </p>
-            )}
+              return (
+                <>
+                  <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-bg/50 border border-white/5">
+                    <div>
+                      <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Status</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                        <p className={`text-sm font-bold ${statusColor}`}>
+                          {statusLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">Plano</p>
+                      <p className="text-sm font-bold text-proc-text-main mt-1">
+                        {planLabel}
+                      </p>
+                    </div>
+                  </div>
+
+                  {isPaid && (
+                    <div className="flex items-center justify-between p-4 rounded-2xl bg-proc-cyan/5 border border-proc-cyan/10 group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
+                          <Calendar size={20} />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-bold text-proc-cyan uppercase tracking-widest">Próxima Renovação</p>
+                          <p className="text-sm font-bold text-proc-text-main mt-0.5">
+                            {(() => {
+                              if (userData?.nextPaymentDate) {
+                                return new Date(userData.nextPaymentDate).toLocaleDateString('pt-BR', {
+                                  day: '2-digit',
+                                  month: 'long',
+                                  year: 'numeric'
+                                });
+                              }
+                              if (userData?.lastPayment) {
+                                const lastPay = userData.lastPayment.toDate ? userData.lastPayment.toDate() : new Date(userData.lastPayment);
+                                const nextDate = new Date(lastPay.getTime() + (30 * 24 * 60 * 60 * 1000));
+                                return nextDate.toLocaleDateString('pt-BR', {
+                                  day: '2-digit',
+                                  month: 'long',
+                                  year: 'numeric'
+                                });
+                              }
+                              return isCheckingSub ? "Consultando data..." : "Data não localizada";
+                            })()}
+                          </p>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          fetchSubDetails();
+                        }}
+                        disabled={isCheckingSub}
+                        className={`p-2 rounded-xl transition-all ${isCheckingSub ? 'animate-spin text-proc-cyan' : 'text-proc-cyan/40 hover:text-proc-cyan hover:bg-proc-cyan/10 opacity-0 group-hover:opacity-100'}`}
+                        title="Atualizar dados da assinatura"
+                      >
+                        <RefreshCw size={16} />
+                      </button>
+                    </div>
+                  )}
+
+                  {!isPaid && (
+                    <div>
+                      {access.reason === 'trial_active' ? (
+                        <div className="p-4 rounded-2xl bg-gradient-to-r from-proc-cyan/10 to-proc-green/10 border border-proc-cyan/20 text-center space-y-1.5">
+                          <p className="text-xs font-bold text-proc-cyan flex items-center justify-center gap-1.5 uppercase tracking-wider">
+                            <span>🎁</span> Período de Teste Gratuito Ativo
+                          </p>
+                          <p className="text-xs text-proc-text-sec leading-relaxed">
+                            Você está utilizando o seu período de 7 dias de teste gratuito com acesso ilimitado a todas as funcionalidades do painel e do WhatsApp.
+                          </p>
+                          {access.daysLeft !== undefined && (
+                            <div className="mt-2 inline-block px-3 py-1 bg-proc-cyan/20 border border-proc-cyan/30 rounded-full">
+                              <span className="text-xs font-bold text-proc-cyan">
+                                Restam {access.daysLeft} {access.daysLeft === 1 ? 'dia' : 'dias'} de teste grátis
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : access.reason === 'trial_expired' ? (
+                        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-center space-y-1">
+                          <p className="text-xs font-bold text-amber-400 flex items-center justify-center gap-1.5 uppercase tracking-wider">
+                            ⏰ Período de Teste Expirado
+                          </p>
+                          <p className="text-xs text-amber-200/90 leading-relaxed">
+                            Seu teste gratuito de 7 dias chegou ao fim. Assine o plano Premium por apenas R$ 29,90/mês para reativar o acesso total ao seu painel e às funções no WhatsApp.
+                          </p>
+                        </div>
+                      ) : access.reason === 'phone_blocked' ? (
+                        <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/20 text-center space-y-1">
+                          <p className="text-xs font-bold text-red-400 flex items-center justify-center gap-1.5 uppercase tracking-wider">
+                            ⚠️ Telefone Já Cadastrado
+                          </p>
+                          <p className="text-xs text-red-200/90 leading-relaxed">
+                            O número de telefone celular cadastrado já utilizou o teste gratuito em outra conta. Faça a assinatura para liberar o acesso.
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-proc-text-sec italic text-center">
+                          Sua assinatura não está ativa. Regularize seu pagamento para acessar todas as funcionalidades.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </section>
 

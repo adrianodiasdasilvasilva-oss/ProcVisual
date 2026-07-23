@@ -61,7 +61,7 @@ export default function LandingHowItWorks() {
             transition={{ delay: 0.1 }}
             className="text-4xl md:text-5xl font-bold text-white mb-6 tracking-tight"
           >
-            Sua jornada para a <br /> <span className="text-proc-green">liberdade financeira</span>
+            Sua jornada para um <br /> <span className="text-proc-green">melhor controle financeiro</span>
           </motion.h3>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
