@@ -16,7 +16,8 @@ dotenv.config();
 // Constants for shared logic
 export const ADMIN_EMAILS = [
   "adrianodiasdasilva@yahoo.com.br",
-  "adrianodiasdasilva.silva@gmail.com"
+  "adrianodiasdasilva.silva@gmail.com",
+  "gleize.dias@yahoo.com.br"
 ];
 
 export const ADMIN_USER_IDS = [
@@ -401,7 +402,8 @@ app.get("/api/subscription-details", async (req, res) => {
       userData?.email,
       userData?.stripeEmail,
       'adrianodiasdasilva@yahoo.com.br',
-      'adrianodiasdasilva.silva@gmail.com'
+      'adrianodiasdasilva.silva@gmail.com',
+      'gleize.dias@yahoo.com.br'
     ])).filter(Boolean);
 
     console.log(`>>> [API-SUBS] Busca agressiva por email:`, emailsToTry);

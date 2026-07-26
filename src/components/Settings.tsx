@@ -271,8 +271,9 @@ export default function Settings({ theme, onToggleTheme }: SettingsProps) {
   };
 
   const isAdmin = auth.currentUser && (
-    auth.currentUser.email?.toLowerCase() === 'adrianodiasilva@yahoo.com.br' ||
-    auth.currentUser.email?.toLowerCase() === 'adrianodiasdasilva.silva@gmail.com'
+    auth.currentUser.email?.toLowerCase() === 'adrianodiasdasilva@yahoo.com.br' ||
+    auth.currentUser.email?.toLowerCase() === 'adrianodiasdasilva.silva@gmail.com' ||
+    auth.currentUser.email?.toLowerCase() === 'gleize.dias@yahoo.com.br'
   );
 
   const runNotificationsManually = async () => {

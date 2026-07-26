@@ -639,10 +639,12 @@ export default function App() {
   }
 
   const isAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" || 
-                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+                  (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
+                  (user?.email || "").toLowerCase() === "gleize.dias@yahoo.com.br";
 
   const isSuperAdmin = (user?.email || "").toLowerCase() === "adrianodiasdasilva@yahoo.com.br" ||
-                       (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com";
+                       (user?.email || "").toLowerCase() === "adrianodiasdasilva.silva@gmail.com" ||
+                       (user?.email || "").toLowerCase() === "gleize.dias@yahoo.com.br";
 
   const accessStatus = checkUserAccess(profile);
 
