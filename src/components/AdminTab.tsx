@@ -10,9 +10,10 @@ import {
   updateDoc as firestoreUpdateDoc,
   serverTimestamp 
 } from 'firebase/firestore';
-import { Users, UserCheck, Calendar, Search, Loader2, Bell, RefreshCw, FileDown, Trash2, X, AlertTriangle, Power } from 'lucide-react';
+import { Users, UserCheck, Calendar, Search, Loader2, Bell, RefreshCw, FileDown, Trash2, X, AlertTriangle, Power, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
+import { checkUserAccess, getTrialEndDate } from '../lib/trial';
 
 interface UserProfile {
   id: string;
@@ -178,16 +179,93 @@ export default function AdminTab() {
     }
   };
 
+  const getTrialInfo = (user: UserProfile) => {
+    const access = checkUserAccess(user);
+    if (user.isActive) {
+      return {
+        status: 'paid',
+        label: 'Assinante (Pago)',
+        badgeClass: 'bg-proc-green/10 text-proc-green border border-proc-green/20 font-medium',
+        timeText: 'Acesso Ativo'
+      };
+    }
+
+    if (access.reason === 'trial_active') {
+      const trialEnd = getTrialEndDate(user);
+      if (!trialEnd) {
+        return {
+          status: 'trial_active',
+          label: 'Em Teste',
+          badgeClass: 'bg-proc-cyan/15 text-proc-cyan border border-proc-cyan/30 font-bold',
+          timeText: '7 Dias Grátis'
+        };
+      }
+      const diffMs = trialEnd.getTime() - Date.now();
+      if (diffMs > 0) {
+        const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+        const days = Math.floor(totalHours / 24);
+        const hours = totalHours % 24;
+        const mins = Math.floor((diffMs / (1000 * 60)) % 60);
+
+        let timeText = '';
+        if (days > 0) {
+          timeText = `${days}d ${hours}h restantes`;
+        } else if (hours > 0) {
+          timeText = `${hours}h ${mins}m restantes`;
+        } else {
+          timeText = `${mins}m restantes`;
+        }
+
+        return {
+          status: 'trial_active',
+          label: 'Teste Grátis',
+          badgeClass: 'bg-proc-cyan/20 text-proc-cyan border border-proc-cyan/40 font-bold',
+          timeText
+        };
+      }
+    }
+
+    if (access.reason === 'trial_expired') {
+      return {
+        status: 'trial_expired',
+        label: 'Teste Expirado',
+        badgeClass: 'bg-amber-500/10 text-amber-400 border border-amber-500/20 font-medium',
+        timeText: 'Finalizado (0d)'
+      };
+    }
+
+    if (access.reason === 'phone_blocked') {
+      return {
+        status: 'phone_blocked',
+        label: 'Tel. Duplicado',
+        badgeClass: 'bg-red-500/10 text-red-400 border border-red-500/20 font-medium',
+        timeText: 'Bloqueado'
+      };
+    }
+
+    return {
+      status: 'inactive',
+      label: 'Sem Teste',
+      badgeClass: 'bg-white/5 text-proc-text-sec border border-white/10 font-medium',
+      timeText: 'Inativo'
+    };
+  };
+
   const handleExportExcel = () => {
     try {
-      const dataToExport = filteredUsers.map(u => ({
-        Nome: u.nome || 'Sem Nome',
-        Email: u.email,
-        Telefone: u.telefone || 'N/A',
-        Status: u.isActive ? 'Ativo' : 'Inativo',
-        'Data Criacao': formatDate(u.dataCriacao) || 'N/A',
-        'Data Assinatura': formatDate(u.dataAssinatura) || formatDate(u.lastPayment) || (u.isActive ? 'Em processamento' : 'N/A')
-      }));
+      const dataToExport = filteredUsers.map(u => {
+        const trialInfo = getTrialInfo(u);
+        return {
+          Nome: u.nome || 'Sem Nome',
+          Email: u.email,
+          Telefone: u.telefone || 'N/A',
+          'Teste Gratis': trialInfo.label,
+          'Tempo Restante Teste': trialInfo.timeText,
+          Status: u.isActive ? 'Ativo' : 'Inativo',
+          'Data Criacao': formatDate(u.dataCriacao) || 'N/A',
+          'Data Assinatura': formatDate(u.dataAssinatura) || formatDate(u.lastPayment) || (u.isActive ? 'Em processamento' : 'N/A')
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(dataToExport);
       const wb = XLSX.utils.book_new();
@@ -274,6 +352,10 @@ export default function AdminTab() {
     return users.filter(u => u.isActive).length;
   }, [users]);
 
+  const trialActiveCount = useMemo(() => {
+    return users.filter(u => !u.isActive && checkUserAccess(u).reason === 'trial_active').length;
+  }, [users]);
+
   if (loading) {
     return (
       <div className="py-20 flex justify-center">
@@ -285,34 +367,44 @@ export default function AdminTab() {
   return (
     <div className="space-y-6">
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-proc-secondary/20 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-4 shadow-xl">
-          <div className="w-12 h-12 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan">
-            <Users size={24} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-proc-secondary/20 border border-white/10 p-5 rounded-[2.5rem] flex items-center gap-3.5 shadow-xl">
+          <div className="w-11 h-11 rounded-2xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan shrink-0">
+            <Users size={22} />
           </div>
           <div>
             <p className="text-proc-text-sec text-[10px] font-bold uppercase tracking-widest">Total Usuários</p>
-            <p className="text-2xl font-bold text-proc-text-main">{users.length}</p>
+            <p className="text-xl font-bold text-proc-text-main">{users.length}</p>
           </div>
         </div>
 
-        <div className="bg-proc-secondary/20 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-4 shadow-xl">
-          <div className="w-12 h-12 rounded-2xl bg-proc-green/10 flex items-center justify-center text-proc-green">
-            <UserCheck size={24} />
+        <div className="bg-proc-secondary/20 border border-white/10 p-5 rounded-[2.5rem] flex items-center gap-3.5 shadow-xl">
+          <div className="w-11 h-11 rounded-2xl bg-proc-green/10 flex items-center justify-center text-proc-green shrink-0">
+            <UserCheck size={22} />
           </div>
           <div>
             <p className="text-proc-text-sec text-[10px] font-bold uppercase tracking-widest">Usuários Ativos</p>
-            <p className="text-2xl font-bold text-proc-text-main">{activeCount}</p>
+            <p className="text-xl font-bold text-proc-text-main">{activeCount}</p>
           </div>
         </div>
 
-        <div className="bg-proc-secondary/20 border border-white/10 p-6 rounded-[2.5rem] flex items-center gap-4 shadow-xl">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500">
-            <Calendar size={24} />
+        <div className="bg-proc-secondary/20 border border-proc-cyan/20 p-5 rounded-[2.5rem] flex items-center gap-3.5 shadow-xl bg-gradient-to-br from-proc-cyan/10 to-transparent">
+          <div className="w-11 h-11 rounded-2xl bg-proc-cyan/20 flex items-center justify-center text-proc-cyan shrink-0 animate-pulse">
+            <Timer size={22} />
+          </div>
+          <div>
+            <p className="text-proc-cyan text-[10px] font-bold uppercase tracking-widest">Em Teste Grátis</p>
+            <p className="text-xl font-bold text-proc-cyan">{trialActiveCount}</p>
+          </div>
+        </div>
+
+        <div className="bg-proc-secondary/20 border border-white/10 p-5 rounded-[2.5rem] flex items-center gap-3.5 shadow-xl">
+          <div className="w-11 h-11 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-500 shrink-0">
+            <Calendar size={22} />
           </div>
           <div>
             <p className="text-proc-text-sec text-[10px] font-bold uppercase tracking-widest">Conversão</p>
-            <p className="text-2xl font-bold text-proc-text-main">
+            <p className="text-xl font-bold text-proc-text-main">
               {users.length > 0 ? ((activeCount / users.length) * 100).toFixed(1) : 0}%
             </p>
           </div>
@@ -321,21 +413,21 @@ export default function AdminTab() {
         <button 
           onClick={handleRunNotifications}
           disabled={isNotifying}
-          className="bg-proc-cyan/10 border border-proc-cyan/20 p-6 rounded-[2.5rem] flex flex-col justify-center gap-2 hover:bg-proc-cyan/20 transition-all text-left shadow-xl group disabled:opacity-50"
+          className="bg-proc-cyan/10 border border-proc-cyan/20 p-5 rounded-[2.5rem] flex flex-col justify-center gap-1.5 hover:bg-proc-cyan/20 transition-all text-left shadow-xl group disabled:opacity-50"
         >
           <div className="flex items-center justify-between w-full">
-            <div className={`w-10 h-10 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan ${isNotifying ? 'animate-spin' : 'group-hover:scale-110 transition-transform'}`}>
-              {isNotifying ? <RefreshCw size={20} /> : <Bell size={24} />}
+            <div className={`w-9 h-9 rounded-xl bg-proc-cyan/10 flex items-center justify-center text-proc-cyan ${isNotifying ? 'animate-spin' : 'group-hover:scale-110 transition-transform'}`}>
+              {isNotifying ? <RefreshCw size={18} /> : <Bell size={20} />}
             </div>
             {notifyResult && (
-              <span className="text-[10px] font-bold bg-proc-green/20 text-proc-green px-2 py-1 rounded">
-                Sucesso: {notifyResult.notified ?? 0}
+              <span className="text-[10px] font-bold bg-proc-green/20 text-proc-green px-2 py-0.5 rounded">
+                Envios: {notifyResult.notified ?? 0}
               </span>
             )}
           </div>
           <div>
             <p className="text-proc-cyan text-[10px] font-bold uppercase tracking-widest">Disparar Notificações</p>
-            <p className="text-proc-text-sec text-[10px]">Executar rotina de vencimentos</p>
+            <p className="text-proc-text-sec text-[9px]">Rotina de vencimentos</p>
           </div>
         </button>
       </div>
@@ -449,6 +541,7 @@ export default function AdminTab() {
             <thead>
               <tr className="bg-white/5 border-b border-white/10">
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Usuário</th>
+                <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-cyan">Teste Grátis / Tempo</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec">Status</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Data de Assinatura</th>
                 <th className="px-6 py-4 text-[10px] font-bold uppercase tracking-widest text-proc-text-sec text-center">Criado em</th>
@@ -456,25 +549,38 @@ export default function AdminTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {filteredUsers.map((user) => (
-                <tr key={user.id} className="hover:bg-white/5 transition-colors group">
-                  <td className="px-6 py-4">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-proc-text-main">{user.nome || 'Sem Nome'}</span>
-                      <span className="text-xs text-proc-text-sec">{user.email}</span>
-                      {user.telefone && <span className="text-[10px] text-proc-cyan/70 mt-0.5">{user.telefone}</span>}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                      user.isActive 
-                        ? 'bg-proc-green/10 text-proc-green border border-proc-green/20' 
-                        : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    }`}>
-                      <div className={`w-1 h-1 rounded-full ${user.isActive ? 'bg-proc-green' : 'bg-red-400'}`} />
-                      {user.isActive ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </td>
+              {filteredUsers.map((user) => {
+                const trialInfo = getTrialInfo(user);
+                return (
+                  <tr key={user.id} className="hover:bg-white/5 transition-colors group">
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-proc-text-main">{user.nome || 'Sem Nome'}</span>
+                        <span className="text-xs text-proc-text-sec">{user.email}</span>
+                        {user.telefone && <span className="text-[10px] text-proc-cyan/70 mt-0.5">{user.telefone}</span>}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-col gap-1 items-start">
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] uppercase tracking-wider ${trialInfo.badgeClass}`}>
+                          {trialInfo.status === 'trial_active' && <span className="w-1.5 h-1.5 rounded-full bg-proc-cyan animate-pulse" />}
+                          {trialInfo.label}
+                        </span>
+                        <span className={`text-xs font-mono font-medium ${trialInfo.status === 'trial_active' ? 'text-proc-cyan font-bold' : 'text-proc-text-sec'}`}>
+                          {trialInfo.timeText}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                        user.isActive 
+                          ? 'bg-proc-green/10 text-proc-green border border-proc-green/20' 
+                          : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                      }`}>
+                        <div className={`w-1 h-1 rounded-full ${user.isActive ? 'bg-proc-green' : 'bg-red-400'}`} />
+                        {user.isActive ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
                   <td className="px-6 py-4 text-center">
                     <span className="text-sm text-proc-text-main font-mono">
                       {formatDate(user.dataAssinatura) || formatDate(user.lastPayment) || 
@@ -526,10 +632,11 @@ export default function AdminTab() {
                     </div>
                   </td>
                 </tr>
-              ))}
+              );
+              })}
               {filteredUsers.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-proc-text-sec">
+                  <td colSpan={6} className="px-6 py-12 text-center text-proc-text-sec">
                     Nenhum usuário encontrado.
                   </td>
                 </tr>
