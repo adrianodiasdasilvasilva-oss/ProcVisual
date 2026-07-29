@@ -492,7 +492,13 @@ export default function AdminTab() {
               {lastCronStatus && (
                 <div className={`text-[10px] flex items-center gap-1.5 px-2.5 py-1 rounded-full border ${lastCronStatus.status === 'success' ? 'bg-proc-green/10 border-proc-green/30 text-proc-green' : 'bg-proc-cyan/10 border-proc-cyan/30 text-proc-cyan'}`}>
                   <div className={`w-1.5 h-1.5 rounded-full ${lastCronStatus.status === 'success' ? 'bg-proc-green animate-pulse' : 'bg-proc-cyan animate-pulse'}`} />
-                  Último Envio: {lastCronStatus.timestamp?.toDate().toLocaleString('pt-BR')} | Notificados: {lastCronStatus.results?.notified || 0}
+                  Último Envio: {
+                    lastCronStatus.timestamp?.toDate 
+                      ? lastCronStatus.timestamp.toDate().toLocaleString('pt-BR') 
+                      : lastCronStatus.timestamp 
+                        ? new Date(lastCronStatus.timestamp).toLocaleString('pt-BR')
+                        : 'Aguardando'
+                  } | Notificados: {lastCronStatus.results?.notified || 0}
                 </div>
               )}
             </div>

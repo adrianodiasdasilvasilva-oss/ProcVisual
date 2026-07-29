@@ -477,7 +477,7 @@ app.use((req, res, next) => {
 let lastWakeupCheck = 0;
 app.use(async (req, res, next) => {
   // Skip for health checks and non-api calls to stay responsive
-  if (req.path === "/api/health" || !req.path.startsWith("/api")) return next();
+  if (req.path === "/api/health") return next();
 
   const now = Date.now();
   // Evitar checar o banco em cada requisição (limite de 1 check a cada 10 min)
@@ -506,13 +506,23 @@ app.use(async (req, res, next) => {
       if (!lastRun || !lastRun.timestamp) {
         needsRun = true;
       } else {
-        const lastRunDate = lastRun.timestamp.toDate();
-        const lastRunBr = new Date(lastRunDate.getTime() - (3 * 60 * 60 * 1000));
-        const lastRunStr = lastRunBr.toISOString().split('T')[0];
-        
-        // Se a última execução não foi hoje e já passou das 08:00 Brasília
-        if (lastRunStr !== todayStr && hourBr >= 8) {
+        let lastRunDate: Date | null = null;
+        if (lastRun.timestamp?.toDate) {
+          lastRunDate = lastRun.timestamp.toDate();
+        } else if (lastRun.timestamp) {
+          lastRunDate = new Date(lastRun.timestamp);
+        }
+
+        if (!lastRunDate || isNaN(lastRunDate.getTime())) {
           needsRun = true;
+        } else {
+          const lastRunBr = new Date(lastRunDate.getTime() - (3 * 60 * 60 * 1000));
+          const lastRunStr = lastRunBr.toISOString().split('T')[0];
+          
+          // Se a última execução não foi hoje e já passou das 08:00 Brasília
+          if (lastRunStr !== todayStr && hourBr >= 8) {
+            needsRun = true;
+          }
         }
       }
 
@@ -862,19 +872,11 @@ async function runDailyNotifications(targetUserId?: string) {
     let query: admin.firestore.Query;
     if (targetUserId) {
       query = db.collection("lancamentos")
-        .where("userId", "==", targetUserId)
-        .where("tipo", "in", ["expense", "birthday", "despesa"])
-        .where("pago", "==", false);
+        .where("userId", "==", targetUserId);
     } else {
-      // Para todos, focamos nos não pagos
-      // E podemos filtrar por data para não pegar lixo antigo (ex: data >= hoje - 5 dias)
-      const fiveDaysAgo = new Date(today.getTime() - (5 * 24 * 60 * 60 * 1000));
-      const fiveDaysAgoStr = fiveDaysAgo.toISOString().split('T')[0];
-      
+      // Busca lançamentos não pagos de forma simples e segura sem exigir índices compostos
       query = db.collection("lancamentos")
-        .where("tipo", "in", ["expense", "birthday", "despesa"])
-        .where("pago", "==", false)
-        .where("data", ">=", fiveDaysAgoStr);
+        .where("pago", "==", false);
     }
     
     const snapshot = await query.limit(500).get();
@@ -882,6 +884,7 @@ async function runDailyNotifications(targetUserId?: string) {
 
     if (snapshot.empty) {
       console.log(">>> [JOB] Nenhum lançamento encontrado.");
+      if (!targetUserId) await logCronExecution("success", { processed: 0, notified: 0 });
       return { processed: 0, notified: 0 };
     }
 
