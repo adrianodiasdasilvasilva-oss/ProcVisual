@@ -171,7 +171,7 @@ Olá! Identificamos que este número ainda não está vinculado a uma conta na *
 Você possui *7 dias grátis* para testar todas as funcionalidades! 🎉
 
 Para começar:
-1️⃣ Acesse nosso site: *https://procvisual-dashboard.com*
+1️⃣ Acesse nosso site: *https://procvisual.vercel.app/*
 2️⃣ Crie sua conta gratuitamente em instantes.
 3️⃣ Vincule seu número de WhatsApp no seu perfil para liberar o registro por voz, fotos e conversa com a IA!
 
@@ -191,11 +191,11 @@ Aproveite seu teste gratuito! 🚀`;
     const userAccess = evaluateUserAccess(userData, userId, cleanIncoming);
     if (!userAccess.granted) {
       if (userAccess.reason === 'phone_blocked') {
-        await sendWhatsAppMessage(numero, '⚠️ *Número de Telefone em Uso*\n\nIdentificamos que este número de celular já utilizou o período de teste gratuito de 7 dias em outra conta. Para continuar usando o WhatsApp, efetue a assinatura no nosso site:\n👉 *https://procvisual-dashboard.com*');
+        await sendWhatsAppMessage(numero, '⚠️ *Número de Telefone em Uso*\n\nIdentificamos que este número de celular já utilizou o período de teste gratuito de 7 dias em outra conta. Para continuar usando o WhatsApp, efetue a assinatura no nosso site:\n👉 *https://procvisual.vercel.app/*');
       } else if (userAccess.reason === 'trial_expired') {
-        await sendWhatsAppMessage(numero, '⏰ *Período de Teste Expirado*\n\nSeu teste gratuito de 7 dias chegou ao fim! Para continuar registrando receitas, despesas e conversando com seu Analista IA no WhatsApp, assine o plano Premium por apenas R$ 29,90/mês:\n👉 *https://procvisual-dashboard.com*');
+        await sendWhatsAppMessage(numero, '⏰ *Período de Teste Expirado*\n\nSeu teste gratuito de 7 dias chegou ao fim! Para continuar registrando receitas, despesas e conversando com seu Analista IA no WhatsApp, assine o plano Premium por apenas R$ 29,90/mês:\n👉 *https://procvisual.vercel.app/*');
       } else {
-        await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nIdentificamos que sua assinatura não está ativa. Por favor, acesse o site para regularizar seu plano e continuar usando o registro via WhatsApp:\n👉 *https://procvisual-dashboard.com*');
+        await sendWhatsAppMessage(numero, '⚠️ *Assinatura Inativa*\n\nIdentificamos que sua assinatura não está ativa. Por favor, acesse o site para regularizar seu plano e continuar usando o registro via WhatsApp:\n👉 *https://procvisual.vercel.app/*');
       }
       return res.status(200).json({ ok: true });
     }
