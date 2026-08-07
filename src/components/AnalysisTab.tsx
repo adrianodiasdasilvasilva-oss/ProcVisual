@@ -11,7 +11,8 @@ import {
   Legend,
   Bar,
   ComposedChart,
-  Line
+  Line,
+  Cell
 } from 'recharts';
 import { 
   ChevronLeft, 
@@ -113,10 +114,15 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
       result = result.slice(-12);
     }
 
-    return result.map(d => ({
-      ...d,
-      displayDate: `${d.month.substring(0, 3)}/${String(d.year).substring(2)}`
-    }));
+    let accumulated = 0;
+    return result.map(d => {
+      accumulated += d.balance;
+      return {
+        ...d,
+        accumulatedBalance: accumulated,
+        displayDate: `${d.month.substring(0, 3)}/${String(d.year).substring(2)}`
+      };
+    });
   }, [transactions, filteredTransactions, selectedYears, selectedMonths]);
 
   // --- Calendar Logic ---
@@ -216,6 +222,53 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
     }
     return null;
   };
+
+  const CustomEvolutionTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      const isPositive = data.balance >= 0;
+      const isAccumulatedPositive = data.accumulatedBalance >= 0;
+
+      return (
+        <div className="bg-proc-secondary/95 backdrop-blur-md border border-white/10 p-4 rounded-2xl shadow-2xl space-y-2 min-w-[210px]">
+          <p className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest border-b border-white/10 pb-1.5">
+            {data.month} de {data.year}
+          </p>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between items-center gap-6">
+              <span className="text-proc-text-sec">Resultado do Mês:</span>
+              <span className={`font-bold ${isPositive ? 'text-proc-green' : 'text-red-500'}`}>
+                {isPositive ? '+' : ''}{formatCurrency(data.balance)}
+              </span>
+            </div>
+            <div className="flex justify-between items-center gap-6">
+              <span className="text-proc-text-sec">Saldo Acumulado:</span>
+              <span className={`font-bold ${isAccumulatedPositive ? 'text-proc-cyan' : 'text-red-500'}`}>
+                {formatCurrency(data.accumulatedBalance)}
+              </span>
+            </div>
+          </div>
+          <div className={`mt-2 pt-2 border-t border-white/10 text-[10px] font-bold flex items-center gap-1.5 ${isAccumulatedPositive ? 'text-proc-green' : 'text-red-400'}`}>
+            <div className={`w-2 h-2 rounded-full shrink-0 ${isAccumulatedPositive ? 'bg-proc-green' : 'bg-red-500'}`} />
+            <span>{isAccumulatedPositive ? 'Caixa Positivo (Margem OK)' : 'Atenção: Caixa no Vermelho!'}</span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const evolutionMetrics = useMemo(() => {
+    if (chartData.length === 0) return { finalAccumulated: 0, avgMonthly: 0, isHealthy: true };
+    const finalAccumulated = chartData[chartData.length - 1].accumulatedBalance;
+    const totalMonthlyBalance = chartData.reduce((acc, curr) => acc + curr.balance, 0);
+    const avgMonthly = totalMonthlyBalance / chartData.length;
+    return {
+      finalAccumulated,
+      avgMonthly,
+      isHealthy: finalAccumulated >= 0
+    };
+  }, [chartData]);
 
   const selectedDayData = useMemo(() => {
     if (!selectedDay) return null;
@@ -364,64 +417,187 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
             </div>
           </div>
 
-          <div className="h-[350px] w-full relative">
+          <div className="w-full relative">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                  <XAxis 
-                    dataKey="displayDate" 
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                    minTickGap={30}
-                  />
-                  <YAxis 
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
-                    tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
-                  />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
-                  <Legend 
-                    verticalAlign="top" 
-                    align="right" 
-                    iconType="circle"
-                    content={(props) => {
-                      const { payload } = props;
-                      return (
-                        <div className="flex justify-end gap-6 mb-4">
-                          {payload?.map((entry: any, index: number) => (
-                            <div key={`item-${index}`} className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                              <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
+              <div className="w-full overflow-x-auto pb-2 custom-scrollbar">
+                <div style={{ minWidth: `${Math.max(100, chartData.length * 65)}px`, height: '350px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                      <XAxis 
+                        dataKey="displayDate" 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                        interval={0}
+                      />
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                        tickFormatter={(value) => `R$ ${value >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                      />
+                      <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
+                      <Legend 
+                        verticalAlign="top" 
+                        align="right" 
+                        iconType="circle"
+                        content={(props) => {
+                          const { payload } = props;
+                          return (
+                            <div className="flex justify-end gap-6 mb-4">
+                              {payload?.map((entry: any, index: number) => (
+                                <div key={`item-${index}`} className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                  <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                      );
-                    }}
-                  />
-                  <Bar 
-                    dataKey="income" 
-                    name="Receitas" 
-                    fill="#00E676" 
-                    radius={[4, 4, 0, 0]} 
-                    barSize={20}
-                  />
-                  <Bar 
-                    dataKey="expense" 
-                    name="Despesas" 
-                    fill="#F87171" 
-                    radius={[4, 4, 0, 0]} 
-                    barSize={20}
-                  />
-                </ComposedChart>
-              </ResponsiveContainer>
+                          );
+                        }}
+                      />
+                      <Bar 
+                        dataKey="income" 
+                        name="Receitas" 
+                        fill="#00E676" 
+                        radius={[4, 4, 0, 0]} 
+                        barSize={20}
+                      />
+                      <Bar 
+                        dataKey="expense" 
+                        name="Despesas" 
+                        fill="#F87171" 
+                        radius={[4, 4, 0, 0]} 
+                        barSize={20}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
             ) : (
               <div className="h-full w-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-3xl">
                 <Info className="text-proc-text-sec mb-2" size={32} />
                 <p className="text-proc-text-sec text-sm font-medium">Sem dados para o período selecionado</p>
                 <p className="text-proc-text-sec/50 text-xs mt-1">Tente ajustar os filtros de data no topo da página</p>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        {/* Component 3: Financial Evolution & Cash Flow Health Chart */}
+        <motion.section 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="lg:col-span-12 bg-proc-secondary/20 border border-white/10 rounded-[2.5rem] p-6 md:p-8 shadow-2xl"
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${evolutionMetrics.isHealthy ? 'bg-proc-green/10 text-proc-green' : 'bg-red-500/10 text-red-500'}`}>
+                <TrendingUp size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h3 className="text-xl font-bold text-proc-text-main">Evolução Financeira & Saúde do Caixa</h3>
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-widest ${
+                    evolutionMetrics.isHealthy ? 'bg-proc-green/10 text-proc-green border border-proc-green/30' : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                  }`}>
+                    {evolutionMetrics.isHealthy ? 'Saúde Financeira OK' : 'No Vermelho'}
+                  </span>
+                </div>
+                <p className="text-xs text-proc-text-sec mt-0.5">Resultado mensal líquido e trajetória do saldo acumulado</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="bg-proc-bg/50 px-4 py-2.5 rounded-2xl border border-white/5">
+                <p className="text-[9px] font-bold text-proc-text-sec uppercase tracking-widest">Média Líquida Mensal</p>
+                <p className={`text-sm font-bold ${evolutionMetrics.avgMonthly >= 0 ? 'text-proc-green' : 'text-red-400'}`}>
+                  {evolutionMetrics.avgMonthly >= 0 ? '+' : ''}{formatCurrency(evolutionMetrics.avgMonthly)}
+                </p>
+              </div>
+              <div className="bg-proc-bg/50 px-4 py-2.5 rounded-2xl border border-white/5">
+                <p className="text-[9px] font-bold text-proc-text-sec uppercase tracking-widest">Saldo Acumulado Final</p>
+                <p className={`text-sm font-bold ${evolutionMetrics.isHealthy ? 'text-proc-cyan' : 'text-red-400'}`}>
+                  {formatCurrency(evolutionMetrics.finalAccumulated)}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full relative">
+            {chartData.length > 0 ? (
+              <div className="w-full overflow-x-auto pb-2 custom-scrollbar">
+                <div style={{ minWidth: `${Math.max(100, chartData.length * 65)}px`, height: '350px' }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={chartData} margin={{ top: 15, right: 15, left: -10, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorAccumulated" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#00D1FF" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#00D1FF" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
+                      <XAxis 
+                        dataKey="displayDate" 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                        interval={0}
+                      />
+                      <YAxis 
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: 'var(--proc-text-sec)', fontSize: 10, fontWeight: 'bold' }}
+                        tickFormatter={(value) => `R$ ${Math.abs(value) >= 1000 ? (value/1000).toFixed(1) + 'k' : value}`}
+                      />
+                      <Tooltip content={<CustomEvolutionTooltip />} cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }} />
+                      <ReferenceLine y={0} stroke="#EF4444" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: 'Linha Zero (No Vermelho)', fill: '#EF4444', fontSize: 10, position: 'insideTopLeft' }} />
+                      <Legend 
+                        verticalAlign="top" 
+                        align="right" 
+                        iconType="circle"
+                        content={(props) => {
+                          const { payload } = props;
+                          return (
+                            <div className="flex justify-end gap-6 mb-4">
+                              {payload?.map((entry: any, index: number) => (
+                                <div key={`item-${index}`} className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                                  <span className="text-[10px] font-bold text-proc-text-sec uppercase tracking-widest">{entry.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                      <Bar 
+                        dataKey="balance" 
+                        name="Resultado do Mês" 
+                        barSize={16}
+                        radius={[4, 4, 0, 0]}
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.balance >= 0 ? '#00E676' : '#EF4444'} />
+                        ))}
+                      </Bar>
+                      <Area 
+                        type="monotone" 
+                        dataKey="accumulatedBalance" 
+                        name="Saldo Acumulado" 
+                        stroke="#00D1FF" 
+                        fill="url(#colorAccumulated)" 
+                        strokeWidth={3}
+                        dot={{ r: 4, fill: '#00D1FF', strokeWidth: 2, stroke: '#0B132B' }}
+                      />
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            ) : (
+              <div className="h-full w-full flex flex-col items-center justify-center border-2 border-dashed border-white/5 rounded-3xl py-12">
+                <Info className="text-proc-text-sec mb-2" size={32} />
+                <p className="text-proc-text-sec text-sm font-medium">Sem dados para o período selecionado</p>
               </div>
             )}
           </div>
