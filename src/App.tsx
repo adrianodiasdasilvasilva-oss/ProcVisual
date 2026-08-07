@@ -887,64 +887,74 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* Sub-filtro de Status (Pendentes / Pagos / Todos) */}
-                    <div className="flex items-center justify-between flex-wrap gap-2 mb-6 bg-proc-bg/30 p-2.5 rounded-2xl border border-white/5">
-                      <div className="flex items-center gap-2 overflow-x-auto pb-0.5 max-w-full custom-scrollbar">
+                    {/* Sub-filtro de Status (Organizado em 2 níveis sem rolagem horizontal) */}
+                    <div className="space-y-2.5 mb-6 bg-proc-bg/40 p-3 rounded-2xl border border-white/5">
+                      {/* Nível 1: Botão 'Todos' */}
+                      <div className="flex items-center justify-between gap-2">
                         <button
                           onClick={() => setStatusFilter('all')}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between gap-2.5 ${
                             statusFilter === 'all'
-                              ? 'bg-proc-cyan text-proc-bg shadow-md shadow-proc-cyan/20'
-                              : 'bg-proc-bg/50 border border-white/10 text-proc-text-sec hover:text-proc-text-main hover:bg-white/5'
+                              ? 'bg-proc-cyan text-proc-bg shadow-lg shadow-proc-cyan/25 ring-2 ring-proc-cyan/50'
+                              : 'bg-proc-secondary/60 border border-white/10 text-proc-text-sec hover:text-proc-text-main hover:bg-white/5'
                           }`}
                         >
-                          <span>Todos</span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'all' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-white/10 text-proc-text-sec'}`}>
+                          <span className="font-bold">Todos</span>
+                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold ${
+                            statusFilter === 'all' ? 'bg-black/20 text-proc-bg' : 'bg-white/10 text-proc-text-sec'
+                          }`}>
                             {filteredTransactions.length}
                           </span>
                         </button>
 
+                        {statusFilter !== 'all' && (
+                          <button
+                            onClick={() => setStatusFilter('all')}
+                            className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-proc-text-sec hover:text-proc-cyan transition-all border border-white/10 shrink-0"
+                            title="Limpar filtro de status"
+                          >
+                            <X size={14} />
+                            <span className="hidden sm:inline">Limpar filtro</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Nível 2: Botões 'Pendentes' e 'Pagos' lado a lado */}
+                      <div className="grid grid-cols-2 gap-2.5 w-full">
                         <button
                           onClick={() => setStatusFilter('pending')}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                          className={`py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                             statusFilter === 'pending'
-                              ? 'bg-amber-500 text-proc-bg shadow-md shadow-amber-500/20'
-                              : 'bg-proc-bg/50 border border-white/10 text-amber-500/90 hover:text-amber-400 hover:bg-amber-500/10'
+                              ? 'bg-amber-500 text-proc-bg shadow-lg shadow-amber-500/25 ring-2 ring-amber-500/50'
+                              : 'bg-amber-500/10 border border-amber-500/20 text-amber-500 hover:bg-amber-500/20'
                           }`}
                         >
-                          <Clock size={14} />
-                          <span>Pendentes</span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'pending' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-amber-500/20 text-amber-400'}`}>
+                          <Clock size={16} className={`shrink-0 ${statusFilter === 'pending' ? 'text-proc-bg' : 'text-amber-500'}`} />
+                          <span className="truncate">Pendentes</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold shrink-0 ${
+                            statusFilter === 'pending' ? 'bg-black/20 text-proc-bg' : 'bg-amber-500/20 text-amber-400'
+                          }`}>
                             {filteredTransactions.filter(t => !t.pago).length}
                           </span>
                         </button>
 
                         <button
                           onClick={() => setStatusFilter('paid')}
-                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                          className={`py-2.5 px-3 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 ${
                             statusFilter === 'paid'
-                              ? 'bg-proc-green text-proc-bg shadow-md shadow-proc-green/20'
-                              : 'bg-proc-green/10 border border-proc-green/30 text-proc-green hover:bg-proc-green/20'
+                              ? 'bg-proc-green text-proc-bg shadow-lg shadow-proc-green/25 ring-2 ring-proc-green/50'
+                              : 'bg-proc-green/10 border border-proc-green/20 text-proc-green hover:bg-proc-green/20'
                           }`}
                         >
-                          <CheckCircle2 size={14} />
-                          <span>Pagos</span>
-                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'paid' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-proc-green/20 text-proc-green'}`}>
+                          <CheckCircle2 size={16} className={`shrink-0 ${statusFilter === 'paid' ? 'text-proc-bg' : 'text-proc-green'}`} />
+                          <span className="truncate">Pagos</span>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-extrabold shrink-0 ${
+                            statusFilter === 'paid' ? 'bg-black/20 text-proc-bg' : 'bg-proc-green/20 text-proc-green'
+                          }`}>
                             {filteredTransactions.filter(t => t.pago === true).length}
                           </span>
                         </button>
                       </div>
-
-                      {statusFilter !== 'all' && (
-                        <button
-                          onClick={() => setStatusFilter('all')}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-proc-text-sec hover:text-proc-cyan transition-all border border-white/5"
-                          title="Limpar filtro de status"
-                        >
-                          <X size={14} />
-                          <span>Limpar filtro</span>
-                        </button>
-                      )}
                     </div>
 
                     <div className="space-y-4">
