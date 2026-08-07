@@ -481,37 +481,58 @@ export default function AnalysisTab({ transactions, filteredTransactions, select
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                 <h4 className="text-[10px] font-bold text-proc-text-sec uppercase tracking-[0.2em] mb-2">Lançamentos</h4>
                 {selectedDayData.events.length > 0 ? (
-                  selectedDayData.events.map((event, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-proc-bg/30 border border-white/5">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                          event.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
-                          event.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500' :
-                          event.pago ? 'bg-proc-cyan/10 text-proc-cyan' : 'bg-red-500/10 text-red-500'
-                        }`}>
-                          {event.tipo === 'income' ? <ArrowUpRight size={16} /> : event.tipo === 'birthday' ? '🎂' : <ArrowDownRight size={16} />}
+                  selectedDayData.events.map((event, idx) => {
+                    const rawTitle = event.estabelecimento || event.descricao || 'Sem descrição';
+                    const cleanTitle = rawTitle.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/, '').trim() || rawTitle;
+
+                    let parcela = event.parcela;
+                    let totalParcelas = event.totalParcelas;
+                    if (!parcela || !totalParcelas) {
+                      const textToSearch = `${event.descricao || ''} ${event.estabelecimento || ''}`;
+                      const match = textToSearch.match(/\((\d+)\/(\d+)\)/);
+                      if (match) {
+                        parcela = parseInt(match[1], 10);
+                        totalParcelas = parseInt(match[2], 10);
+                      }
+                    }
+                    const hasInstallments = Boolean(parcela && totalParcelas && totalParcelas > 1);
+                    const installmentText = hasInstallments ? `Parcela ${parcela} de ${totalParcelas}` : null;
+
+                    return (
+                      <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-proc-bg/30 border border-white/5">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                            event.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                            event.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500' :
+                            event.pago ? 'bg-proc-cyan/10 text-proc-cyan' : 'bg-red-500/10 text-red-500'
+                          }`}>
+                            {event.tipo === 'income' ? <ArrowUpRight size={16} /> : event.tipo === 'birthday' ? '🎂' : <ArrowDownRight size={16} />}
+                          </div>
+                          <div>
+                            <p className="text-sm font-bold text-proc-text-main leading-none">{cleanTitle}</p>
+                            <p className="text-[10px] text-proc-text-sec mt-1">{event.categoria}</p>
+                            {installmentText && (
+                              <p className="text-[10px] text-proc-cyan font-semibold mt-0.5">{installmentText}</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-sm font-bold text-proc-text-main leading-none">{event.descricao || event.estabelecimento}</p>
-                          <p className="text-[10px] text-proc-text-sec mt-1">{event.categoria}</p>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${
+                            event.tipo === 'income' ? 'text-proc-green' : 
+                            event.tipo === 'birthday' ? 'text-pink-500' :
+                            'text-red-500'
+                          }`}>
+                            {event.tipo === 'income' ? '+' : event.tipo === 'birthday' ? '🎉' : '-'} {event.tipo === 'birthday' ? 'Aniversário' : formatCurrency(event.valor)}
+                          </p>
+                          {event.tipo === 'expense' && (
+                            <span className={`text-[8px] font-bold uppercase tracking-widest ${event.pago ? 'text-proc-cyan' : 'text-amber-500'}`}>
+                              {event.pago ? 'Pago' : 'Pendente'}
+                            </span>
+                          )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-sm font-bold ${
-                          event.tipo === 'income' ? 'text-proc-green' : 
-                          event.tipo === 'birthday' ? 'text-pink-500' :
-                          'text-red-500'
-                        }`}>
-                          {event.tipo === 'income' ? '+' : event.tipo === 'birthday' ? '🎉' : '-'} {event.tipo === 'birthday' ? 'Aniversário' : formatCurrency(event.valor)}
-                        </p>
-                        {event.tipo === 'expense' && (
-                          <span className={`text-[8px] font-bold uppercase tracking-widest ${event.pago ? 'text-proc-cyan' : 'text-amber-500'}`}>
-                            {event.pago ? 'Pago' : 'Pendente'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="py-10 text-center border-2 border-dashed border-white/5 rounded-2xl">
                     <p className="text-proc-text-sec text-xs italic">Nenhum lançamento para este dia.</p>

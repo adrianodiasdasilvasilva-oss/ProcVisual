@@ -45,6 +45,33 @@ export interface Transaction {
   totalParcelas?: number;
 }
 
+export function getInstallmentInfo(t: Transaction) {
+  let parcela = t.parcela;
+  let totalParcelas = t.totalParcelas;
+
+  if ((!parcela || !totalParcelas) && (t.descricao || t.estabelecimento)) {
+    const textToSearch = `${t.descricao || ''} ${t.estabelecimento || ''}`;
+    const match = textToSearch.match(/\((\d+)\/(\d+)\)/);
+    if (match) {
+      parcela = parseInt(match[1], 10);
+      totalParcelas = parseInt(match[2], 10);
+    }
+  }
+
+  const rawTitle = t.estabelecimento || t.descricao || 'Sem descrição';
+  const cleanTitle = rawTitle.replace(/\s*\(\d+\s*\/\s*\d+\)\s*$/, '').trim() || rawTitle;
+
+  const hasInstallments = Boolean(parcela && totalParcelas && totalParcelas > 1);
+
+  return {
+    cleanTitle,
+    hasInstallments,
+    parcela,
+    totalParcelas,
+    installmentText: hasInstallments ? `Parcela ${parcela} de ${totalParcelas}` : null,
+  };
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -742,35 +769,39 @@ export default function App() {
                           <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                             {filteredTransactions
                               .filter(t => t.tipo !== 'birthday')
-                              .map((t) => (
-                                <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
-                                <div className="flex items-center gap-4">
-                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                  t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
-                                  t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-lg' : 
-                                  'bg-red-500/10 text-red-500'
-                                }`}>
-                                  {t.tipo === 'birthday' ? '🎂' : <div className="w-2 h-2 rounded-full bg-current" />}
-                                </div>
-                                  <div>
-                                    <p className="text-proc-text-main font-medium text-sm">{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                                    <p className="text-proc-text-sec text-xs">{t.categoria} • {(() => {
-                                      const d = new Date(t.data + 'T12:00:00');
-                                      return d.toLocaleDateString('pt-BR');
-                                    })()}</p>
+                              .map((t) => {
+                                const instInfo = getInstallmentInfo(t);
+                                const d = new Date(t.data + 'T12:00:00');
+                                return (
+                                  <div key={t.id} className="flex items-center justify-between p-4 rounded-2xl bg-proc-secondary/30 hover:bg-proc-secondary/50 transition-all">
+                                    <div className="flex items-center gap-4">
+                                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                        t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                                        t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-lg' : 
+                                        'bg-red-500/10 text-red-500'
+                                      }`}>
+                                        {t.tipo === 'birthday' ? '🎂' : <div className="w-2 h-2 rounded-full bg-current" />}
+                                      </div>
+                                      <div>
+                                        <p className="text-proc-text-main font-medium text-sm">{instInfo.cleanTitle}</p>
+                                        <p className="text-proc-text-sec text-xs">{t.categoria} • {d.toLocaleDateString('pt-BR')}</p>
+                                        {instInfo.installmentText && (
+                                          <p className="text-xs text-proc-cyan font-medium mt-0.5">{instInfo.installmentText}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-4">
+                                      <p className={`font-bold text-sm ${
+                                        t.tipo === 'income' ? 'text-proc-green' : 
+                                        t.tipo === 'birthday' ? 'text-pink-500' : 
+                                        'text-red-500'
+                                      }`}>
+                                        {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                      </p>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-4">
-                                  <p className={`font-bold text-sm ${
-                                    t.tipo === 'income' ? 'text-proc-green' : 
-                                    t.tipo === 'birthday' ? 'text-pink-500' : 
-                                    'text-red-500'
-                                  }`}>
-                                    {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                                );
+                              })}
                             {filteredTransactions.filter(t => t.tipo !== 'birthday').length === 0 && (
                               <p className="text-proc-text-sec text-center py-8">Nenhum lançamento encontrado.</p>
                             )}
@@ -848,83 +879,88 @@ export default function App() {
                     </div>
 
                     <div className="space-y-4">
-                      {searchedTransactions
-                        .map((t) => (
+                      {searchedTransactions.map((t) => {
+                        const instInfo = getInstallmentInfo(t);
+                        return (
                           <div 
                             key={t.id} 
                             className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 rounded-2xl transition-all border gap-4 ${
-                            selectedIds.includes(t.id) 
-                              ? 'bg-proc-cyan/5 border-proc-cyan/30' 
-                              : 'bg-proc-secondary/30 hover:bg-proc-secondary/50 border-white/10'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 w-full sm:w-auto">
-                            <button 
-                              onClick={() => handleToggleSelect(t.id)}
-                              className={`p-2 rounded-lg transition-all ${
-                                selectedIds.includes(t.id) ? 'text-proc-cyan' : 'text-proc-text-sec hover:text-proc-text-main'
-                              }`}
-                            >
-                              {selectedIds.includes(t.id) ? <CheckSquare size={20} /> : <Square size={20} />}
-                            </button>
-                            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                              t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
-                              t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-xl' : 
-                              'bg-red-500/10 text-red-500'
-                            }`}>
-                              {t.tipo === 'birthday' ? '🎂' : <div className="w-2.5 h-2.5 rounded-full bg-current" />}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-proc-text-main font-bold truncate text-sm md:text-base" title={t.estabelecimento || t.descricao}>{t.estabelecimento || t.descricao || 'Sem descrição'}</p>
-                              <p className="text-proc-text-sec text-xs truncate">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between sm:justify-end gap-4 md:gap-6 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0 shrink-0">
-                            <div className="text-right">
-                              <p className={`font-bold ${
-                                t.tipo === 'income' ? 'text-proc-green' : 
-                                t.tipo === 'birthday' ? 'text-pink-500' : 
-                                'text-red-500'
+                              selectedIds.includes(t.id) 
+                                ? 'bg-proc-cyan/5 border-proc-cyan/30' 
+                                : 'bg-proc-secondary/30 hover:bg-proc-secondary/50 border-white/10'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 md:gap-4 flex-1 min-w-0 w-full sm:w-auto">
+                              <button 
+                                onClick={() => handleToggleSelect(t.id)}
+                                className={`p-2 rounded-lg transition-all ${
+                                  selectedIds.includes(t.id) ? 'text-proc-cyan' : 'text-proc-text-sec hover:text-proc-text-main'
+                                }`}
+                              >
+                                {selectedIds.includes(t.id) ? <CheckSquare size={20} /> : <Square size={20} />}
+                              </button>
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                t.tipo === 'income' ? 'bg-proc-green/10 text-proc-green' : 
+                                t.tipo === 'birthday' ? 'bg-pink-500/10 text-pink-500 text-xl' : 
+                                'bg-red-500/10 text-red-500'
                               }`}>
-                                {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
-                              </p>
-                              {t.tipo === 'expense' && (
-                                <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 sm:mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
-                                  {t.pago ? 'Pago' : 'Pendente'}
-                                </p>
-                              )}
+                                {t.tipo === 'birthday' ? '🎂' : <div className="w-2.5 h-2.5 rounded-full bg-current" />}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-proc-text-main font-bold truncate text-sm md:text-base" title={instInfo.cleanTitle}>{instInfo.cleanTitle}</p>
+                                <p className="text-proc-text-sec text-xs truncate">{t.categoria} • {new Date(t.data + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
+                                {instInfo.installmentText && (
+                                  <p className="text-xs text-proc-cyan font-semibold mt-0.5 truncate">{instInfo.installmentText}</p>
+                                )}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-1.5 md:gap-2">
-                              {t.tipo === 'expense' && (
+                            <div className="flex items-center justify-between sm:justify-end gap-4 md:gap-6 border-t sm:border-t-0 border-white/5 pt-3 sm:pt-0 shrink-0">
+                              <div className="text-right">
+                                <p className={`font-bold ${
+                                  t.tipo === 'income' ? 'text-proc-green' : 
+                                  t.tipo === 'birthday' ? 'text-pink-500' : 
+                                  'text-red-500'
+                                }`}>
+                                  {t.tipo === 'income' ? '+' : t.tipo === 'birthday' ? '🎉' : '-'} {t.tipo === 'birthday' ? 'Aniversário' : `R$ ${t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
+                                </p>
+                                {t.tipo === 'expense' && (
+                                  <p className={`text-[10px] font-bold uppercase tracking-widest mt-0.5 sm:mt-1 ${t.pago ? 'text-proc-green' : 'text-amber-500'}`}>
+                                    {t.pago ? 'Pago' : 'Pendente'}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 md:gap-2">
+                                {t.tipo === 'expense' && (
+                                  <button 
+                                    onClick={() => handleTogglePaid(t)}
+                                    className={`p-2.5 md:p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
+                                    title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
+                                  >
+                                    <CheckCircle2 size={16} className="md:w-[18px] md:h-[18px]" />
+                                  </button>
+                                )}
                                 <button 
-                                  onClick={() => handleTogglePaid(t)}
-                                  className={`p-2.5 md:p-3 rounded-xl transition-all ${t.pago ? 'bg-proc-green/10 text-proc-green hover:bg-proc-green/20' : 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20'}`}
-                                  title={t.pago ? "Marcar como Pendente" : "Marcar como Pago"}
+                                  onClick={() => {
+                                    setEditingTransaction(t);
+                                    setIsModalOpen(true);
+                                  }}
+                                  className="p-2.5 md:p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
+                                  title="Editar"
                                 >
-                                  <CheckCircle2 size={16} className="md:w-[18px] md:h-[18px]" />
+                                  <Edit3 size={16} className="md:w-[18px] md:h-[18px]" />
                                 </button>
-                              )}
-                              <button 
-                                onClick={() => {
-                                  setEditingTransaction(t);
-                                  setIsModalOpen(true);
-                                }}
-                                className="p-2.5 md:p-3 rounded-xl bg-proc-cyan/10 text-proc-cyan hover:bg-proc-cyan/20 transition-all"
-                                title="Editar"
-                              >
-                                <Edit3 size={16} className="md:w-[18px] md:h-[18px]" />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteTransaction(t.id)}
-                                className="p-2.5 md:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
-                                title="Excluir"
-                              >
-                                <Trash2 size={16} className="md:w-[18px] md:h-[18px]" />
-                              </button>
+                                <button 
+                                  onClick={() => handleDeleteTransaction(t.id)}
+                                  className="p-2.5 md:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500/20 transition-all"
+                                  title="Excluir"
+                                >
+                                  <Trash2 size={16} className="md:w-[18px] md:h-[18px]" />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                       {transactions.filter(t => t.tipo !== 'birthday').length > 0 && searchedTransactions.filter(t => t.tipo !== 'birthday').length === 0 && (
                         <div className="py-20 text-center">
                           <p className="text-proc-text-sec">Nenhum lançamento encontrado para "{searchTerm}".</p>
