@@ -658,6 +658,10 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
       baseDate.setHours(baseDate.getHours() - 3);
     }
 
+    const nowBR = new Date();
+    nowBR.setHours(nowBR.getHours() - 3);
+    const todayStr = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
+
     const groupId = totalParcelas > 1 ? `wa_${Date.now()}` : null;
     const batch = db.batch();
     let firstDocId = "";
@@ -665,13 +669,14 @@ async function saveAndConfirm(db: admin.firestore.Firestore, userId: string, num
         const d = new Date(baseDate);
         d.setMonth(d.getMonth() + (i - parcela));
         const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const isFuture = dateStr > todayStr;
         const ref = db.collection("lancamentos").doc();
         if (i === parcela) firstDocId = ref.id;
         batch.set(ref, {
             userId, tipo: isBirthday ? 'birthday' : (tipo || 'expense'), valor, categoria: isBirthday ? 'Aniversário' : (categoria || 'Outros'), data: dateStr,
             descricao: totalParcelas > 1 ? `${descricao} (${i}/${totalParcelas})` : descricao,
             estabelecimento: descricao, origem, telefone: numero.split('@')[0].replace(/\D/g, ""),
-            createdAt: FieldValue.serverTimestamp(), pago: false, parcela: i, totalParcelas, groupId,
+            createdAt: FieldValue.serverTimestamp(), pago: !isFuture, parcela: i, totalParcelas, groupId,
             notificado5dias: false, notificadoNoDia: false, notificadoAmanha: false
         });
     }
@@ -829,19 +834,24 @@ async function setupRecurrence(db: any, userId: string, numero: string, data: an
     const groupId = `recur_${Date.now()}`;
     const totalParcelas = 12;
 
+    const nowBR = new Date();
+    nowBR.setHours(nowBR.getHours() - 3);
+    const todayStr = `${nowBR.getFullYear()}-${String(nowBR.getMonth()+1).padStart(2,'0')}-${String(nowBR.getDate()).padStart(2,'0')}`;
+
     const batch = db.batch();
     // Já temos o primeiro (que foi o gatilho), vamos criar os outros 11
     for (let i = 2; i <= totalParcelas; i++) {
       const d = new Date(baseDate);
       d.setMonth(d.getMonth() + (i - 1));
       const ds = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const isFuture = ds > todayStr;
       const ref = db.collection("lancamentos").doc();
       batch.set(ref, {
         userId, tipo: 'expense', valor, categoria, data: ds,
         descricao: `${descricao} (${i}/${totalParcelas})`,
         estabelecimento: descricao, origem: "whatsapp_recorrente", 
         telefone: numero.split('@')[0].replace(/\D/g, ""),
-        createdAt: FieldValue.serverTimestamp(), pago: false, parcela: i, totalParcelas, groupId,
+        createdAt: FieldValue.serverTimestamp(), pago: !isFuture, parcela: i, totalParcelas, groupId,
         notificado5dias: false, notificadoNoDia: false, notificadoAmanha: false
       });
     }

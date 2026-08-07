@@ -20,7 +20,7 @@ import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { checkUserAccess, checkAndRegisterPhoneTrial } from './lib/trial';
 import { onAuthStateChanged, User, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
 import { collection, query, where, onSnapshot, doc, setDoc, serverTimestamp, orderBy, getDoc, deleteDoc, getDocs, updateDoc } from 'firebase/firestore';
-import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X } from 'lucide-react';
+import { LogIn, Loader2, Edit3, Trash2, CheckCircle2, Square, CheckSquare, Search, X, Clock } from 'lucide-react';
 import emailjs from '@emailjs/browser';
 
 import LandingPage from './components/landing/LandingPage';
@@ -94,6 +94,7 @@ export default function App() {
   });
   const [filterCategory, setFilterCategory] = useState('Todas Categorias');
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'paid'>('all');
   const [modalInitialType, setModalInitialType] = useState<'income' | 'expense' | 'birthday'>('expense');
   const [customCategories, setCustomCategories] = useState<string[]>([]);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
@@ -263,18 +264,26 @@ export default function App() {
   };
 
   const searchedTransactions = useMemo(() => {
-    if (!searchTerm.trim()) return filteredTransactions;
+    let list = filteredTransactions;
+
+    if (statusFilter === 'pending') {
+      list = list.filter(t => !t.pago);
+    } else if (statusFilter === 'paid') {
+      list = list.filter(t => t.pago === true);
+    }
+
+    if (!searchTerm.trim()) return list;
     
     const normalize = (str: string) => 
       str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     
     const term = normalize(searchTerm);
     
-    return filteredTransactions.filter(t => 
+    return list.filter(t => 
       normalize(t.estabelecimento || '').includes(term) || 
       normalize(t.descricao || '').includes(term)
     );
-  }, [filteredTransactions, searchTerm]);
+  }, [filteredTransactions, searchTerm, statusFilter]);
 
   const handleSelectAll = () => {
     if (selectedIds.length === transactions.length && transactions.length > 0) {
@@ -859,7 +868,7 @@ export default function App() {
                     <PendingBalanceCard transactions={filteredTransactions} />
                     
                     {/* Search Bar */}
-                    <div className="mb-6 relative group">
+                    <div className="mb-4 relative group">
                       <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-proc-text-sec group-focus-within:text-proc-cyan transition-colors" />
                       <input 
                         type="text"
@@ -874,6 +883,66 @@ export default function App() {
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-proc-text-sec hover:text-white transition-colors"
                         >
                           <X size={16} />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Sub-filtro de Status (Pendentes / Pagos / Todos) */}
+                    <div className="flex items-center justify-between flex-wrap gap-2 mb-6 bg-proc-bg/30 p-2.5 rounded-2xl border border-white/5">
+                      <div className="flex items-center gap-2 overflow-x-auto pb-0.5 max-w-full custom-scrollbar">
+                        <button
+                          onClick={() => setStatusFilter('all')}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                            statusFilter === 'all'
+                              ? 'bg-proc-cyan text-proc-bg shadow-md shadow-proc-cyan/20'
+                              : 'bg-proc-bg/50 border border-white/10 text-proc-text-sec hover:text-proc-text-main hover:bg-white/5'
+                          }`}
+                        >
+                          <span>Todos</span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'all' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-white/10 text-proc-text-sec'}`}>
+                            {filteredTransactions.length}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setStatusFilter('pending')}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                            statusFilter === 'pending'
+                              ? 'bg-amber-500 text-proc-bg shadow-md shadow-amber-500/20'
+                              : 'bg-proc-bg/50 border border-white/10 text-amber-500/90 hover:text-amber-400 hover:bg-amber-500/10'
+                          }`}
+                        >
+                          <Clock size={14} />
+                          <span>Pendentes</span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'pending' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-amber-500/20 text-amber-400'}`}>
+                            {filteredTransactions.filter(t => !t.pago).length}
+                          </span>
+                        </button>
+
+                        <button
+                          onClick={() => setStatusFilter('paid')}
+                          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 ${
+                            statusFilter === 'paid'
+                              ? 'bg-proc-green text-proc-bg shadow-md shadow-proc-green/20'
+                              : 'bg-proc-green/10 border border-proc-green/30 text-proc-green hover:bg-proc-green/20'
+                          }`}
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>Pagos</span>
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${statusFilter === 'paid' ? 'bg-proc-bg/20 text-proc-bg font-extrabold' : 'bg-proc-green/20 text-proc-green'}`}>
+                            {filteredTransactions.filter(t => t.pago === true).length}
+                          </span>
+                        </button>
+                      </div>
+
+                      {statusFilter !== 'all' && (
+                        <button
+                          onClick={() => setStatusFilter('all')}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 text-xs text-proc-text-sec hover:text-proc-cyan transition-all border border-white/5"
+                          title="Limpar filtro de status"
+                        >
+                          <X size={14} />
+                          <span>Limpar filtro</span>
                         </button>
                       )}
                     </div>
